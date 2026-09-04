@@ -76,6 +76,18 @@ describe('buildDocumentPath — Stable Document Filename Derivation (trf5-adapte
     expect(() => buildDocumentPath('../escape', '12452668', 'Decisão')).toThrow();
     expect(() => buildDocumentPath(PROCESS_NUMBER, '../../etc/passwd', 'Decisão')).toThrow();
   });
+
+  it('folds every accented character the site actually emits to its ASCII base, never dropping the base letter', () => {
+    // Covers the full documented accent set (lower- and uppercase) rather than
+    // relying on 'Decisão' alone, which only exercises ã/ç indirectly.
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', 'áéíóúâêîôûãõñçÁÉÍÓÚÂÊÎÔÛÃÕÑÇ');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668-aeiouaeiouaoncaeiouaeiouaonc.pdf`);
+  });
+
+  it('folds Petição to peticao, matching the site’s own accented labels', () => {
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', 'Petição');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668-peticao.pdf`);
+  });
 });
 
 describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding)', () => {
