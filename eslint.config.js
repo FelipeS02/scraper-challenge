@@ -41,6 +41,31 @@ export default tseslint.config(
     },
   },
 
+  // Enforced adapter seam: the engine is payload-generic and must never import
+  // an adapter, a transport, or an HTML parser directly — only through the ports
+  // declared in engine/ports.ts. This is a build-time seam, not a convention.
+  {
+    files: ['src/engine/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/adapters/**', '**/infra/**', '**/cli/**'],
+              message: 'engine/ must not import an adapter — this is the ports/adapters seam.',
+            },
+            {
+              group: ['axios', 'axios-*', 'cheerio', 'tough-cookie'],
+              message:
+                'engine/ must not touch a transport or an HTML parser; go through HttpTransport.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Config files are not part of the TypeScript program.
   {
     files: ['**/*.js'],
