@@ -107,6 +107,31 @@ The cell coverage ledger MUST be written to a separate `coverage.jsonl` file, di
 - WHEN the output directory is inspected
 - THEN cell-state records appear only in `coverage.jsonl` and item records only in `items.jsonl`
 
+### Requirement: Persisted Identifier Stability
+Any identifier written to durable state — checkpoints, the coverage ledger, the failure
+ledger, output records, or document paths — MUST remain resolvable in a later session. A
+value whose lifetime is bound to a live session (a session cookie, a view state, or a
+site-issued conversation token) MUST NOT be the only handle by which persisted data is
+addressed, keyed, or recovered.
+
+Existing requirements govern how persisted values are *formatted* and that they are
+round-tripped opaquely; this requirement governs whether they are still *usable* after the
+session that produced them ends. A record that can only be acted upon by replaying an
+expired token is not durable state, regardless of how faithfully it was serialized.
+
+A point-in-time locator MAY be persisted for provenance — the output envelope's `sourceUrl`
+is one — provided the record also carries a session-independent handle that can recover it.
+
+#### Scenario: Persisted record survives its originating session
+- GIVEN a checkpoint, ledger entry, or document path written in one run
+- WHEN a later run in a new session reads it back
+- THEN it resolves to the same work unit, item, or file without replaying any token from the earlier session
+
+#### Scenario: Session-scoped token is not the only handle
+- GIVEN an output record whose `sourceUrl` embeds a session-scoped token
+- WHEN that token has expired
+- THEN the record is still addressable by its adapter-declared identity key
+
 ### Requirement: Personal Data Handling Rules
 Scraped output MUST NOT be committed to the repository. No test fixture MAY contain a real
 CPF, real party name, or real document content. No upload path MUST exist.
