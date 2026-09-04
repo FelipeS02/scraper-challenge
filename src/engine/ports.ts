@@ -94,11 +94,16 @@ export interface CheckpointStore {
 }
 
 export interface LedgerEntry {
-  readonly itemId: string;
+  readonly itemId: string; // for a discovery-stage failure, the unit's `unitKey` (no item was ever produced)
   readonly documentId: string | null; // null for a discovery-stage failure
   readonly reason: string;
   readonly observedAt: string;
   readonly resolved?: boolean;
+  // Opaque TItem/TDoc payloads (S2 correction, same opacity pattern as `cursor`/`payload`):
+  // without these, `retry-failed` would have no way to call `SitePort.fetchDocument(item, doc)`
+  // again without re-running discovery, which contradicts "document retry does not re-discover".
+  readonly item?: unknown;
+  readonly doc?: unknown;
 }
 
 export interface FailureLedger {

@@ -11,10 +11,10 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~3300 authored (S1 749 actual, S2 ~550, S3 ~550, S4 ~550, S5 ~490, S6 ~420) |
-| 800-line budget risk | Low — the widest remaining slice sits ~250 lines under budget |
+| Estimated changed lines | ~3800 authored (S1 749 actual, S2a 808 actual, S2b ~450, S3 ~600, S4 ~650, S5 ~550, S6 ~450) |
+| 800-line budget risk | Medium — S3/S4/S5 estimates are now grounded in two measured slices, but remain estimates |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2 -> S3 -> S4 -> S5 -> S6 (S1+S2 hard-gate S3; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4 -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
@@ -22,35 +22,52 @@ Decision needed before apply: No — budget raised to 800 and S1's exception rec
 Chained PRs recommended: Yes
 800-line budget risk: Low
 
-### How the S2..S6 estimates were re-derived
+### How the estimates were re-derived (second revision, after S2a)
 
-S1's raw overrun factor was ~1.97x, but applying that to every later slice would overstate
-them. Roughly 245 of S1's lines are **one-time** costs that do not recur: the vitest install,
-the ESLint seam block, `README.md`, the `openspec/config.yaml` update, and `ports.ts` (152
-lines, declared once for the whole engine). Excluding those, S1's recurring implementation
-work was ~504 lines against a 380 estimate — a **~1.33x** factor. That factor is what the
-S2..S6 numbers above apply, and it is the one to re-check after S2 lands.
+The first revision applied a 1.33x factor to the original per-slice guesses. That was the
+wrong method and it failed immediately: S2 was re-estimated at ~550 and its storage half
+alone measured 808. Multiplying an unmeasured estimate by a factor produces another
+unmeasured estimate, only more confident.
+
+What two measured slices actually show:
+
+- A slice that declares types and stores costs ~100 lines per persisted record type once
+  tests are counted. S2a's five JSONL stores plus `coverage.ts` came to 808 for six units.
+- Tests and fixtures run slightly over half of authored source under strict TDD. S1: 351 of
+  656. S2a: 511 of 808. Budget for roughly 1 line of test per line of production code.
+
+S3..S6 above are re-derived from those two ratios rather than from a multiplier, using each
+slice's count of distinct units (parsers, schemas, stores, commands). They remain estimates.
+The rule going forward is to **split by coherent deliverable rather than raise the budget**:
+S2 blew its budget because it was two deliverables (persistence, and the loop over it) filed
+as one, not because 800 was too small a number.
 
 Excluded from every count: `pnpm-lock.yaml` and any other generated file. The native
 `gentle-ai sdd-attempt` runtime counts the lockfile in its own accounting, so its
-`changed_lines` figure will read substantially higher than the authored numbers here.
+`changed_lines` figure reads substantially higher than the authored numbers here.
 
 ### Suggested Work Units
 
 | Unit | Goal | Likely PR | Focused test command | Runtime harness | Rollback boundary |
 |---|---|---|---|---|---|
 | S1 | Portable engine primitives + enforced seam, proven against a fake adapter | PR 1 | `vitest run src/engine` | N/A — no CLI yet; proof is the fake-adapter suite | Delete `src/engine/{types,ports,backoff,retry-policy,rate-limiter,pool}.ts`, fixtures, eslint seam block, vitest devDeps |
-| S2 | Full discover->fetch loop + durable JSONL state + coverage arithmetic, against the fake adapter | PR 2 | `vitest run src/engine src/infra/storage` | N/A — proven by driving `engine/scraper.ts` directly in tests | Delete `src/engine/{scraper,coverage}.ts`, `src/infra/storage/*`; S1 untouched |
+| S2a | Durable append-only JSONL state + coverage arithmetic, crash-safe on read-back | PR 2 | `vitest run src/engine/coverage.test.ts src/infra/storage` | N/A — pure functions and file I/O, no loop yet | Delete `src/engine/coverage.ts`, `src/infra/storage/*`; S1 untouched |
+| S2b | Two-stage discover->fetch loop over the S2a stores, resumable after a crash | PR 3 | `vitest run src/engine` | N/A — proven by driving `engine/scraper.ts` directly in tests | Delete `src/engine/scraper.ts` and its test; S1 and S2a untouched |
 | S3 | TRF5 session priming + search + content-based validity classification against redacted fixtures | PR 3 | `vitest run src/adapters/trf5/session.test.ts src/adapters/trf5/search.test.ts src/adapters/trf5/traversal.test.ts src/adapters/trf5/schemas` | N/A — no detail/document stage or CLI wired yet | Delete `src/adapters/trf5/{session,search,classes,traversal,encoding}.ts`, `schemas/{response-view,validity-chain}.ts`, fixtures |
 | S4 | Full detail-page field inventory + document fetch/decode/filename, spec-conformant payload | PR 4 | `vitest run src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts src/adapters/trf5/parsing src/adapters/trf5/encoding.test.ts` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/{detail,documents}.ts`, `parsing/*`, `schemas/payload.ts`; S3 untouched |
 | S5 | Bounded, forecastable, resumable CLI run end to end | PR 5 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
 | S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 6 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
-**Hard ordering**: S1 and S2 must both land before S3 starts (chain is sequential, not parallelizable across writers). S3 before S4 (detail parsing needs the validity-chain skeleton). S5 needs S1–S4 (wires CLI to the full loop). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
+**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4 (detail parsing needs the validity-chain skeleton). S5 needs S1–S4 (wires CLI to the full loop). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
 
 ## Requirement Coverage Map
 
 Every requirement across the six specs maps to exactly one slice below. No requirement is left uncovered.
+
+`S2` in this map now resolves to the S2a/S2b pair: persistence and coverage arithmetic land in
+S2a, and anything requiring the loop — two-stage execution, opaque checkpoint persistence from
+the engine, envelope assembly, dedup by identity key — lands in S2b. Task numbers are unchanged
+by the split, so each row still resolves to the same numbered task.
 
 | Spec | Requirement | Slice |
 |---|---|---|
@@ -121,24 +138,40 @@ Demonstrates: a portable engine core (backoff, retry, rate limiter, pool) whose 
 - [x] 1.15 GREEN implement `engine/__fixtures__/fake-site.ts` + `fake-traversal.ts`.
 - [x] 1.16 Confirm `pnpm lint` fails on a scratch import of `adapters/trf5` from `engine/**`; remove the scratch file after confirming.
 
-## S2: Discover->fetch loop + durable state + coverage (~550 lines)
+## S2a: Durable JSONL state + coverage arithmetic (808 lines actual — complete)
 
-Demonstrates: the full two-stage loop, resumable JSONL state, and measured (not certified) coverage — all against the S1 fake adapter, no TRF5 code involved.
+**Split from the original S2.** S2 was planned as one slice but is two deliverables: the
+persistence layer, and the loop that orchestrates it. They are reviewed differently and fail
+differently. The storage half alone consumed 808 authored lines, so the loop moved to S2b
+rather than the budget being raised a second time. Task numbering is unchanged so the
+Requirement Coverage Map above still resolves.
+
+Demonstrates: append-only JSONL persistence with crash-safe read-back, and measured (not
+certified) coverage arithmetic. 47 tests green.
+
+- [x] 2.3 RED `infra/storage/jsonl-item-sink.test.ts` + `jsonl-coverage-sink.test.ts`: append-only; killed-run leaves N valid lines; torn final line dropped with a warning at load; malformed non-final line is fatal.
+- [x] 2.4 GREEN implement `infra/storage/jsonl-item-sink.ts`, `jsonl-coverage-sink.ts`.
+- [x] 2.5 RED `infra/storage/jsonl-checkpoint-store.test.ts`: cursor round-trips byte-identical JSON; engine performs no transform on cursor fields.
+- [x] 2.6 RED `infra/storage/jsonl-failure-ledger.test.ts` + `jsonl-adapter-state-store.test.ts`: ledger keyed by itemId+documentId(`null` for discovery failure); resolution appends `resolved:true`, never edits/deletes.
+- [x] 2.7 GREEN implement `infra/storage/jsonl-checkpoint-store.ts`, `jsonl-failure-ledger.ts`, `jsonl-adapter-state-store.ts`.
+- [x] 2.8 RED `engine/coverage.test.ts`: cell state (complete/truncated/failed) judged against adapter-declared cap, not a hardcoded value; run-summary counts match ledger exactly; SHA-1 set-hash confirms idempotence and reports a mismatch as observed, not an error; partition invariant passes/flags per the day-count comparison; a T2 re-check does not invalidate a T1 `complete` record.
+- [x] 2.9 GREEN implement `engine/coverage.ts` (cell ledger, run-summary arithmetic, set hash, partition invariant).
+- [x] 2.14 Confirm `coverage.jsonl` and `items.jsonl` are separate files, never interleaved (assert in `jsonl-*.test.ts`).
+
+## S2b: Two-stage discover->fetch loop (~450 lines)
+
+Demonstrates: the full two-stage loop driving the S2a stores, deduplicating by the
+adapter-declared identity key, and resuming from a checkpoint after a crash — all against the
+S1 fake adapter, with no TRF5 code involved. This slice is where portability is proven a
+second time: if the loop needed to know anything about the target site to close, the seam
+would be fiction.
 
 - [ ] 2.1 RED `engine/scraper.test.ts`: doc-fetch failure after successful discover still writes the item and records the doc failure; discover failure skips fetch entirely.
-- [ ] 2.2 GREEN implement `engine/scraper.ts` (two-stage loop wired to Pool + RetryPolicy + RateLimiter).
-- [ ] 2.3 RED `infra/storage/jsonl-item-sink.test.ts` + `jsonl-coverage-sink.test.ts`: append-only; killed-run leaves N valid lines; torn final line dropped with a warning at load; malformed non-final line is fatal.
-- [ ] 2.4 GREEN implement `infra/storage/jsonl-item-sink.ts`, `jsonl-coverage-sink.ts`.
-- [ ] 2.5 RED `infra/storage/jsonl-checkpoint-store.test.ts`: cursor round-trips byte-identical JSON; engine performs no transform on cursor fields.
-- [ ] 2.6 RED `infra/storage/jsonl-failure-ledger.test.ts` + `jsonl-adapter-state-store.test.ts`: ledger keyed by itemId+documentId(`null` for discovery failure); resolution appends `resolved:true`, never edits/deletes.
-- [ ] 2.7 GREEN implement `infra/storage/jsonl-checkpoint-store.ts`, `jsonl-failure-ledger.ts`, `jsonl-adapter-state-store.ts`.
-- [ ] 2.8 RED `engine/coverage.test.ts`: cell state (complete/truncated/failed) judged against adapter-declared cap, not a hardcoded value; run-summary counts match ledger exactly; SHA-1 set-hash confirms idempotence and reports a mismatch as observed, not an error; partition invariant passes/flags per the day-count comparison; a T2 re-check does not invalidate a T1 `complete` record.
-- [ ] 2.9 GREEN implement `engine/coverage.ts` (cell ledger, run-summary arithmetic, set hash, partition invariant).
+- [ ] 2.2 GREEN implement `engine/scraper.ts` (two-stage loop wired to Pool + RetryPolicy + RateLimiter). This is where the 429 wait-duration composition lands: `RetryDecision.requeue` carries no `delayMs`, so `scraper.ts` calls `tripCooldown` and requeues the unit, freeing the worker slot while the global cooldown owns the wait.
 - [ ] 2.10 RED (extend `scraper.test.ts`): same item across two overlapping cells is written once, keyed by the adapter-declared identity key; envelope is exactly `{schemaVersion, itemId, scrapedAt, sourceUrl, runId, payload}`.
 - [ ] 2.11 GREEN implement dedup-by-identity-key and envelope assembly in `engine/scraper.ts`.
 - [ ] 2.12 RED (extend `scraper.test.ts`): write order is items -> coverage -> checkpoint; a crash between them leaves no checkpoint, so the unit re-runs; retrying a failed document re-issues only `fetchDocument`, never the cell's discovery.
 - [ ] 2.13 GREEN implement checkpoint-write ordering and the document-only retry path (`retry-failed`).
-- [ ] 2.14 Confirm `coverage.jsonl` and `items.jsonl` are separate files, never interleaved (assert in `jsonl-*.test.ts`).
 
 ## S3: TRF5 session, search, and content-based validity (~550 lines)
 
