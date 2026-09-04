@@ -1,0 +1,16 @@
+dist/
+node_modules/
+coverage/
+output/
+data/
+pdfs/
+pnpm-lock.yaml
+
+# Tool-owned, generated on their own schedule.
+.atl/
+openspec/
+
+# Prose and captured evidence. Prettier reflows HTML inside fenced code blocks,
+# which silently rewrites verbatim samples of what the site actually returned.
+# Formatting owns the code; it does not own the research record.
+*.md

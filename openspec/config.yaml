@@ -1,0 +1,93 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: TypeScript 5.6 (strict, NodeNext ESM), Node >=20, pnpm@11.22.0 workspace.
+  Libraries: axios + axios-cookiejar-support + tough-cookie (session/cookie jar), cheerio (HTML parsing).
+  Domain: TRF5 PJe (JSF 1.2 + JBoss Seam + RichFaces) public process consultation scraper.
+  Constraint: HTTP-only — no Puppeteer/Playwright/Selenium, per challenge brief.
+  Flow: prime session (GET) -> AJAX POST search -> GET process detail -> GET/302 PDF download.
+  No real pagination: 30-result server cap forces date-range partitioning (binary split;
+  saturated single-day windows are a reported coverage gap, not silently dropped).
+  Extra requirements: decouple the scraping engine from this specific site (ports/adapters,
+  so another portal can be added later) and support resumable date-range checkpoints.
+  429 handling: exponential backoff + failure ledger, exercised only via a stubbed transport.
+
+strict_tdd: true
+
+testing:
+  strict_tdd_note: >
+    Strict TDD is enabled by project preflight even though no runner is installed yet.
+    The recommended runner (see below) MUST be added before the first RED test can run;
+    treat "install the test runner" as the first task in the first sdd-tasks batch.
+  runner:
+    installed: false
+    recommended: vitest
+    recommended_dev_deps: [vitest, "@vitest/coverage-v8"]
+    rationale: >
+      Native ESM + TS execution via esbuild (no ts-node/ts-jest needed, fits NodeNext +
+      verbatimModuleSyntax cleanly); built-in vi.fn()/vi.useFakeTimers() make the 429
+      exponential-backoff path deterministic without real delays or the live site;
+      fast watch mode supports the strict RED-GREEN-REFACTOR loop.
+    test_command: "vitest run"
+    watch_command: "vitest"
+    coverage_command: "vitest run --coverage"
+  layers:
+    unit:
+      available: false
+      tool: vitest (recommended, not yet installed)
+    integration:
+      available: false
+      tool: >
+        vitest against a fake/stubbed HTTP transport implementing the same port as the
+        axios-based client (hand-written fake or axios-mock-adapter); the 429/backoff
+        path and the JSF session-priming flow MUST be tested this way, never live.
+    e2e:
+      available: false
+      tool: "N/A by design — browser automation is forbidden by the challenge brief"
+  coverage:
+    available: false
+    command: "vitest run --coverage (once @vitest/coverage-v8 is added)"
+  quality_tools:
+    linter:
+      available: false
+      command: "—"
+    type_checker:
+      available: true
+      command: "pnpm typecheck"
+    formatter:
+      available: false
+      command: "—"
+
+rules:
+  proposal:
+    - Include a rollback plan for changes touching session/state handling or partitioning logic
+    - State explicitly which parts are PJe-TRF5-specific vs. portal-agnostic (adapter boundary)
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Cover the case-5 "host defect" and case-3 "session expired" behaviors from docs/RESEARCH.md
+    - Specify resumability semantics (checkpoint format, what counts as a completed date window)
+  design:
+    - Document the scraping-engine port/adapter boundary (site-agnostic core vs. PJe-TRF5 adapter)
+    - Document the checkpoint/resumability model explicitly (storage shape, idempotency)
+    - Include sequence diagrams for the session-priming + AJAX search + detail + PDF flow
+    - Justify any deviation from the error catalog and retry policy in docs/RESEARCH.md
+  tasks:
+    - First task in the first batch MUST be adding the recommended test runner (vitest)
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+    - Flag any task that would require live-site 429 reproduction as out of scope (use stubs)
+  apply:
+    guidelines:
+      - Follow existing code patterns and the src/ layout (pje/, http/, storage/, domain/, partition/, logging/)
+      - Never test the 429/backoff path or session-recovery paths against the live PJe TRF5 site
+    tdd: true # RED-GREEN-REFACTOR is mandatory (Strict TDD Mode: enabled)
+    test_command: "vitest run"
+  verify:
+    test_command: "vitest run"
+    build_command: "pnpm typecheck"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+    - Warn if a change modifies the checkpoint/resumability format without a migration note

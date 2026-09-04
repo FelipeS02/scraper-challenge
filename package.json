@@ -1,0 +1,47 @@
+{
+  "name": "pje-trf5-scraper",
+  "version": "1.0.0",
+  "description": "HTTP-only scraper for the TRF5 PJe public consultation portal (JSF/Seam + RichFaces), with 429 backoff and PDF downloads.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check",
+    "start": "tsx src/main.ts",
+    "scrape": "tsx src/main.ts scrape",
+    "retry-failed": "tsx src/main.ts retry-failed"
+  },
+  "keywords": [
+    "scraper",
+    "pje",
+    "trf5",
+    "jsf",
+    "typescript"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@11.22.0",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "axios-cookiejar-support": "^5.0.3",
+    "cheerio": "^1.0.0",
+    "tough-cookie": "^5.0.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.7.5",
+    "eslint": "^10.9.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.69.0"
+  }
+}

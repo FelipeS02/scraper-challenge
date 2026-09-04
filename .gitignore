@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Scraper output (data and PDFs are regenerated, never committed)
+output/
+data/
+pdfs/
+logs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local AI tooling state (machine-specific, not part of the deliverable)
+.atl/
+.engram/
+
+# Logs
+*.log
+npm-debug.log*

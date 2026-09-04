@@ -1,0 +1,4 @@
+# esbuild ships a prebuilt binary and needs its postinstall script to run;
+# tsx depends on it. pnpm blocks build scripts by default.
+allowBuilds:
+  esbuild: true
