@@ -3,7 +3,7 @@
  * MUST NOT depend on Redis, BullMQ, or any other queue client (core-scraping-engine).
  */
 export class Pool {
-  constructor(private readonly concurrency: number) {}
+  constructor(readonly concurrency: number) {}
 
   async run<T>(units: readonly T[], worker: (unit: T) => Promise<void>): Promise<void> {
     const queue = [...units];

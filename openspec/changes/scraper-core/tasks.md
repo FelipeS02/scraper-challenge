@@ -11,7 +11,7 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~3800 authored (S1 749 actual, S2a 808 actual, S2b ~450, S3 ~600, S4 ~650, S5 ~550, S6 ~450) |
+| Estimated changed lines | ~3800 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 ~600, S4 ~650, S5 ~550, S6 ~450) |
 | 800-line budget risk | Medium — S3/S4/S5 estimates are now grounded in two measured slices, but remain estimates |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2a -> S2b -> S3 -> S4 -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
@@ -158,7 +158,7 @@ certified) coverage arithmetic. 47 tests green.
 - [x] 2.9 GREEN implement `engine/coverage.ts` (cell ledger, run-summary arithmetic, set hash, partition invariant).
 - [x] 2.14 Confirm `coverage.jsonl` and `items.jsonl` are separate files, never interleaved (assert in `jsonl-*.test.ts`).
 
-## S2b: Two-stage discover->fetch loop (~450 lines)
+## S2b: Two-stage discover->fetch loop (663 lines actual — complete)
 
 Demonstrates: the full two-stage loop driving the S2a stores, deduplicating by the
 adapter-declared identity key, and resuming from a checkpoint after a crash — all against the
@@ -166,12 +166,12 @@ S1 fake adapter, with no TRF5 code involved. This slice is where portability is 
 second time: if the loop needed to know anything about the target site to close, the seam
 would be fiction.
 
-- [ ] 2.1 RED `engine/scraper.test.ts`: doc-fetch failure after successful discover still writes the item and records the doc failure; discover failure skips fetch entirely.
-- [ ] 2.2 GREEN implement `engine/scraper.ts` (two-stage loop wired to Pool + RetryPolicy + RateLimiter). This is where the 429 wait-duration composition lands: `RetryDecision.requeue` carries no `delayMs`, so `scraper.ts` calls `tripCooldown` and requeues the unit, freeing the worker slot while the global cooldown owns the wait.
-- [ ] 2.10 RED (extend `scraper.test.ts`): same item across two overlapping cells is written once, keyed by the adapter-declared identity key; envelope is exactly `{schemaVersion, itemId, scrapedAt, sourceUrl, runId, payload}`.
-- [ ] 2.11 GREEN implement dedup-by-identity-key and envelope assembly in `engine/scraper.ts`.
-- [ ] 2.12 RED (extend `scraper.test.ts`): write order is items -> coverage -> checkpoint; a crash between them leaves no checkpoint, so the unit re-runs; retrying a failed document re-issues only `fetchDocument`, never the cell's discovery.
-- [ ] 2.13 GREEN implement checkpoint-write ordering and the document-only retry path (`retry-failed`).
+- [x] 2.1 RED `engine/scraper.test.ts`: doc-fetch failure after successful discover still writes the item and records the doc failure; discover failure skips fetch entirely.
+- [x] 2.2 GREEN implement `engine/scraper.ts` (two-stage loop wired to Pool + RetryPolicy + RateLimiter). This is where the 429 wait-duration composition lands: `RetryDecision.requeue` carries no `delayMs`, so `scraper.ts` calls `tripCooldown` and requeues the unit, freeing the worker slot while the global cooldown owns the wait.
+- [x] 2.10 RED (extend `scraper.test.ts`): same item across two overlapping cells is written once, keyed by the adapter-declared identity key; envelope is exactly `{schemaVersion, itemId, scrapedAt, sourceUrl, runId, payload}`.
+- [x] 2.11 GREEN implement dedup-by-identity-key and envelope assembly in `engine/scraper.ts`.
+- [x] 2.12 RED (extend `scraper.test.ts`): write order is items -> coverage -> checkpoint; a crash between them leaves no checkpoint, so the unit re-runs; retrying a failed document re-issues only `fetchDocument`, never the cell's discovery.
+- [x] 2.13 GREEN implement checkpoint-write ordering and the document-only retry path (`retry-failed`).
 
 ## S3: TRF5 session, search, and content-based validity (~550 lines)
 
