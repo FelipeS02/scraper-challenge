@@ -11,10 +11,10 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~4850 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5 ~550, S6 ~450) |
+| Estimated changed lines | ~4850 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a ~330, S5b ~520, S6 ~450) |
 | 800-line budget risk | Medium — the S4a/S4b split broke a four-slice overrun streak: S4a landed at 729 authored and S4b at 266, both inside budget for the first time. Split by deliverable rather than trusting an estimate |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5b -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5b; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
@@ -84,10 +84,11 @@ and filename derivation (4.15–4.18) — rather than discovering the overage at
 | S4b | Document fetch through 302, byte-level decode, stable filename derivation | PR 6 | `vitest run src/adapters/trf5/documents.test.ts src/adapters/trf5/encoding.test.ts` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/{documents,encoding}.ts`; S4a untouched |
 | S4c | Document bytes actually persisted, under session-independent human-navigable paths | PR 7 | `vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` | N/A — CLI not wired until S5 | Delete `src/infra/storage/fs-document-sink.ts` and the `DocumentSink` port; revert the path builder to S4b's `ca`-derived filename |
 | S4d | Every document-persistence test proven to detect a defect; the two behaviors S4c left uncovered done under real strict TDD | PR 8 | `vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` | N/A — CLI not wired until S5 | Revert `documents.ts` slug folding and drop the tests added here; S4c behavior is unchanged |
-| S5 | Bounded, forecastable, resumable CLI run end to end | PR 9 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 10 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S5a | Every engine lifecycle transition observable through a port, redacted, unable to fail the run | PR 9 | `vitest run src/infra/logging src/engine/scraper.test.ts` | N/A — no CLI yet; proof is `RecordingLogger` assertions over the existing loop | Delete `src/infra/logging/*`, the `Logger` port, and the `logger` field on `ScraperConfig`; restore the `console.warn` in `infra/storage/jsonl.ts` |
+| S5b | Bounded, forecastable, resumable CLI run end to end | PR 10 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter/logging remain independently testable |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 11 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
-**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5 needs S1–S4d (wires CLI to the full loop, including the document sink). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
+**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5b: `src/main.ts` wires the logger, so the port and its implementations must exist before the composition root is written. S5b needs S5a. S6 is additive and may land last independently of S5b's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
 
 ## Requirement Coverage Map
 
@@ -101,6 +102,11 @@ by the split, so each row still resolves to the same numbered task.
 `S4` resolves the same way to the S4a/S4b pair: detail fetch, field extraction, and payload
 assembly land in S4a; document byte-level decoding and stable filename derivation land in S4b.
 Task numbers are again unchanged.
+
+`S5` resolves to the S5a/S5b pair: the logging port, its implementations, and the engine's
+event emission land in S5a (tasks 5.12–5.18); the CLI, its bounds, the dry-run forecast, the
+summary, and the composition root land in S5b (tasks 5.1–5.11). Task numbers are unchanged by
+this split too — 5.12–5.18 are numbered after 5.11 but execute before it.
 
 | Spec | Requirement | Slice |
 |---|---|---|
@@ -116,20 +122,21 @@ Task numbers are again unchanged.
 | core-resilience-policy | Global 429 Cooldown | S1 |
 | core-resilience-policy | Stubbed-Transport Test Isolation | S1 (cross-cutting: also honored in S3) |
 | core-coverage-accounting | Cell State Ledger | S2 |
-| core-coverage-accounting | Run Summary Arithmetic | S2 (arithmetic) / S5 (CLI display) |
+| core-coverage-accounting | Run Summary Arithmetic | S2 (arithmetic) / S5b (CLI display) |
 | core-coverage-accounting | Idempotence Verification by Set Hash | S2 |
 | core-coverage-accounting | Deduplication by Adapter-Declared Identity Key | S2 |
 | core-coverage-accounting | Partition Invariant Verification | S2 |
 | core-coverage-accounting | Separate Checkpoint and Failure Ledger Concerns | S2 |
 | core-coverage-accounting | Observation-Timestamped Completeness | S2 |
-| core-run-control-and-output | CLI Bound Enforcement | S5 (S2 budget hook) |
-| core-run-control-and-output | Default Request Ceiling Requiring Override | S5 (S2 budget hook) |
-| core-run-control-and-output | Dry-Run Forecast | S5 |
+| core-run-control-and-output | CLI Bound Enforcement | S5b (S2 budget hook) |
+| core-run-control-and-output | Default Request Ceiling Requiring Override | S5b (S2 budget hook) |
+| core-run-control-and-output | Dry-Run Forecast | S5b |
 | core-run-control-and-output | JSONL Append-Only Output | S2 |
 | core-run-control-and-output | Mandatory Envelope Fields | S2 |
 | core-run-control-and-output | English camelCase Property Naming | S2 (envelope) / S4 (payload) |
 | core-run-control-and-output | Separate Coverage Ledger File | S2 |
-| core-run-control-and-output | Personal Data Handling Rules | S1 (`.gitignore` + convention) / S3+S4 (fixtures) |
+| core-run-control-and-output | Structured Run Observability | S5a |
+| core-run-control-and-output | Personal Data Handling Rules | S1 (`.gitignore` + convention) / S3+S4 (fixtures) / S5a (log redaction) |
 | core-frontier-crawl | Deferred Phase-2 Invocation | S6 |
 | core-frontier-crawl | Seed Harvesting and Prioritization | S6 |
 | core-frontier-crawl | Yield-Decay Stop Condition | S6 |
@@ -305,21 +312,52 @@ applies genuine strict TDD to the two behaviors S4c left uncovered.
 - [x] 4d.5 GREEN implement correct combining-mark folding. No implementation change was needed — S4c's strip-after-NFD approach already folds this exact character set correctly.
 - [x] 4d.6 Record strict-TDD compliance for this slice in `apply-progress.md`: every cycle in 4d.2–4d.5 observed a genuine RED before its GREEN, with the failure output quoted. No reconstructed RED is acceptable in this slice — if a cycle cannot produce a real RED, say so and explain why rather than staging one. Done — see `apply-progress.md` §"Strict-TDD compliance for S4d".
 
-## S5: CLI, bounds, and run control (~490 lines)
+## S5a: Structured logging port and implementations (~330 lines)
+
+**Split from S5 before launch**, on the same rule S2 and S4 were split under: a slice is cut by
+coherent deliverable, not by raising the budget. Adding logging took S5's estimate from ~490 to
+~850, past the 800 cap, and the two halves fail differently — a logging defect costs a missing
+event, a CLI defect costs an unbounded run against a live judicial portal. They are reviewed
+differently, so they ship separately. Task numbering is unchanged so the Requirement Coverage
+Map still resolves.
+
+**Logging was a planning gap.** `design.md` line 25 declared `infra/logging/logger.ts` and
+`proposal.md` promised structured logs, but no task ever built either, and no spec required
+them — the same shape of gap S4c found for document persistence, caught here before apply
+rather than after. A requirement (`Structured Run Observability`) was added to
+`core-run-control-and-output`, and `Personal Data Handling Rules` was extended to cover log
+redaction, since `logs/` is exactly where a well-meaning `console.log(item)` leaks a CPF.
+
+Demonstrates: every lifecycle transition the engine makes is observable after the fact, through
+a port, without leaking personal data and without the ability to fail the run.
+
+This slice hard-gates S5b: `src/main.ts` (5.9) wires the logger, so the port and its
+implementations must exist first. The loggers take level and destination as constructor
+arguments here; S5b's `cli/args.ts` is what later chooses them from the command line.
+
+- [ ] 5.12 RED `infra/logging/redacting-logger.test.ts`: a `LogEvent` whose `fields` carry `cpf`, a party name, `jsessionid`, `viewState`, or `ca` reaches the wrapped `Logger` with those values replaced; every other field passes through byte-identical; redaction is keyed on field name, never on sniffing values.
+- [ ] 5.13 GREEN declare `LogLevel`/`LogEvent`/`Logger` in `engine/ports.ts` and implement `infra/logging/redacting-logger.ts` as a decorator over any `Logger` — same composition shape as `withJitter`/`withCap` in `engine/backoff.ts`.
+- [ ] 5.14 RED `infra/logging/jsonl-logger.test.ts` + `console-logger.test.ts`: the JSONL logger appends one valid JSON object per line to `logs/run-<runId>.jsonl`, reusing `infra/storage/jsonl.ts`'s `appendJsonlLine`, and writes UTF-8 explicitly so a non-ASCII field survives on Windows; the console logger writes to stderr only, leaving stdout free for S5b's `cli/summary.ts` and `cli/dry-run.ts`; a level below the configured threshold emits nothing. The log file is diagnostic, never replayed into program state, so it carries no torn-line contract — that standard belongs to the S2a sinks whose records drive coverage arithmetic.
+- [ ] 5.15 GREEN implement `infra/logging/jsonl-logger.ts` and `console-logger.ts`; add `engine/__fixtures__/recording-logger.ts` (in-memory `Logger` for assertions) and a `NullLogger` default.
+- [ ] 5.16 RED (extend `engine/scraper.test.ts`): the loop emits a stable event key at each lifecycle transition — unit start/complete, saturation split, retry with attempt and delay, session re-prime, 429 cooldown, document persisted, document failed — asserted through `RecordingLogger`, never by spying on `console`. A `Logger` that throws does not fail the run or change its outcome.
+- [ ] 5.17 GREEN add `logger` to `ScraperConfig` and emit those events from `engine/scraper.ts`; replace the direct `console.warn` in `infra/storage/jsonl.ts` with a `Logger` call, so no module under `src/` writes to the console outside `infra/logging/`.
+- [ ] 5.18 Confirm the seam holds: `pnpm lint` still passes with `engine/**` importing nothing from `infra/logging/**` (the engine depends on the `Logger` port only), and no `console.` call remains under `src/` outside `infra/logging/`.
+
+## S5b: CLI, bounds, and run control (~520 lines)
 
 Demonstrates: a bounded, forecastable, resumable run invocable end to end from the command line.
 
 - [ ] 5.1 RED `engine/budget.test.ts`: `--max-documents` stops further fetches once reached; `--max-items` stops discovery once reached; an omitted `--max-requests` still stops at a default ceiling; unbounded requires an explicit override flag.
 - [ ] 5.2 GREEN implement `engine/budget.ts`; wire into `engine/scraper.ts`.
-- [ ] 5.3 RED `cli/args.test.ts`: parses `--from --to --max-days --max-facet-values --max-items --max-documents(default 10) --documents-per-item --max-requests`.
+- [ ] 5.3 RED `cli/args.test.ts`: parses `--from --to --max-days --max-facet-values --max-items --max-documents(default 10) --documents-per-item --max-requests --log-level(default info) --log-format(console|jsonl, default console)`.
 - [ ] 5.4 GREEN implement `cli/args.ts`.
 - [ ] 5.5 RED `cli/dry-run.test.ts`: prints forecasted request count and duration; zero discovery requests reach the stub transport.
 - [ ] 5.6 GREEN implement `cli/dry-run.ts`.
 - [ ] 5.7 RED `cli/summary.test.ts`: printed summary equals the S2 ledger-derived counts exactly, no independent completeness claim.
 - [ ] 5.8 GREEN implement `cli/summary.ts` (consumes `engine/coverage.ts` arithmetic).
-- [ ] 5.9 GREEN implement `src/main.ts` composition root: wires `TRF5Site`/`TRF5Traversal` + `AxiosTransport` + JSONL stores into `scrape` / `scrape --frontier` / `retry-failed`.
-- [ ] 5.10 GREEN write README: pnpm/tsx deviation, every CLI bound, personal-data rules, "coverage is measured, never certified," manual-smoke-only note for 429/session-recovery against the live host.
-- [ ] 5.11 Confirm `openspec/config.yaml` reflects the final S1–S5 layout and testing state (no stale `pje/`, `partition/`, `domain/` references).
+- [ ] 5.9 GREEN implement `src/main.ts` composition root: wires `TRF5Site`/`TRF5Traversal` + `AxiosTransport` + JSONL stores + the redaction-wrapped `Logger` into `scrape` / `scrape --frontier` / `retry-failed`.
+- [ ] 5.10 GREEN write README: pnpm/tsx deviation, every CLI bound, personal-data rules (including that `logs/` is git-ignored and log fields are redacted by name), the emitted event keys and how to filter them, "coverage is measured, never certified," manual-smoke-only note for 429/session-recovery against the live host.
+- [ ] 5.11 Confirm `openspec/config.yaml` reflects the final S1–S5b layout — including `src/infra/logging/` — and testing state (no stale `pje/`, `partition/`, `domain/` references).
 
 ## S6: Frontier crawl — additive, off by default (~420 lines)
 
@@ -334,7 +372,7 @@ Demonstrates: an optional second pass that targets known gaps and self-limits, w
 - [ ] 6.7 RED (extend `frontier.test.ts`): a rolling window of zero-new-item seed searches stops further searches (yield decay).
 - [ ] 6.8 GREEN implement yield-decay tracking.
 - [ ] 6.9 RED (extend `frontier.test.ts`): the Nth request stops the run even while yield has not decayed.
-- [ ] 6.10 GREEN wire `engine/budget.ts` (S5) into the frontier loop as a hard ceiling.
+- [ ] 6.10 GREEN wire `engine/budget.ts` (S5b) into the frontier loop as a hard ceiling.
 - [ ] 6.11 RED (extend `frontier.test.ts` + `search.test.ts`): a seed search without a date range is rejected before send; a saturated seed search bisects via the same `traversal.ts` split used in phase 1.
 - [ ] 6.12 GREEN wire date-range validation and split reuse into the frontier seed-search path.
 - [ ] 6.13 GREEN state, in `cli/summary.ts` output and README §Frontier, that frontier-crawl coverage gains are unmeasured and self-reinforcing.
