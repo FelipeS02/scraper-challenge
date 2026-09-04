@@ -11,15 +11,19 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~4850 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5b ~520, S6 ~450) |
-| 800-line budget risk | Medium — the S4a/S4b split broke a four-slice overrun streak: S4a landed at 729 authored and S4b at 266, both inside budget for the first time. Split by deliverable rather than trusting an estimate |
+| Estimated changed lines | ~7250 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c ~950–1300 estimated, S5b ~520, S6 ~450) — corrected running total; the figure previously carried here (~4850) had not been recomputed since S4c/S4d/S5a landed |
+| 800-line budget risk | Medium overall since the S4a/S4b split broke a four-slice overrun streak — but **S5c is forecast High**, see "S5c forecast (decide before launch)" below |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5b -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5b; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
-Decision needed before apply: No — S4 was split into S4a/S4b before launch (see the third
-revision below). S1 and S3 are recorded as accepted `size:exception`.
+Decision needed before apply: **Resolved 2026-09-04 — the owner granted an explicit
+`size:exception` for S5c and directed that it ship whole rather than split.** S5c's forecast
+(~950–1300 authored lines) exceeds the 800-line budget on its own low end; a split into a
+coverage-mechanism half and a contract-hygiene half was offered and declined. S5c therefore
+joins S1 and S3 as an accepted `size:exception`. S4 was split into S4a/S4b before launch (see
+the third revision below).
 Chained PRs recommended: Yes
 800-line budget risk: High
 
@@ -72,6 +76,31 @@ with a worse track record behind it. Decide S4's boundary before launching it �
 detail-page parsing and payload assembly (4.1–4.14) separately from document fetch, decode,
 and filename derivation (4.15–4.18) — rather than discovering the overage at settle time.
 
+### S5c forecast (decide before launch)
+
+S5c is estimated bottom-up at ~800 authored lines by summing its ~29 tasks group by group —
+already at the cap by itself, before any correction. Every measured single-deliverable slice
+in this project has landed over its own pre-launch estimate: S3 at 1.39x, S4 (combined) at
+1.53x, S5a at 1.74x. S5c's shape — wiring new behavior into the existing `scraper.ts` loop,
+plus a new engine-owned depth tracker, plus two genuinely novel test fixtures (a non-date fake
+adapter, a symbol-to-requirement audit) — is closer in kind to S5a (wiring into existing code)
+than to a green-field adapter slice, so the honest range is **~950–1300 authored `src/`
+lines**, applying S5a's and S3's measured multipliers to the ~800 bottom-up figure. This
+already exceeds the 800-line budget on the low end of the range.
+
+Per `delivery_strategy: single-pr`, an over-budget forecast means **apply must not start**
+until the owner grants an explicit `size:exception` for S5c, exactly as for S1 and S3 — or
+decides to split it further before launch, the way S4 and S5 were each split pre-launch on
+weaker evidence than this. That decision belongs to the owner, not to this task breakdown: the
+estimate above is not shaved to fit, and S5c is not silently pre-split here.
+
+**Owner decision (2026-09-04): `size:exception` granted; S5c ships whole.** A split along the
+two failure modes was proposed — a coverage-mechanism half (split wiring, `subdivided`,
+coverage arithmetic, checkpoint/resume, the sweep-flow document) and a contract-hygiene half
+(`resultPageCap: number | null`, D12's `invalidReference` + `detail`, the reverse-coverage
+audit) — and declined in favour of a single slice. Reviewers should expect a PR well above
+800 lines and treat the two groups as separable review passes even though they land together.
+
 ### Suggested Work Units
 
 | Unit | Goal | Likely PR | Focused test command | Runtime harness | Rollback boundary |
@@ -85,10 +114,11 @@ and filename derivation (4.15–4.18) — rather than discovering the overage at
 | S4c | Document bytes actually persisted, under session-independent human-navigable paths | PR 7 | `vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` | N/A — CLI not wired until S5 | Delete `src/infra/storage/fs-document-sink.ts` and the `DocumentSink` port; revert the path builder to S4b's `ca`-derived filename |
 | S4d | Every document-persistence test proven to detect a defect; the two behaviors S4c left uncovered done under real strict TDD | PR 8 | `vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` | N/A — CLI not wired until S5 | Revert `documents.ts` slug folding and drop the tests added here; S4c behavior is unchanged |
 | S5a | Every engine lifecycle transition observable through a port, redacted, unable to fail the run | PR 9 | `vitest run src/infra/logging src/engine/scraper.test.ts` | N/A — no CLI yet; proof is `RecordingLogger` assertions over the existing loop | Delete `src/infra/logging/*`, the `Logger` port, and the `logger` field on `ScraperConfig`; restore the `console.warn` in `infra/storage/jsonl.ts` |
-| S5b | Bounded, forecastable, resumable CLI run end to end | PR 10 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter/logging remain independently testable |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 11 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S5c | Saturation-driven subdivision wired end to end — `split()` enqueues children, `subdivided` cells are ledgered not lost, coverage arithmetic and the partition invariant read the amended ledger correctly, resume re-splits without re-searching, the failure vocabulary and result-cap type stay site-agnostic | PR 10 | `vitest run src/engine/coverage.test.ts src/engine/scraper.test.ts src/engine/__fixtures__ src/infra/storage/jsonl-checkpoint-store.test.ts src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts` | N/A — CLI not wired until S5b; proof is the engine/adapter suite plus the two fake-adapter fixtures | Delete the `subdivided` state, split-depth tracking, and checkpoint `facetValue`/`label` fields from `engine/{ports,coverage,scraper}.ts`; revert `SitePort.resultPageCap`/`CoverageRecord.declaredCap` to non-null `number`; revert `permanentError.reason`/`detail` in `engine/types.ts` and the two TRF5 construction sites; delete the non-date fake and the ports-coverage-audit test; S5a and S4d remain unaffected |
+| S5b | Bounded, forecastable, resumable CLI run end to end | PR 11 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter/logging remain independently testable |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 12 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
-**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5b: `src/main.ts` wires the logger, so the port and its implementations must exist before the composition root is written. S5b needs S5a. S6 is additive and may land last independently of S5b's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
+**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5c: `engine/scraper.ts`'s event emission must already exist before S5c adds new lifecycle branches (split, resume-resplit) to the same loop. S5c needs S1–S5a (it modifies `engine/{coverage,scraper,ports}.ts`, which S5a's logging already instruments and emits events through) and hard-gates S5b: `cli/summary.ts` (5.7) prints `summarizeRunCoverage`'s exact counts, so the `subdivided`-aware arithmetic and partition-invariant fixes must land before the CLI can report them honestly. S5b needs S5a and S5c. S6 is additive and may land last independently of S5b's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
 
 ## Requirement Coverage Map
 
@@ -115,17 +145,19 @@ this split too — 5.12–5.18 are numbered after 5.11 but execute before it.
 | core-scraping-engine | Opaque Checkpoint Persistence | S2 |
 | core-scraping-engine | Enforced Adapter Seam | S1 |
 | core-scraping-engine | Bounded In-Process Worker Pool | S1 |
+| core-scraping-engine | Saturation-Driven Subdivision | S5c |
+| core-scraping-engine | Site-Agnostic Failure Vocabulary | S5c |
 | core-resilience-policy | FetchOutcome to RetryDecision Mapping | S1 |
 | core-resilience-policy | Composable Backoff Strategies | S1 |
 | core-resilience-policy | Retry-After Precedence | S1 |
 | core-resilience-policy | Mandatory Backoff Cap | S1 |
 | core-resilience-policy | Global 429 Cooldown | S1 |
 | core-resilience-policy | Stubbed-Transport Test Isolation | S1 (cross-cutting: also honored in S3) |
-| core-coverage-accounting | Cell State Ledger | S2 |
-| core-coverage-accounting | Run Summary Arithmetic | S2 (arithmetic) / S5b (CLI display) |
+| core-coverage-accounting | Cell State Ledger | S2 (state ledger) / S5c (amended: uncapped-site handling + faithful cap recording) |
+| core-coverage-accounting | Run Summary Arithmetic | S2 (arithmetic) / S5c (amended: `subdivided` excluded from all three tallies) / S5b (CLI display) |
 | core-coverage-accounting | Idempotence Verification by Set Hash | S2 |
 | core-coverage-accounting | Deduplication by Adapter-Declared Identity Key | S2 |
-| core-coverage-accounting | Partition Invariant Verification | S2 |
+| core-coverage-accounting | Partition Invariant Verification | S2 / S5c (amended: sourced from the persisted `subdivided`/`truncated` parent) |
 | core-coverage-accounting | Separate Checkpoint and Failure Ledger Concerns | S2 |
 | core-coverage-accounting | Observation-Timestamped Completeness | S2 |
 | core-run-control-and-output | CLI Bound Enforcement | S5b (S2 budget hook) |
@@ -331,9 +363,10 @@ redaction, since `logs/` is exactly where a well-meaning `console.log(item)` lea
 Demonstrates: every lifecycle transition the engine makes is observable after the fact, through
 a port, without leaking personal data and without the ability to fail the run.
 
-This slice hard-gates S5b: `src/main.ts` (5.9) wires the logger, so the port and its
-implementations must exist first. The loggers take level and destination as constructor
-arguments here; S5b's `cli/args.ts` is what later chooses them from the command line.
+This slice hard-gates S5c and, transitively, S5b: `src/main.ts` (5.9) wires the logger, so the
+port and its implementations must exist first. The loggers take level and destination as
+constructor arguments here; S5b's `cli/args.ts` is what later chooses them from the command
+line.
 
 - [x] 5.12 RED `infra/logging/redacting-logger.test.ts`: a `LogEvent` whose `fields` carry `cpf`, a party name, `jsessionid`, `viewState`, or `ca` reaches the wrapped `Logger` with those values replaced; every other field passes through byte-identical; redaction is keyed on field name, never on sniffing values. Result: genuine RED — `Cannot find module './redacting-logger.js'` — before `withRedaction` existed. See `apply-progress.md`.
 - [x] 5.13 GREEN declare `LogLevel`/`LogEvent`/`Logger` in `engine/ports.ts` and implement `infra/logging/redacting-logger.ts` as a decorator over any `Logger` — same composition shape as `withJitter`/`withCap` in `engine/backoff.ts`. Result: `withRedaction(inner: Logger): Logger`, keyed on a fixed field-name set (`cpf`, `partyName`, `jsessionid`, `viewState`, `ca`); 2/2 tests passing, including a value-sniffing negative case.
@@ -342,6 +375,143 @@ arguments here; S5b's `cli/args.ts` is what later chooses them from the command 
 - [x] 5.16 RED (extend `engine/scraper.test.ts`): the loop emits a stable event key at each lifecycle transition — unit start/complete, saturation split, retry with attempt and delay, session re-prime, 429 cooldown, document persisted, document failed — asserted through `RecordingLogger`, never by spying on `console`. A `Logger` that throws does not fail the run or change its outcome. Result: genuine RED — 7/15 tests failed for the right reason (`expected undefined to match object ...` / `expected -1 to be greater than or equal to 0`) — before `scraper.ts` emitted anything. `saturation split` is asserted as `unit.saturated` (the cell reaching `truncated` state), since `TraversalPort.split()`'s children-requeue path is still unwired in `scraper.ts` in every slice through S5a (a pre-existing, explicitly out-of-scope gap — see `apply-progress.md`). See `apply-progress.md` for the full RED transcript and the one cycle (throwing-logger safety) that could not produce a RED.
 - [x] 5.17 GREEN add `logger` to `ScraperConfig` and emit those events from `engine/scraper.ts`; replace the direct `console.warn` in `infra/storage/jsonl.ts` with a `Logger` call, so no module under `src/` writes to the console outside `infra/logging/`. Result: 15/15 `scraper.test.ts` green. `readJsonlFile` gained an optional `logger: Logger = new NullLogger()` parameter (RED-first: a new `jsonl-item-sink.test.ts` case observed `expected [] to have a length of 1 but got +0` before the parameter was wired), replacing its `console.warn` call with `logger.log({ event: 'jsonl.tornLineDropped', ... })`.
 - [x] 5.18 Confirm the seam holds: `pnpm lint` still passes with `engine/**` importing nothing from `infra/logging/**` (the engine depends on the `Logger` port only), and no `console.` call remains under `src/` outside `infra/logging/`. Result: confirmed — `grep -rn "infra/logging" src/engine` empty; `grep -rln "console\." src` outside `infra/logging/` returns only a test file that spies on `console.warn` to assert it is *not* called (no production `console.` call remains); `eslint.config.js`'s existing engine-seam rule plus a new `no-console: 'error'` global rule (carved out for `src/infra/logging/**`) make both checks build-enforced, not just grep-confirmed. `pnpm check` (typecheck + lint + format) clean.
+
+## S5c: Saturation-driven subdivision wired end to end (~950–1300 lines — likely exceeds the 800-line budget, see forecast above)
+
+**Added between S5a and S5b**, when `design.md`'s D10–D12 decisions and the amended
+`core-scraping-engine`/`core-coverage-accounting` specs landed after the original S1–S6 plan
+was written. This is the same shape of gap S4c and S5a each found — a component or behavior
+named in `design.md` and declared on a port, required by no task, invisible to a 100%
+Requirement Coverage Map that only checks requirement -> slice — caught here for saturation
+handling specifically: `TraversalPort.split()` has existed on the port since S1, `scraper.ts`
+has never called it through S5a, and every coverage-arithmetic function still assumes a
+numeric-only cap and a three-state ledger. A saturated cell today is always recorded
+`truncated` and its children are never enqueued — the engine silently under-reports coverage
+on exactly the sites that need subdivision the most.
+
+Demonstrates: a saturated work unit is actually subdivided — children are enqueued, the parent
+is ledgered `subdivided` rather than discarded or mis-tallied as a failure, the partition
+invariant reads the correct persisted parent, resume re-splits without re-searching, a
+misbehaving `split()` cannot loop forever, and the engine's own failure vocabulary and
+result-cap type stay honest about a site that declares neither.
+
+- [ ] 7.1 Update `engine/types.ts` (`FetchOutcome.permanentError`: drop `invalidTokenShell`,
+      add `reason: 'notFound' | 'invalidReference' | 'schemaMismatch'` + `detail: string | null`,
+      D12) and `engine/ports.ts` (`SitePort.resultPageCap: number | null`,
+      `CoverageRecord.declaredCap: number | null`, `CoverageRecord.state`/`CheckpointRecord.state`
+      gain `'subdivided'`, `CheckpointRecord` gains `facetValue: string | null` + `label: string`,
+      D10/D11) — type-only, no RED test (no runtime behavior), same precedent as 1.5.
+- [ ] 7.2 RED extend `engine/coverage.test.ts`: `classifyCellState(count, null)` always returns
+      `'complete'` regardless of count; `isSaturated(count, null)` is always `false`; both still
+      classify correctly against a numeric cap exactly as today.
+- [ ] 7.3 GREEN implement the `null`-cap branch in `classifyCellState`/`isSaturated`
+      (`engine/coverage.ts:11-20`).
+- [ ] 7.4 RED extend `engine/coverage.test.ts`: `summarizeRunCoverage` excludes every
+      `subdivided` record from the `complete`/`truncated`/`failed` tallies entirely; a ledger
+      with one `subdivided` parent plus two children (one `complete`, one `truncated`) reports
+      exactly `{ complete: 1, truncated: 1, failed: 0 }`, proving the parent is never
+      double-counted alongside its own children.
+- [ ] 7.5 GREEN fix `summarizeRunCoverage` (`engine/coverage.ts:52-56`): branch explicitly on
+      `'complete' | 'truncated' | 'subdivided'` instead of the current catch-all
+      `else failed += 1`, which silently miscounts a `subdivided` record as a failure today.
+- [ ] 7.6 RED extend `engine/coverage.test.ts`: `verifyPartitionInvariant` sources a day's
+      unfiltered count from the LATEST-observed `facetValue === null` record for that
+      `windowKey`, never the first array match, so a stale earlier observation (e.g. an
+      interrupted first attempt later re-observed as `subdivided`) can never shadow the
+      current persisted parent; the invariant compares the facet-value sum against that
+      `subdivided` parent's exact `resultCount`.
+- [ ] 7.7 GREEN fix `verifyPartitionInvariant` (`engine/coverage.ts:79-82`) to select the
+      latest `facetValue === null` record by `observedAt` — the same "latest wins" rule
+      `summarizeRunCoverage` already applies — instead of `Array.find`'s first match.
+- [ ] 7.8 RED extend `engine/scraper.test.ts`: a saturated unit (`resultCount === declaredCap`)
+      calls `TraversalPort.split()`; when it returns children, every child `WorkUnit` is
+      enqueued and processed exactly like a seeded unit, and the parent's coverage record is
+      written as `subdivided` carrying the saturation result count — never `truncated`, never
+      omitted; when `split()` returns `null`, the parent is still recorded `truncated` and
+      nothing is enqueued (regression: wiring `split()` must not change the already-covered
+      null-split path).
+- [ ] 7.9 GREEN wire `split()` into `processUnit` (`engine/scraper.ts`): on saturation, call
+      `this.config.traversal.split(unit, { resultCount, cap })`; on non-null children, enqueue
+      them and record `subdivided`; on `null`, keep recording `truncated` as today. Extend
+      `buildCoverageRecord` (`scraper.ts:287-310`) to accept `'subdivided'`.
+- [ ] 7.10 RED extend `engine/scraper.test.ts`: a work-unit lineage already subdivided the
+      configured maximum number of times is recorded `truncated` without a further `split()`
+      call, even though it is still saturated; depth is engine-owned state keyed by `unitKey`
+      and is never read from or written onto the adapter-generated `WorkUnit` (assert the fake
+      `TraversalPort.split()` never receives a depth argument and the enqueued child `WorkUnit`
+      carries no depth field).
+- [ ] 7.11 GREEN implement engine-owned split-depth tracking in `engine/scraper.ts`: a
+      `Map<string, number>` populated with each child's depth when children are enqueued
+      (default 0 for seeded units), read on `processUnit` entry, and a new
+      `ScraperConfig.maxSplitDepth: number` field; exceeding it behaves exactly like a `null`
+      split result, without calling `split()`.
+- [ ] 7.12 RED extend `engine/scraper.test.ts` + `infra/storage/jsonl-checkpoint-store.test.ts`:
+      a persisted `CheckpointRecord` carries `facetValue` and `label` alongside `cursor`,
+      round-tripping byte-identical exactly as `cursor` already does — a checkpoint now
+      describes a complete `WorkUnit`, not just its cursor.
+- [ ] 7.13 GREEN update the `checkpointStore.put(...)` call site in `engine/scraper.ts` to
+      include `facetValue`/`label`; `JsonlCheckpointStore` needs no code change beyond the
+      type, since it already round-trips the whole record verbatim.
+- [ ] 7.14 RED extend `engine/scraper.test.ts`: on `run()`, a checkpoint whose latest state is
+      `subdivided` is reconstructed into a full `WorkUnit` from its persisted
+      `cursor`/`facetValue`/`label` and passed straight to `TraversalPort.split()` — never to
+      `discover()` again; the returned children are enqueued, and any child already
+      checkpointed `complete` is skipped individually while the rest are processed like seeded
+      units.
+- [ ] 7.15 GREEN implement subdivided-checkpoint resume in `run()`: alongside the existing
+      seeded-unit filter, reconstruct every `subdivided` checkpoint into a `WorkUnit`, call
+      `split()` immediately, and merge the returned children against the loaded checkpoint map
+      before enqueuing.
+- [ ] 7.16 RED extend `engine/scraper.test.ts`: a unit whose `SitePort.resultPageCap === null`
+      is never treated as saturated — `buildCoverageRecord`'s `saturated` field is always
+      `false` and `declaredCap` reads back as `null`, never a coerced number, regardless of
+      result count.
+- [ ] 7.17 GREEN guard `buildCoverageRecord` (`scraper.ts:287-310`):
+      `saturated: cap !== null && result.count >= cap`, `declaredCap` passed through unchanged.
+- [ ] 7.18 RED extend `engine/scraper.test.ts` (failure-ledger `reason` assertions):
+      `describeOutcome` for a `permanentError` outcome reports `${reason}` when `detail` is
+      `null`, and `${reason}:${detail}` when present — the same convention `transient:${status}`
+      already uses — so an operator reading `failures.jsonl` still sees the concrete adapter
+      detail even though the type itself stays site-agnostic (D12).
+- [ ] 7.19 GREEN update the `permanentError` case in `describeOutcome` (`engine/scraper.ts:48-61`).
+- [ ] 7.20 RED extend `adapters/trf5/detail.test.ts`: the `invalidTokenShell` validity-chain
+      branch now produces `{ kind: 'permanentError', reason: 'invalidReference', detail:
+      'invalidTokenShell' }` (D12), never a site-specific `reason` literal; the
+      `schemaMismatch` construction site carries `detail: null`.
+- [ ] 7.21 GREEN update the two `FetchOutcome` construction sites in `adapters/trf5/detail.ts`
+      (currently lines 32-33, 39) per D12.
+- [ ] 7.22 RED extend `adapters/trf5/documents.test.ts`: the `notFound`/`schemaMismatch`
+      `FetchOutcome` construction sites (currently `documents.ts:88,117`) carry an explicit
+      `detail: null`, matching the new `permanentError` shape.
+- [ ] 7.23 GREEN update those two construction sites in `adapters/trf5/documents.ts` per D12.
+- [ ] 7.24 RED `engine/__fixtures__/portability-non-date.test.ts`: the full saturation/split
+      path (seed -> discover -> saturate -> split -> children enqueued/`subdivided`) runs green
+      against a fake adapter that (a) partitions along a dimension other than dates, and (b)
+      declares `resultPageCap: null`; assert `adapters/trf5` is never imported (module-graph
+      check, same as 1.14).
+- [ ] 7.25 GREEN implement `engine/__fixtures__/fake-non-date-site.ts` +
+      `fake-non-date-traversal.ts`.
+- [ ] 7.26 Record the portability audit in `apply-progress.md`: which `RunBounds` fields
+      (`dateFrom`/`dateTo`/`maxFacetValues`) the non-date fake had to abuse, repurpose, or
+      leave meaningless; whether `TraversalPort.facetName`'s singular contract blocked or
+      merely inconvenienced a non-date or multi-dimension split. Report what actually broke —
+      or that nothing did — rather than a conclusion decided in advance.
+- [ ] 7.27 Write `docs/sweep-flow.md`: a plain-language explanation of the saturation/
+      subdivision mechanism for a reader who has never seen the project, with two Mermaid
+      diagrams — a work-unit flow (search -> saturated? -> split or record -> queue) and a
+      bisection tree showing a real date range subdividing until each leaf returns under the
+      cap — with prose alongside both diagrams, not instead of them. This file does not count
+      against the authored `src/` line budget; it is documentation, tracked separately.
+- [ ] 7.28 RED `engine/__fixtures__/ports-coverage-audit.test.ts`: build a hand-maintained map
+      of every symbol exported from `engine/ports.ts` to the requirement(s) (from
+      `openspec/changes/scraper-core/specs/`) that name or require it; assert every exported
+      symbol has at least one mapped requirement. Prove the check is non-vacuous by first
+      deliberately removing one real symbol's mapping and observing a named failure (mutation-
+      testing style, same discipline S4d used for defect detection), then restoring it.
+- [ ] 7.29 GREEN implement the audit so it passes for the current `engine/ports.ts`. If it
+      surfaces a genuinely untraced symbol, record it in `apply-progress.md` as a new finding —
+      do not silently invent a requirement to close it; that decision belongs to a future spec
+      revision, not to this test.
 
 ## S5b: CLI, bounds, and run control (~520 lines)
 

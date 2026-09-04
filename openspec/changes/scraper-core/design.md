@@ -47,6 +47,9 @@ payload, not over a domain". Driven adapters group under `infra/` so the top lev
 | D7 | **zod parses a normalized `ResponseView`, not raw HTML** | zod over a cheerio-extracted DOM; regex predicates | Each validity schema becomes a small predicate over discriminating features, mapping ~1:1 onto the RESEARCH §5 error table, and the chain is unit-testable without HTML. |
 | D8 | **Invalid-token shell is detected by absence of the detail header/parties block**, not by absence of documents or by byte size | RESEARCH §5 case 1 ("detect by absence of the document table"); 28KB size threshold | *Justified deviation*: a legitimate process may have zero documents, so the documented heuristic produces false negatives. Size thresholds break the first time the site changes a stylesheet. |
 | D9 | **`null` means "known absent" in emitted payloads; `?` optional only on internal types** | optional everywhere | JSON has no `undefined`, and `exactOptionalPropertyTypes` makes `{ x: undefined }` un-assignable to `{ x?: T }`. Optional *inputs* are declared `?: T \| undefined`; optional *outputs* are declared `?: T`. |
+| D10 | **A fourth cell state `subdivided`**: a saturated cell whose `split()` returned children is recorded as `subdivided` carrying the result count observed at saturation, and is excluded from the summary's `complete`/`truncated`/`failed` tallies | (a) the parent records no cell at all (this design's own earlier rule); (b) reuse `truncated` with a `superseded: boolean` flag | (a) makes `Partition Invariant Verification` unsatisfiable: `verifyPartitionInvariant` sources a day's unfiltered count from that day's own `facetValue === null` record, so omitting the parent deletes the very number the invariant compares against — and the check does not fail loudly, it `continue`s, silently skipping the day it was written to protect. (b) overloads a state whose spec meaning is "a reported gap": the summary counts every `truncated` cell as a gap, so each *successfully closed* parent would be reported as a gap unless every reader remembered to consult the flag. A state that means two opposite things is the defect; the flag only hides it. Excluding `subdivided` from the three tallies is what stops a parent being double-counted alongside its own children. |
+| D11 | **Absence of a result-page cap is `null`, never a sentinel number**: `SitePort.resultPageCap: number \| null`, mirrored by `CoverageRecord.declaredCap: number \| null` | (a) `Number.POSITIVE_INFINITY`; (b) a `0`/`-1` sentinel; (c) a separate `hasResultPageCap: boolean` | (a) is silently lossy, and this was verified rather than assumed: every record is written through `appendJsonlLine` (`src/infra/storage/jsonl.ts:13`), and `JSON.stringify` has no non-finite representation — `Infinity` serializes to `null`, so the ledger would persist a corrupted cap behind the adapter's back, which is exactly what the spec forbids. (b) makes a magic number indistinguishable from a genuine cap, and `count >= -1` marks *every* cell saturated. (c) permits two fields to contradict each other. `null` = "known absent" is already this design's rule (D9); reusing it beats inventing a second one. Consequence: `classifyCellState(resultCount, declaredCap: number \| null)` in `src/engine/coverage.ts` returns `complete` whenever `declaredCap === null`, `isSaturated` is `false` there, and such a unit is never passed to `split()`. |
+| D12 | **`permanentError.reason` stays site-agnostic; adapter-specific detail rides beside it as opaque data**: `reason: 'notFound' \| 'invalidReference' \| 'schemaMismatch'` plus `detail: string \| null` | (a) keep the `invalidTokenShell` literal; (b) collapse the shell into `notFound`; (c) widen `reason` to a free-form `string` | (a) is the standing contradiction: `src/engine/types.ts:18` names a TRF5 observation (RESEARCH §5 case 1) inside a file whose own header claims it references no concrete site, and every future portal would have to widen an engine union to describe its own pages. (b) erases the distinction between an honest 404 (case 4) and a `200` that lies (case 1) — the distinction the coverage-honesty story rests on. (c) surrenders the exhaustive `switch` the engine relies on to classify outcomes. D8 is unchanged: the adapter still detects the shell by the absent detail-header/parties block and now reports `{ reason: 'invalidReference', detail: 'invalidTokenShell' }`, so only the site-agnostic condition crosses the seam while the ledger still records *why*. |
 
 ## Interfaces / Contracts
 
@@ -57,7 +60,9 @@ export type FetchOutcome<T> =
   | { readonly kind: 'transient'; readonly status: number | null; readonly retryAfterMs: number | null }
   | { readonly kind: 'sessionExpired' }
   | { readonly kind: 'hostDefect'; readonly reason: string }
-  | { readonly kind: 'permanentError'; readonly reason: 'notFound' | 'invalidTokenShell' | 'schemaMismatch' };
+  | { readonly kind: 'permanentError';
+      readonly reason: 'notFound' | 'invalidReference' | 'schemaMismatch';  // site-agnostic (D12)
+      readonly detail: string | null };                    // adapter-owned, opaque to the engine
 
 export type RetryDecision =
   | { readonly action: 'retryAfter'; readonly delayMs: number }
@@ -81,7 +86,7 @@ export interface HttpTransport {
 }
 
 export interface SitePort<TItem, TDoc> {
-  readonly resultPageCap: number;          // TRF5 declares 30
+  readonly resultPageCap: number | null;   // TRF5 declares 30; null = no cap declared (D11)
   readonly identityKeyName: string;        // TRF5 declares 'processNumber'
   itemId(item: TItem): string;
   documentId(doc: TDoc): string;
@@ -94,7 +99,8 @@ export interface SitePort<TItem, TDoc> {
 export interface TraversalPort<TCursor> {
   readonly facetName: string;              // TRF5 declares 'classeJudicial'
   seed(bounds: RunBounds): Promise<readonly WorkUnit<TCursor>[]>;
-  /** null = cannot subdivide further -> the engine records a `truncated` gap */
+  /** children -> the engine enqueues them and records the parent `subdivided` (D10);
+   *  null = cannot subdivide further -> the engine records a `truncated` gap */
   split(unit: WorkUnit<TCursor>, saturated: SaturationInfo): Promise<readonly WorkUnit<TCursor>[] | null>;
 }
 
@@ -104,6 +110,8 @@ export interface FrontierCapable<TItem, TCursor> {          // phase 2 only (D3)
   unitFromSeed(seed: Seed, bounds: RunBounds): WorkUnit<TCursor>;
 }
 
+// CheckpointRecord persists the whole opaque WorkUnit — cursor + facetValue + label — so a
+// `subdivided` parent is re-split on resume without re-issuing its search (D10, "Re-split inputs").
 export interface CheckpointStore { load(): Promise<ReadonlyMap<string, CheckpointRecord>>; put(r: CheckpointRecord): Promise<void>; }
 export interface FailureLedger   { load(): Promise<readonly LedgerEntry[]>; record(e: LedgerEntry): Promise<void>; resolve(itemId: string, documentId: string | null): Promise<void>; }
 export interface ItemSink<TItem> { write(r: OutputRecord<TItem>): Promise<void>; }
@@ -126,6 +134,8 @@ Dependency direction: `engine → (nothing)`. `adapters/trf5 → engine` (implem
   "dimensions": { "dateFrom": "2026-09-01", "dateTo": "2026-09-01", "facetName": "classeJudicial" } }
 ```
 
+`state` is one of `complete | truncated | failed | subdivided` (D10) and `declaredCap` is
+`null` for a site that declares no cap (D11) — both are read back verbatim, never coerced.
 `windowKey` and `facetValue` are opaque strings the core only compares for equality
 (grouping for the partition invariant, counting for `--max-facet-values`) — the core never
 parses a date. `dimensions` is adapter-owned and passed through, reusing the same opaque
@@ -159,7 +169,8 @@ CLI bounds ──→ Budget ─────────────────�
     ┌──── discover(unit) ───────────────────────────┘                        │
     │  ok        → dedup(itemId) → ItemSink(items.jsonl) → CoverageSink   ───┘
     │             → fetch stage per document → documents/ + ledger on failure
-    │  saturated  → TraversalPort.split() → children requeued | null → `truncated` gap
+    │  saturated  → split() → children enqueued + parent cell `subdivided`
+    │                       | null (or max depth) → cell `truncated` ← the reported gap
     │  failure    → RetryPolicy → retryAfter | reprimeAndRetryNow | requeue | recordAndStop
     └──── after items are flushed → CheckpointStore.put(unitKey, cursor)
 ```
@@ -187,7 +198,7 @@ Adapter                          Site
 | 1 | `sessionExpired` | `text/xml` + `Ajax-Response: redirect` + `login.seam` | `sessionExpired` (case 3) |
 | 2 | `unprimedSession` | `errorUnexpected.seam?cid=` **without** `PersistenceException` | `sessionExpired` (case 2) |
 | 3 | `hostDefect` | `errorUnexpected.seam` **with** `PersistenceException` | `hostDefect` (case 5) |
-| 4 | `invalidTokenShell` | 200 + no detail header/parties block (D8) | `permanentError:invalidTokenShell` (case 1) |
+| 4 | `invalidTokenShell` | 200 + no detail header/parties block (D8) | `permanentError:invalidReference` + `detail: 'invalidTokenShell'` (case 1, D12) |
 | 5 | `validDetail` | full payload schema parses | `ok` |
 
 404 (case 4) and 429/5xx/timeout (case 6) are classified at the transport boundary before
@@ -213,7 +224,8 @@ from the production composition).
 |---|---|
 | Write order | items → coverage → **then** checkpoint. A crash between them re-runs the unit. |
 | Guarantee | **At-least-once** item/coverage lines; **exactly-once cell accounting** at read time (dedup by adapter `itemId`; latest-by-`observedAt` per `unitKey`). |
-| Resume | Skip any `unitKey` whose latest checkpoint state is `complete` or `truncated`. `failed` units are retried. |
+| Resume | Skip any `unitKey` whose latest checkpoint state is `complete` or `truncated`. `failed` units are retried. A `subdivided` parent is **re-split, never re-searched**: its persisted work unit goes straight to `split()`, the returned children are enqueued, and those already checkpointed `complete` are skipped individually. Re-issuing the parent's `discover` would return the same capped set it already recorded — a wasted request that teaches the engine nothing. Skipping the parent outright would instead strand every child the kill interrupted, since children exist only in the in-memory queue. |
+| Re-split inputs | Reconstructed from persisted state, never from a request. `CheckpointRecord` carries the whole opaque `WorkUnit` — the byte-identical `cursor` it already round-trips, plus the adapter-owned `facetValue` and `label`; those last two are the only new persisted state this approach costs, and they are added because `split()` reads `facetValue` and the engine must not fabricate an adapter-owned field it failed to save. `SaturationInfo` (`resultCount`, `declaredCap`) is read off the parent's own `subdivided` coverage record, which is a second reason D10 must persist that cell. TRF5's `split()` ignores `SaturationInfo` today (`traversal.ts:65`, `_saturated`), but the port keeps passing it: another adapter may legitimately need the observed count to choose how to subdivide, and the ledger can supply it without a request. |
 | Ledger key | adapter `itemId` + `documentId` (`null` for a discovery failure). |
 | Document retry | `retry-failed` replays only `fetchDocument`; it never re-issues the cell's search POST. |
 | Resolution | Appends a `resolved: true` line — never edits or deletes the original. |
@@ -225,17 +237,35 @@ Files: `output/items.jsonl`, `output/coverage.jsonl`, `output/state/{checkpoints
 ## Partitioning
 
 ```
-process(unit):
+process(unit):                              // engine side — names no partitioning dimension
   r = discover(unit)
-  if r.count < cap            -> cell `complete`
+  if cap == null or r.count < cap  -> cell `complete`   (a site with no cap never saturates, D11)
+  else if depth(unit) >= maxSplitDepth
+                                   -> cell `truncated`  ← the depth bound is treated
+                                                          exactly as a null split
   else:
-     children = split(unit)   -> date bisect: mid = from + ⌊(to-from)/2⌋; [from,mid],[mid+1,to]
-     if children != null      -> requeue children (parent records no cell)
-     else if facetValue==null -> expand into ≤ --max-facet-values units for that day (D4)
-     else                     -> cell `truncated`  ← the reported gap
+     children = split(unit, { resultCount: r.count, cap })
+     if children != null           -> cell `subdivided`, resultCount = r.count (D10)
+                                      + enqueue children at depth(unit)+1
+     else                          -> cell `truncated`  ← the reported gap
 ```
-Saturation is `count >= sitePort.resultPageCap` (`>=`, defensively). Boundary contract test
-covers the `mid`/`mid+1` off-by-one; dedup by `itemId` is the safety net.
+
+```
+TRF5Traversal.split(unit):                  // adapter side — owns every dimension (D4)
+  if dateFrom != dateTo  -> date bisect: mid = from + ⌊(to-from)/2⌋; [from,mid],[mid+1,to]
+  if facetValue != null  -> null                    // already one day and one class
+  else                   -> ≤ --max-facet-values per-class units for that day (null if empty)
+```
+
+Saturation is `count >= sitePort.resultPageCap` (`>=`, defensively) and is never evaluated
+when the adapter declares no cap. Facet expansion is a *branch inside `split()`*, not an
+engine branch — the engine sees only "children or `null`" and records `subdivided` whichever
+dimension the adapter used. Date bisection is a pure function of the work unit and issues no
+request; the facet branch fetches the class catalogue, so `split()` is not request-free. That
+cost is identical on a first run and on a resume, and it is never the search POST. `depth` is engine-owned state keyed by `unitKey`; it is never a
+field on the adapter-generated `WorkUnit`, because the engine must not make an adapter
+maintain the engine's own loop-safety bookkeeping. Boundary contract test covers the
+`mid`/`mid+1` off-by-one; dedup by `itemId` is the safety net.
 
 ## Seam Enforcement
 
@@ -261,8 +291,8 @@ satisfying the requirement. `pnpm lint` runs in `pnpm check`; a violation fails 
 
 | Layer | What | Approach |
 |---|---|---|
-| Unit (pure) | backoff composition/jitter/cap, retry mapping table, date bisection boundaries, yield decay, coverage arithmetic, set hash, partition invariant, envelope assembly, CLI bounds | vitest, no I/O, no fakes needed |
-| Port-level | full engine loop: 429 global cooldown, `Retry-After` precedence, re-prime + replay, discover-failure skips fetch, document failure keeps the item, checkpoint resume, torn-line tolerance | vitest + `StubTransport` + `FakeClock` (`vi.useFakeTimers()`) + in-memory stores |
+| Unit (pure) | backoff composition/jitter/cap, retry mapping table, date bisection boundaries, yield decay, coverage arithmetic, `subdivided` excluded from all three tallies, `null`-cap classification never saturating, partition invariant read off the persisted `subdivided` parent, set hash, envelope assembly, CLI bounds | vitest, no I/O, no fakes needed |
+| Port-level | full engine loop: 429 global cooldown, `Retry-After` precedence, re-prime + replay, discover-failure skips fetch, document failure keeps the item, saturated unit records `subdivided` **and** enqueues children, max split depth degrades to `truncated` without calling `split()` again, resume re-splits a subdivided parent without re-issuing `discover`, torn-line tolerance | vitest + `StubTransport` + `FakeClock` (`vi.useFakeTimers()`) + in-memory stores |
 | Portability proof | whole `engine/` suite green against a ~20-line `FakeSite`/`FakeTraversal` | assert `adapters/trf5` is never imported; ESLint seam rule is the second half of the proof |
 | Adapter parsing | all six RESEARCH §5 cases, ISO-8859-1 label decode, colliding `Decisão` filenames, full field inventory, 132-class catalogue | vitest against **redacted** fixture HTML — synthetic CPFs and names only |
 | E2E | — | **N/A by design** — browser automation is forbidden by the brief, not merely unavailable |
