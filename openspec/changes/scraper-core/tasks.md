@@ -2,19 +2,38 @@
 
 ## Review Workload Forecast
 
+**Revised after S1 landed.** The original forecast assumed ~400 changed lines per slice and
+did not account for the test mass that strict TDD makes mandatory. S1 measured 749 authored
+lines against a 380 estimate; 351 of the 656 lines under `src/` are tests and fixtures — more
+than half the source. The per-slice budget is therefore raised to **800**, and S2..S6 are
+re-estimated below. S1 is recorded as an accepted `size:exception`.
+
 | Field | Value |
 |---|---|
-| Estimated changed lines | ~2200 (S1 380, S2 390, S3 390, S4 390, S5 350, S6 300) |
-| 400-line budget risk | High (S2/S3/S4 within 10 lines of the per-PR budget) |
+| Per-slice review budget | 800 changed lines (raised from 400) |
+| Estimated changed lines | ~3300 authored (S1 749 actual, S2 ~550, S3 ~550, S4 ~550, S5 ~490, S6 ~420) |
+| 800-line budget risk | Low — the widest remaining slice sits ~250 lines under budget |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2 -> S3 -> S4 -> S5 -> S6 (S1+S2 hard-gate S3; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
-| Chain strategy | pending — orchestrator collects stacked-to-main vs feature-branch-chain before apply |
+| Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
-Decision needed before apply: Yes
+Decision needed before apply: No — budget raised to 800 and S1's exception recorded.
 Chained PRs recommended: Yes
-Chain strategy: pending
-400-line budget risk: High
+800-line budget risk: Low
+
+### How the S2..S6 estimates were re-derived
+
+S1's raw overrun factor was ~1.97x, but applying that to every later slice would overstate
+them. Roughly 245 of S1's lines are **one-time** costs that do not recur: the vitest install,
+the ESLint seam block, `README.md`, the `openspec/config.yaml` update, and `ports.ts` (152
+lines, declared once for the whole engine). Excluding those, S1's recurring implementation
+work was ~504 lines against a 380 estimate — a **~1.33x** factor. That factor is what the
+S2..S6 numbers above apply, and it is the one to re-check after S2 lands.
+
+Excluded from every count: `pnpm-lock.yaml` and any other generated file. The native
+`gentle-ai sdd-attempt` runtime counts the lockfile in its own accounting, so its
+`changed_lines` figure will read substantially higher than the authored numbers here.
 
 ### Suggested Work Units
 
@@ -80,7 +99,7 @@ Every requirement across the six specs maps to exactly one slice below. No requi
 | trf5-adapter | Judicial Record Payload Contract | S4 |
 | trf5-adapter | Declared Seed Kinds and Ranking | S6 |
 
-## S1: Engine primitives + enforced seam (~380 lines)
+## S1: Engine primitives + enforced seam (749 lines actual — accepted size:exception)
 
 Demonstrates: a portable engine core (backoff, retry, rate limiter, pool) whose seam to any adapter is enforced by tooling, not documentation.
 
@@ -102,7 +121,7 @@ Demonstrates: a portable engine core (backoff, retry, rate limiter, pool) whose 
 - [x] 1.15 GREEN implement `engine/__fixtures__/fake-site.ts` + `fake-traversal.ts`.
 - [x] 1.16 Confirm `pnpm lint` fails on a scratch import of `adapters/trf5` from `engine/**`; remove the scratch file after confirming.
 
-## S2: Discover->fetch loop + durable state + coverage (~390 lines)
+## S2: Discover->fetch loop + durable state + coverage (~550 lines)
 
 Demonstrates: the full two-stage loop, resumable JSONL state, and measured (not certified) coverage — all against the S1 fake adapter, no TRF5 code involved.
 
@@ -121,7 +140,7 @@ Demonstrates: the full two-stage loop, resumable JSONL state, and measured (not 
 - [ ] 2.13 GREEN implement checkpoint-write ordering and the document-only retry path (`retry-failed`).
 - [ ] 2.14 Confirm `coverage.jsonl` and `items.jsonl` are separate files, never interleaved (assert in `jsonl-*.test.ts`).
 
-## S3: TRF5 session, search, and content-based validity (~390 lines)
+## S3: TRF5 session, search, and content-based validity (~550 lines)
 
 Demonstrates: the TRF5 adapter primes a session and classifies every response by content, against redacted fixtures, over a stubbed transport only.
 
@@ -140,7 +159,7 @@ Demonstrates: the TRF5 adapter primes a session and classifies every response by
 - [ ] 3.13 GREEN implement `adapters/trf5/schemas/response-view.ts` + first three branches of `validity-chain.ts` (`invalidTokenShell`/`validDetail` branches stubbed pending S4).
 - [ ] 3.14 Confirm every session/search/validity test in this slice runs against `StubTransport`/`FakeClock`, never a live-host base URL.
 
-## S4: TRF5 detail parsing, payload assembly, and documents (~390 lines)
+## S4: TRF5 detail parsing, payload assembly, and documents (~550 lines)
 
 Demonstrates: a full, spec-conformant payload — every field, correctly decoded, safely filed — assembled from a redacted fixture only.
 
@@ -163,7 +182,7 @@ Demonstrates: a full, spec-conformant payload — every field, correctly decoded
 - [ ] 4.17 RED `adapters/trf5/documents.test.ts`: three same-labeled `Decisão` documents in one process get three distinct filenames, derived only from `ca` + `idProcessoDocumento` (`[A-Za-z0-9._-]`-validated), never from the remote label; a failed document fetch is ledgered without discarding the already-extracted item.
 - [ ] 4.18 GREEN implement `adapters/trf5/documents.ts` (302-follow, filename builder, `FetchOutcome` wiring for `fetchDocument`).
 
-## S5: CLI, bounds, and run control (~350 lines)
+## S5: CLI, bounds, and run control (~490 lines)
 
 Demonstrates: a bounded, forecastable, resumable run invocable end to end from the command line.
 
@@ -179,7 +198,7 @@ Demonstrates: a bounded, forecastable, resumable run invocable end to end from t
 - [ ] 5.10 GREEN write README: pnpm/tsx deviation, every CLI bound, personal-data rules, "coverage is measured, never certified," manual-smoke-only note for 429/session-recovery against the live host.
 - [ ] 5.11 Confirm `openspec/config.yaml` reflects the final S1–S5 layout and testing state (no stale `pje/`, `partition/`, `domain/` references).
 
-## S6: Frontier crawl — additive, off by default (~300 lines)
+## S6: Frontier crawl — additive, off by default (~420 lines)
 
 Demonstrates: an optional second pass that targets known gaps and self-limits, without touching phase-1 behavior.
 
