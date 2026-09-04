@@ -11,15 +11,15 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~4035 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4 ~650, S5 ~550, S6 ~450) |
+| Estimated changed lines | ~4275 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a ~700, S4b ~280, S5 ~550, S6 ~450) |
 | 800-line budget risk | High — four measured slices have each exceeded their estimate; S4/S5/S6 estimates are unreliable low |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2a -> S2b -> S3 -> S4 -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
-Decision needed before apply: Yes for S4 — decide its boundary before launch, not after (see the
-third revision below). S1 and S3 are recorded as accepted `size:exception`.
+Decision needed before apply: No — S4 was split into S4a/S4b before launch (see the third
+revision below). S1 and S3 are recorded as accepted `size:exception`.
 Chained PRs recommended: Yes
 800-line budget risk: High
 
@@ -80,11 +80,12 @@ and filename derivation (4.15–4.18) — rather than discovering the overage at
 | S2a | Durable append-only JSONL state + coverage arithmetic, crash-safe on read-back | PR 2 | `vitest run src/engine/coverage.test.ts src/infra/storage` | N/A — pure functions and file I/O, no loop yet | Delete `src/engine/coverage.ts`, `src/infra/storage/*`; S1 untouched |
 | S2b | Two-stage discover->fetch loop over the S2a stores, resumable after a crash | PR 3 | `vitest run src/engine` | N/A — proven by driving `engine/scraper.ts` directly in tests | Delete `src/engine/scraper.ts` and its test; S1 and S2a untouched |
 | S3 | TRF5 session priming + search + content-based validity classification against redacted fixtures | PR 4 | `vitest run src/adapters/trf5/session.test.ts src/adapters/trf5/search.test.ts src/adapters/trf5/traversal.test.ts src/adapters/trf5/schemas` | N/A — no detail/document stage or CLI wired yet | Delete `src/adapters/trf5/{session,search,classes,traversal,encoding}.ts`, `schemas/{response-view,validity-chain}.ts`, fixtures |
-| S4 | Full detail-page field inventory + document fetch/decode/filename, spec-conformant payload | PR 5 | `vitest run src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts src/adapters/trf5/parsing src/adapters/trf5/encoding.test.ts` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/{detail,documents}.ts`, `parsing/*`, `schemas/payload.ts`; S3 untouched |
-| S5 | Bounded, forecastable, resumable CLI run end to end | PR 6 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 7 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S4a | Full detail-page field inventory + spec-conformant payload assembly | PR 5 | `vitest run src/adapters/trf5/detail.test.ts src/adapters/trf5/parsing src/adapters/trf5/payload.test.ts src/adapters/trf5/schemas` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/detail.ts`, `parsing/*`, `schemas/payload.ts`; S3 untouched |
+| S4b | Document fetch through 302, byte-level decode, stable filename derivation | PR 6 | `vitest run src/adapters/trf5/documents.test.ts src/adapters/trf5/encoding.test.ts` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/{documents,encoding}.ts`; S4a untouched |
+| S5 | Bounded, forecastable, resumable CLI run end to end | PR 7 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 8 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
-**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4 (detail parsing needs the validity-chain skeleton). S5 needs S1–S4 (wires CLI to the full loop). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
+**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S5 needs S1–S4b (wires CLI to the full loop). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
 
 ## Requirement Coverage Map
 
@@ -94,6 +95,10 @@ Every requirement across the six specs maps to exactly one slice below. No requi
 S2a, and anything requiring the loop — two-stage execution, opaque checkpoint persistence from
 the engine, envelope assembly, dedup by identity key — lands in S2b. Task numbers are unchanged
 by the split, so each row still resolves to the same numbered task.
+
+`S4` resolves the same way to the S4a/S4b pair: detail fetch, field extraction, and payload
+assembly land in S4a; document byte-level decoding and stable filename derivation land in S4b.
+Task numbers are again unchanged.
 
 | Spec | Requirement | Slice |
 |---|---|---|
@@ -218,9 +223,17 @@ Demonstrates: the TRF5 adapter primes a session and classifies every response by
 - [x] 3.13 GREEN implement `adapters/trf5/schemas/response-view.ts` + first three branches of `validity-chain.ts` (`invalidTokenShell`/`validDetail` branches stubbed pending S4).
 - [x] 3.14 Confirm every session/search/validity test in this slice runs against `StubTransport`/`FakeClock`, never a live-host base URL. Confirmed by grep: no `trf5.jus.br`/`pjett.`/`http(s)://` literal anywhere under `src/adapters/trf5`. `FakeClock` is not exercised in this slice — no adapter code here calls `Clock.sleep`; that composition is `engine/scraper.ts`'s concern (S2b), already proven against `FakeClock` there.
 
-## S4: TRF5 detail parsing, payload assembly, and documents (~550 lines)
+## S4a: TRF5 detail parsing and payload assembly (~700 lines)
 
-Demonstrates: a full, spec-conformant payload — every field, correctly decoded, safely filed — assembled from a redacted fixture only.
+**Split from the original S4**, before launch rather than at settle time, on the evidence of four
+consecutive overruns. S4 was one slice of eighteen tasks covering two deliverables that fail
+differently: extracting a correct payload from a detail page, and fetching the binary documents
+that page references. A parsing bug yields a wrong field; a document bug yields a lost or
+misfiled file. They are reviewed differently, so they ship separately. Task numbering is
+unchanged, so the Requirement Coverage Map above still resolves.
+
+Demonstrates: a full, spec-conformant payload — every field correctly extracted and named —
+assembled from a redacted fixture only.
 
 - [ ] 4.1 RED `adapters/trf5/detail.test.ts`: a `ca` token with no primed session primes first, then fetches detail.
 - [ ] 4.2 GREEN implement `adapters/trf5/detail.ts`.
@@ -236,6 +249,12 @@ Demonstrates: a full, spec-conformant payload — every field, correctly decoded
 - [ ] 4.12 GREEN implement `adapters/trf5/schemas/payload.ts` (full schema) and wire it as the `validData` branch.
 - [ ] 4.13 RED `adapters/trf5/payload.test.ts`: `caseClass`/each `subjects[]` entry carries `cnjCode`+`label`; `parties.active/passive/others` nest `lawyers`; no Portuguese source field names appear as output property names; `cpf`/`oabNumber`/`oabState` preserved; envelope `itemId` equals payload `processNumber`.
 - [ ] 4.14 GREEN implement payload assembler + `SitePort.itemId`/`documentId`/`sourceUrl`.
+## S4b: TRF5 document fetch, decoding, and filing (~280 lines)
+
+Demonstrates: a document is fetched through its 302, decoded at the byte level, and filed under
+a name derived only from stable ids — and a failed fetch is ledgered without discarding the item
+S4a already extracted.
+
 - [ ] 4.15 RED `adapters/trf5/encoding.test.ts`: `nomeArqProcDocBin=Decis%E3o` decodes to `Decisão` at the byte level, never UTF-8.
 - [ ] 4.16 GREEN implement `adapters/trf5/encoding.ts`.
 - [ ] 4.17 RED `adapters/trf5/documents.test.ts`: three same-labeled `Decisão` documents in one process get three distinct filenames, derived only from `ca` + `idProcessoDocumento` (`[A-Za-z0-9._-]`-validated), never from the remote label; a failed document fetch is ledgered without discarding the already-extracted item.
