@@ -255,8 +255,8 @@ Demonstrates: a document is fetched through its 302, decoded at the byte level, 
 a name derived only from stable ids — and a failed fetch is ledgered without discarding the item
 S4a already extracted.
 
-- [ ] 4.15 RED `adapters/trf5/encoding.test.ts`: `nomeArqProcDocBin=Decis%E3o` decodes to `Decisão` at the byte level, never UTF-8.
-- [ ] 4.16 GREEN implement `adapters/trf5/encoding.ts`.
+- [x] 4.15 RED `adapters/trf5/encoding.test.ts`: `nomeArqProcDocBin=Decis%E3o` decodes to `Decisão` at the byte level, never UTF-8.
+- [x] 4.16 GREEN implement `adapters/trf5/encoding.ts`.
 - [ ] 4.17 RED `adapters/trf5/documents.test.ts`: three same-labeled `Decisão` documents in one process get three distinct filenames, derived only from `ca` + `idProcessoDocumento` (`[A-Za-z0-9._-]`-validated), never from the remote label; a failed document fetch is ledgered without discarding the already-extracted item.
 - [ ] 4.18 GREEN implement `adapters/trf5/documents.ts` (302-follow, filename builder, `FetchOutcome` wiring for `fetchDocument`).
 
