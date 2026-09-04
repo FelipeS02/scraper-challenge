@@ -11,7 +11,7 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~4600 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c ~350, S5 ~550, S6 ~450) |
+| Estimated changed lines | ~4600 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S5 ~550, S6 ~450) |
 | 800-line budget risk | Medium — the S4a/S4b split broke a four-slice overrun streak: S4a landed at 729 authored and S4b at 266, both inside budget for the first time. Split by deliverable rather than trusting an estimate |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
@@ -263,7 +263,7 @@ S4a already extracted.
 - [ ] 4.17 RED `adapters/trf5/documents.test.ts`: three same-labeled `Decisão` documents in one process get three distinct filenames, derived only from `ca` + `idProcessoDocumento` (`[A-Za-z0-9._-]`-validated), never from the remote label; a failed document fetch is ledgered without discarding the already-extracted item.
 - [ ] 4.18 GREEN implement `adapters/trf5/documents.ts` (302-follow, filename builder, `FetchOutcome` wiring for `fetchDocument`).
 
-## S4c: Document persistence to disk + stable paths (~350 lines)
+## S4c: Document persistence to disk + stable paths (409 lines actual — within budget, complete)
 
 **Added after S4b landed**, when a review found that nothing in S1–S4b ever writes document
 bytes to disk: `fetchDocument` measured `byteLength` and discarded the body, and no port
@@ -275,13 +275,13 @@ a file be *stored*. Two spec requirements were added (`Document Persistence to D
 Demonstrates: a fetched document actually reaches the filesystem, under a human-navigable
 path that survives the session that produced it.
 
-- [ ] 4c.1 RED (extend `adapters/trf5/documents.test.ts`): path is `<processNumber>/<idProcessoDocumento>-<slug>.pdf`; three same-labeled `Decisão` documents get three distinct paths; a hostile label (`../../etc/passwd`) and an empty label both degrade to `<processNumber>/<idProcessoDocumento>.pdf`; the same document derived twice with different `ca` values yields the identical path.
-- [ ] 4c.2 GREEN replace `buildDocumentFilename(ca, documentId)` with a path builder keyed on `processNumber` + `idProcessoDocumento`, plus decorative slug derivation (ISO-8859-1 decode via `encoding.ts`, accent-fold, lowercase, collapse to `[a-z0-9._-]`, truncate); every path component validated before joining. Update `fetchDocument` to take `processNumber` instead of `ca`.
-- [ ] 4c.3 RED `infra/storage/fs-document-sink.test.ts`: writing creates the per-process directory; bytes on disk match the fetched body exactly; a write interrupted before completion leaves no file that reads as complete (temp-file-then-rename, same crash-safety standard as the S2a JSONL sinks).
-- [ ] 4c.4 GREEN declare a `DocumentSink` port in `engine/ports.ts` and implement `infra/storage/fs-document-sink.ts`. Persistence stays an engine concern driven through a port — the adapter returns bytes and never touches the filesystem, exactly as it never touches `items.jsonl`.
-- [ ] 4c.5 RED (extend `engine/scraper.test.ts`): a successful document fetch writes through the `DocumentSink`; a failed fetch writes no file, still writes the item, and still records the ledger entry; `StoredDocument.byteLength` equals the bytes actually written, never the bytes merely received.
-- [ ] 4c.6 GREEN wire `DocumentSink` into the fetch stage of `engine/scraper.ts`.
-- [ ] 4c.7 Confirm no persisted identifier is session-scoped (`Persisted Identifier Stability`): assert that a derived document path, a `TraversalCursor`, and a `CheckpointRecord` contain no `ca`, `jsessionid`, or ViewState value. Record in `apply-progress.md` that the output envelope's `sourceUrl` remains a point-in-time locator by design, recoverable through the `processNumber` identity key.
+- [x] 4c.1 RED (extend `adapters/trf5/documents.test.ts`): path is `<processNumber>/<idProcessoDocumento>-<slug>.pdf`; three same-labeled `Decisão` documents get three distinct paths; a hostile label (`../../etc/passwd`) and an empty label both degrade to `<processNumber>/<idProcessoDocumento>.pdf`; the same document derived twice with different `ca` values yields the identical path.
+- [x] 4c.2 GREEN replace `buildDocumentFilename(ca, documentId)` with a path builder keyed on `processNumber` + `idProcessoDocumento`, plus decorative slug derivation (ISO-8859-1 decode via `encoding.ts`, accent-fold, lowercase, collapse to `[a-z0-9._-]`, truncate); every path component validated before joining. Update `fetchDocument` to take `processNumber` instead of `ca`.
+- [x] 4c.3 RED `infra/storage/fs-document-sink.test.ts`: writing creates the per-process directory; bytes on disk match the fetched body exactly; a write interrupted before completion leaves no file that reads as complete (temp-file-then-rename, same crash-safety standard as the S2a JSONL sinks).
+- [x] 4c.4 GREEN declare a `DocumentSink` port in `engine/ports.ts` and implement `infra/storage/fs-document-sink.ts`. Persistence stays an engine concern driven through a port — the adapter returns bytes and never touches the filesystem, exactly as it never touches `items.jsonl`.
+- [x] 4c.5 RED (extend `engine/scraper.test.ts`): a successful document fetch writes through the `DocumentSink`; a failed fetch writes no file, still writes the item, and still records the ledger entry; `StoredDocument.byteLength` equals the bytes actually written, never the bytes merely received.
+- [x] 4c.6 GREEN wire `DocumentSink` into the fetch stage of `engine/scraper.ts`.
+- [x] 4c.7 Confirm no persisted identifier is session-scoped (`Persisted Identifier Stability`): assert that a derived document path, a `TraversalCursor`, and a `CheckpointRecord` contain no `ca`, `jsessionid`, or ViewState value. Record in `apply-progress.md` that the output envelope's `sourceUrl` remains a point-in-time locator by design, recoverable through the `processNumber` identity key.
 
 ## S5: CLI, bounds, and run control (~490 lines)
 
