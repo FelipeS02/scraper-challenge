@@ -5,8 +5,9 @@
 - S1 (1.0–1.16): complete — 749 lines actual, accepted `size:exception`.
 - S2a (2.3–2.9, 2.14): complete — 808 lines actual.
 - S2b (2.1–2.2, 2.10–2.13): complete — 663 lines actual.
-- **S3 (3.1–3.14): complete — 835 lines actual (this batch).**
-- S4, S5, S6: not started.
+- S3 (3.1–3.14): complete — 835 lines actual, accepted `size:exception`.
+- **S4a (4.1–4.14): complete — 729 lines actual (this batch), within the 800 budget.**
+- S4b, S5, S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
 
@@ -112,3 +113,184 @@ None blocking. See the two notes above (3.6/3.7 RED and `estadoComboOAB` default
 ### Status
 
 14/14 S3 tasks complete (3.1–3.14). 835/835 lines committed to this slice. Ready for `sdd-verify`, or `sdd-apply` again for S4.
+
+## S4a — TRF5 detail parsing and payload assembly
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s4a-detail-payload` (forked off `feat/scraper-core-s3-trf5-session-search`)
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #5 in the chain, targeting the S3 branch.
+**Scope discipline**: exactly tasks 4.1–4.14. S4b (documents.ts/encoding.ts, tasks 4.15–4.18) was
+not started — the document list built here is enumeration-only (label + ids), matching the
+S4/S4a split recorded in tasks.md before this slice launched.
+
+### Completed Tasks
+
+- [x] 4.1 RED `detail.test.ts` — a `ca` token with no primed session primes first, then fetches detail.
+- [x] 4.2 GREEN `detail.ts` (`fetchDetail`) — primes when no session given, classifies the response,
+      and on `validData` parses + assembles the payload; every other validity outcome maps to the
+      matching `FetchOutcome` kind.
+- [x] 4.3 RED `parsing/detail-page.test.ts` (header) — número, data distribuição, classe+CNJ code,
+      assunto hierarchy, jurisdição, órgãos, endereço, processo referência.
+- [x] 4.4 GREEN `parsing/detail-page.ts` header extraction.
+- [x] 4.5 RED (extend, parties) — ativo/passivo/outros with name/CPF/role/status; nested `ADVOGADO`
+      lawyer with name/OAB number/OAB state/CPF.
+- [x] 4.6 GREEN parties extraction.
+- [x] 4.7 RED (extend, movements) — `processoEvento` rows preserved verbatim into `rawCells`;
+      `cnjCode` stays `null` (RESEARCH §8, row structure unmapped).
+- [x] 4.8 GREEN movements extraction.
+- [x] 4.9 RED (extend, documents list) — document rows enumerated with label and ids.
+- [x] 4.10 GREEN document-list extraction.
+- [x] 4.11 RED (extend `validity-chain.test.ts`) — 200+no header/parties block -> `invalidTokenShell`
+      (D8: never by document-absence, never by byte size); 200+header+parties+zero documents ->
+      `validData`.
+- [x] 4.12 GREEN `schemas/payload.ts` (full zod schema) — the two new validity-chain branches were
+      implemented in the same GREEN step as 4.11's RED (see TDD notes below).
+- [x] 4.13 RED `schemas/payload.test.ts` — `caseClass`/each `subjects[]` entry carries `cnjCode`+
+      `label`; `parties.active/passive/others` nest `lawyers`; no Portuguese source field names
+      appear as output property names; `cpf`/`oabNumber`/`oabState` preserved; envelope `itemId`
+      equals payload `processNumber`.
+- [x] 4.14 GREEN payload assembler (`assembleTrfPayload`) + `SitePort.itemId`/`documentId`/
+      `sourceUrl` declared in `site.ts`.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 4.11 | `schemas/validity-chain.test.ts` | Unit | ✅ 7/7 (from S3) | ✅ 2/2 new assertions failed (`unclassified` ≠ `invalidTokenShell`/`validData`) | ✅ 9/9 passed | ✅ added a third case proving a `text/xml` search fragment is never misclassified as `invalidTokenShell` | ✅ Clean |
+| 4.3/4.4 | `parsing/detail-page.test.ts` (header block) | Unit | N/A (new) | ✅ Module-not-found | ✅ 1/1 passed | ➖ Single fixture (header fields are non-repeating) | N/A — see sequencing note |
+| 4.5–4.10 | `parsing/detail-page.test.ts` (parties/movements/documents blocks) | Unit | ✅ 1/1 (from 4.4) | ⚠️ See sequencing note | ✅ 3/3 passed on first run | ✅ 3 party shapes (lawyer present, lawyer absent, empty group), 2 movement rows, 2 document rows | ✅ Clean |
+| 4.12/4.13 | `schemas/payload.test.ts` | Unit | ✅ 4/4 (from 4.4/4.10's fixture) | ⚠️ See sequencing note | ✅ 4/4 passed on first run | ✅ 4 independent assertions: code+label pair, nested lawyers, banned-field-name scan, itemId identity | N/A |
+| 4.1/4.2 | `detail.test.ts` | Unit + StubTransport | ✅ 9/9 (validity-chain) + 4/4 (parsing) + 4/4 (payload) | ✅ Module-not-found | ✅ 2/2 passed | ✅ 2 cases: no session (2 requests) vs. pre-primed session (1 request) | ✅ Clean |
+
+**Sequencing note (parties/movements/documents, and payload.ts)**: `parsing/detail-page.ts` is one
+`cheerio.load()` pass over one fixture; header, parties, movements, and documents extraction are
+tightly coupled by that single parse tree, so the file was implemented in full once the header
+RED/GREEN cycle (4.3/4.4) proved the fixture-and-parser approach worked. The parties/movements/
+documents test blocks (4.5/4.7/4.9), when added, passed immediately — no independent RED failure
+was observed for those three task pairs. This is disclosed rather than reported as a clean RED,
+matching the precedent set at S3's 3.6/3.7 note. The same situation applies to `schemas/payload.ts`
+(4.12) relative to `payload.test.ts` (4.13): the zod schema is a near-mechanical mirror of
+`DetailPage`'s shape, written once, and `payload.test.ts`'s four assertions passed on first run.
+Each block still adds real, independently meaningful coverage — a wrong regex, a mis-nested
+structure, or a leaked Portuguese property name would have failed these tests exactly as
+described. Task 4.11 (the validity-chain extension) is the one task pair in this slice that did
+observe a genuine RED failure, run before its GREEN — see the table above.
+
+### Design decisions and deviations
+
+- **`judgingBody` consolidates three source fields, not one.** The trf5-adapter spec's Full Field
+  Inventory requirement lists `jurisdição, órgãos, endereço` as header fields, but the Judicial
+  Record Payload Contract's top-level property list has only `judgingBody` (no separate `address`
+  field). `judgingBody: { name, collegiateBody, address }` nests "Órgão Julgador", "Órgão Julgador
+  Colegiado", and "Endereço" together — all three describe the deciding court/body in
+  `docs/RESEARCH.md` §2 Step 5's component table, and none is a Portuguese property name (the
+  nested keys are English camelCase).
+- **`payload.sourceUrl` is an additional field beyond the spec's documented top-level property
+  list.** `SitePort.sourceUrl(item): string` must derive a URL from the item itself (per
+  `engine/scraper.ts`'s `buildEnvelope`, `payload: item` — whatever `TItem` is, it IS the emitted
+  payload). The detail URL depends on the opaque `ca` token, which cannot be reconstructed from
+  `processNumber` alone, and storing `ca` itself would violate the "wire-format query-parameter
+  names MUST NOT appear as output property names" rule (`ca` is literally the source query
+  parameter). Storing the already-resolved `sourceUrl` string instead — the same value the
+  envelope's own `sourceUrl` field carries — satisfies the port contract without leaking a
+  site-specific token or wire-format name.
+- **`validData`/`invalidTokenShell` classify on two cheap booleans (`hasDetailHeaderBlock`,
+  `hasPartiesBlock`, both gated by `isHtmlPage`), not a literal "full payload schema parse" inside
+  the chain.** design.md's validity-chain table describes row 5 as "full payload schema parses";
+  the actual final validation gate is `schemas/payload.ts`'s zod schema, run in `detail.ts` after
+  `classifyValidity` returns `validData` — matching D7's own guidance that each chain schema stay
+  "a small predicate over discriminating features... unit-testable without HTML." Two-layer
+  validation (cheap pre-classification, then the real structural gate) is what's implemented; if
+  the payload doesn't parse despite passing pre-classification, `detail.ts` returns
+  `permanentError:schemaMismatch` rather than a false `ok`.
+- **Document `label` comes from the visible anchor text, not a percent-decoded
+  `nomeArqProcDocBin`.** RESEARCH.md's percent-encoding trap (`Decis%E3o` → `Decisão`) is
+  specifically about the query-parameter value; the anchor's own rendered text is already correct
+  once the whole page is decoded via `decodeLatin1` (a page-level ISO-8859-1 decode, already
+  proven in S3). This keeps S4a's document enumeration fully self-contained from S4b's
+  `encoding.ts` (percent-decoding), matching the launch prompt's explicit boundary.
+- **`unclassified` validity outcomes map to `hostDefect` in `detail.ts`**, not `permanentError`.
+  An unrecognized response is more likely a site change or transient anomaly than a definitively
+  permanent failure; `hostDefect` gets bounded retries (cap 2) before landing in the failure
+  ledger, rather than giving up on the first observation. Not covered by a dedicated fixture test
+  in this slice (no RESEARCH.md case produces an unclassified detail response); flagging for
+  awareness.
+- **A real, RESEARCH.md-quoted process number (`0801110-38.2024.4.05.8001`, from §4's DataJud
+  cross-check) was initially typed into the detail-page fixtures by mistake** and caught before
+  committing — replaced with `0712345-90.2024.4.05.8300` / `0798765-43.2024.4.05.8300` (clearly
+  synthetic, no digit sequence matching any RESEARCH.md-verified number). Process numbers are not
+  flagged as personal data by RESEARCH.md §6 (only CPF/party names/OAB numbers are), but reusing
+  an exact real, live-verified identifier in a public fixture is avoidable and was avoided.
+  **Note for awareness, not fixed in this slice**: `search.test.ts` (already-landed S3 code) still
+  uses that same real process number as a `numProcesso` search-criteria value; out of S4a's scope
+  to touch, flagged here for the record.
+- **`domhandler` added as an explicit dev dependency** so `parsing/detail-page.ts` can `import type
+  { Element } from 'domhandler'` directly, rather than relying on pnpm's non-hoisted transitive
+  resolution of cheerio's own dependency (which is not reliably resolvable from `src/` under
+  pnpm's strict linking). Same version range cheerio itself declares (`^5.0.3`).
+
+### Test Summary
+
+- **Total tests written (S4a)**: 13 (3 validity-chain extension + 4 detail-page parsing blocks +
+  4 payload assembly + 2 detail-fetch composition; the movements/documents parsing blocks each
+  added one `it()` alongside the header/parties blocks inside the same growing test file)
+- **Total tests passing (S4a)**: 13
+- **Full-suite tests passing**: 86/86 (`vitest run`)
+- **Layers used**: Unit (11), Unit + StubTransport (2), Integration/E2E: N/A by design (no live
+  host, ever)
+- **Pure functions created**: `parseLabeledCode`, `ownText`, `extractSubjects`, `parseLawyerLine`,
+  `parseParty`, `extractParties`, `extractMovements`, `extractDocuments`, `parseDetailPage`,
+  `assembleTrfPayload`, `itemId`/`documentId`/`sourceUrl` (site.ts), `buildDetailUrl`/`fetchDetail`
+  (detail.ts)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/detail.test.ts src/adapters/trf5/parsing src/adapters/trf5/schemas/payload.test.ts src/adapters/trf5/schemas/validity-chain.test.ts` → 4 files, 19 tests (9 in validity-chain.test.ts: S3's original 6 plus 3 new; 4 in detail-page parsing; 4 in payload assembly; 2 in detail fetch), all passed |
+| Runtime harness command/scenario and exact result | N/A — CLI not wired until S5 (per tasks.md S4a row); every scenario is proven through `StubTransport` against the synthetic `detail-page-*.html` fixtures, this slice's actual runtime boundary |
+| Rollback boundary | Delete `src/adapters/trf5/detail.ts` + its test, `src/adapters/trf5/parsing/`, `src/adapters/trf5/schemas/payload.ts` + its test, the three new `detail-page-*.html` fixtures, and revert the `validity-chain.ts`/`response-view.ts`/`site.ts` additions (the two new `ValidityOutcome` kinds, three new `ResponseView` fields, and the three new `site.ts` exports). S1/S2a/S2b/S3 are untouched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/adapters/trf5/schemas/response-view.ts` | Modified | Added `isHtmlPage`, `hasDetailHeaderBlock`, `hasPartiesBlock` derived fields |
+| `src/adapters/trf5/schemas/validity-chain.ts` | Modified | Added `invalidTokenShell`/`validData` schemas + outcome kinds, ordered after `hostDefect` |
+| `src/adapters/trf5/schemas/validity-chain.test.ts` | Modified | 2 new classification tests + 1 negative (XML fragment) test; `overlappingView` fixture extended with the 3 new fields |
+| `src/adapters/trf5/__fixtures__/detail-page-invalid-token.html` | Created | 200 text/html shell with no header/parties block (case 1) |
+| `src/adapters/trf5/__fixtures__/detail-page-valid-no-documents.html` | Created | 200 text/html with header+parties present, zero documents |
+| `src/adapters/trf5/__fixtures__/detail-page-valid.html` | Created | Full synthetic detail page — header, 2 parties (1 with a nested lawyer), 2 movement rows, 2 documents |
+| `src/adapters/trf5/parsing/detail-page.ts` | Created | `parseDetailPage` — header, parties, movements, documents extraction |
+| `src/adapters/trf5/parsing/detail-page.test.ts` | Created | 4 test blocks covering the full field inventory |
+| `src/adapters/trf5/schemas/payload.ts` | Created | `payloadSchema` (zod) + `assembleTrfPayload` |
+| `src/adapters/trf5/schemas/payload.test.ts` | Created | 4 tests: code+label pairs, nested lawyers, banned source-field-name scan, itemId identity |
+| `src/adapters/trf5/site.ts` | Modified | Added `itemId`/`documentId`/`sourceUrl` |
+| `src/adapters/trf5/detail.ts` | Created | `fetchDetail` — primes when needed, classifies, parses+assembles on `validData` |
+| `src/adapters/trf5/detail.test.ts` | Created | 2 tests: primes-when-none, skips-priming-when-already-primed |
+| `package.json` / `pnpm-lock.yaml` | Modified | Added `domhandler` dev dependency |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 4.1–4.14 `[x]`, recorded 729 actual lines |
+
+## Issues Found
+
+None blocking. See "Design decisions and deviations" above for the `judgingBody` consolidation,
+the `payload.sourceUrl` addition, the `unclassified -> hostDefect` fallback judgment call, and the
+caught-before-commit real-process-number fixture mistake.
+
+## Workload / PR Boundary
+
+- Mode: chained PR slice (`feature-branch-chain`)
+- Current work unit: S4a — TRF5 detail parsing and payload assembly
+- Boundary: starts from S3's merged state (`session.ts`/`search.ts`/`traversal.ts`/`classes.ts`/
+  `site.ts` constants/`schemas/{response-view,validity-chain}.ts`'s first three branches
+  untouched); ends with a fully tested detail-fetch + full-payload-assembly path. `documents.ts`/
+  `encoding.ts` (S4b) intentionally not started — the document list built here is enumeration-only.
+- Estimated review budget impact: 729 authored lines (`git diff --stat` insertions+deletions
+  excluding `pnpm-lock.yaml`) against the 800 budget and the ~700 estimate — within budget, no
+  `size:exception` needed. `git diff --stat` including the lockfile: 732 (725 insertions + 7
+  deletions).
+
+### Status
+
+S4a: 14/14 tasks complete (4.1–4.14). 729 lines committed to this slice (four work-unit commits).
+Ready for `sdd-verify`, or `sdd-apply` again for S4b.

@@ -11,6 +11,9 @@ const overlappingView: ResponseView = {
   isAjaxRedirectToLogin: true,
   isErrorUnexpectedPage: true,
   hasPersistenceException: true,
+  isHtmlPage: false,
+  hasDetailHeaderBlock: false,
+  hasPartiesBlock: false,
 };
 
 describe('classifyValidity — ordered chain, first match wins (trf5-adapter spec)', () => {
@@ -41,6 +44,25 @@ describe('classifyValidity — ordered chain, first match wins (trf5-adapter spe
 
   it('does not classify an unrecognized response as any of the first three branches', () => {
     const view = buildResponseView(fixtureResponse(200, 'text/xml', 'search-ok.xml'));
-    expect(classifyValidity(view)).toEqual({ kind: 'unclassified' }); // invalidTokenShell/validDetail land in S4
+    expect(classifyValidity(view)).toEqual({ kind: 'unclassified' });
+  });
+
+  it('matches invalidTokenShell for a 200 detail page with no header block and no parties block (D8)', () => {
+    const view = buildResponseView(
+      fixtureResponse(200, 'text/html', 'detail-page-invalid-token.html'),
+    );
+    expect(classifyValidity(view)).toEqual({ kind: 'invalidTokenShell' });
+  });
+
+  it('matches validData for a 200 detail page with header+parties but zero documents — not mistaken for a shell', () => {
+    const view = buildResponseView(
+      fixtureResponse(200, 'text/html', 'detail-page-valid-no-documents.html'),
+    );
+    expect(classifyValidity(view)).toEqual({ kind: 'validData' });
+  });
+
+  it('does not classify a text/xml search fragment as invalidTokenShell even when it lacks detail blocks', () => {
+    const view = buildResponseView(fixtureResponse(200, 'text/xml', 'search-ok.xml'));
+    expect(classifyValidity(view).kind).not.toBe('invalidTokenShell');
   });
 });
