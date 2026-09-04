@@ -12,15 +12,16 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
 | Estimated changed lines | ~4035 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4 ~650, S5 ~550, S6 ~450) |
-| 800-line budget risk | Medium — S3/S4/S5 estimates are now grounded in two measured slices, but remain estimates |
+| 800-line budget risk | High — four measured slices have each exceeded their estimate; S4/S5/S6 estimates are unreliable low |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2a -> S2b -> S3 -> S4 -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
-Decision needed before apply: No — budget raised to 800 and S1's exception recorded.
+Decision needed before apply: Yes for S4 — decide its boundary before launch, not after (see the
+third revision below). S1 and S3 are recorded as accepted `size:exception`.
 Chained PRs recommended: Yes
-800-line budget risk: Low
+800-line budget risk: High
 
 ### How the estimates were re-derived (second revision, after S2a)
 
@@ -43,8 +44,33 @@ S2 blew its budget because it was two deliverables (persistence, and the loop ov
 as one, not because 800 was too small a number.
 
 Excluded from every count: `pnpm-lock.yaml` and any other generated file. The native
-`gentle-ai sdd-attempt` runtime counts the lockfile in its own accounting, so its
-`changed_lines` figure reads substantially higher than the authored numbers here.
+`gentle-ai sdd-attempt` runtime counts the lockfile in its own accounting, and it counts
+insertions plus deletions rather than authored net, so its `changed_lines` figure reads
+substantially higher than the authored numbers here. S3: 987 counted, 835 authored.
+
+### Third revision, after S3
+
+The second revision's method — derive from measured ratios instead of a multiplier — did not
+work either. S3 was estimated at ~550/600 by that method and measured 835. That is four
+measured slices and four overruns:
+
+| Slice | Estimate | Authored actual | Over by |
+|---|---|---|---|
+| S1 | 380 | 749 | 97% |
+| S2a + S2b | 550 (as one S2) | 1471 | 168% |
+| S3 | 600 | 835 | 39% |
+
+The overruns are shrinking as the estimates get more grounded, but the sign has never flipped.
+Treat every remaining estimate as a floor, not a midpoint: assume S4 lands near 900 and S5/S6
+near 700 unless their boundaries are cut first.
+
+The standing rule is unchanged and now has more evidence behind it: **split by coherent
+deliverable rather than raise the budget.** 800 was not raised for S3; S3 was accepted as a
+`size:exception` because splitting a green 14-task slice for a 4.4% overage buys no review
+clarity. That reasoning does not extend to S4, whose estimate is 650 against the same 800 cap
+with a worse track record behind it. Decide S4's boundary before launching it — for example
+detail-page parsing and payload assembly (4.1–4.14) separately from document fetch, decode,
+and filename derivation (4.15–4.18) — rather than discovering the overage at settle time.
 
 ### Suggested Work Units
 
@@ -53,10 +79,10 @@ Excluded from every count: `pnpm-lock.yaml` and any other generated file. The na
 | S1 | Portable engine primitives + enforced seam, proven against a fake adapter | PR 1 | `vitest run src/engine` | N/A — no CLI yet; proof is the fake-adapter suite | Delete `src/engine/{types,ports,backoff,retry-policy,rate-limiter,pool}.ts`, fixtures, eslint seam block, vitest devDeps |
 | S2a | Durable append-only JSONL state + coverage arithmetic, crash-safe on read-back | PR 2 | `vitest run src/engine/coverage.test.ts src/infra/storage` | N/A — pure functions and file I/O, no loop yet | Delete `src/engine/coverage.ts`, `src/infra/storage/*`; S1 untouched |
 | S2b | Two-stage discover->fetch loop over the S2a stores, resumable after a crash | PR 3 | `vitest run src/engine` | N/A — proven by driving `engine/scraper.ts` directly in tests | Delete `src/engine/scraper.ts` and its test; S1 and S2a untouched |
-| S3 | TRF5 session priming + search + content-based validity classification against redacted fixtures | PR 3 | `vitest run src/adapters/trf5/session.test.ts src/adapters/trf5/search.test.ts src/adapters/trf5/traversal.test.ts src/adapters/trf5/schemas` | N/A — no detail/document stage or CLI wired yet | Delete `src/adapters/trf5/{session,search,classes,traversal,encoding}.ts`, `schemas/{response-view,validity-chain}.ts`, fixtures |
-| S4 | Full detail-page field inventory + document fetch/decode/filename, spec-conformant payload | PR 4 | `vitest run src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts src/adapters/trf5/parsing src/adapters/trf5/encoding.test.ts` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/{detail,documents}.ts`, `parsing/*`, `schemas/payload.ts`; S3 untouched |
-| S5 | Bounded, forecastable, resumable CLI run end to end | PR 5 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 6 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S3 | TRF5 session priming + search + content-based validity classification against redacted fixtures | PR 4 | `vitest run src/adapters/trf5/session.test.ts src/adapters/trf5/search.test.ts src/adapters/trf5/traversal.test.ts src/adapters/trf5/schemas` | N/A — no detail/document stage or CLI wired yet | Delete `src/adapters/trf5/{session,search,classes,traversal,encoding}.ts`, `schemas/{response-view,validity-chain}.ts`, fixtures |
+| S4 | Full detail-page field inventory + document fetch/decode/filename, spec-conformant payload | PR 5 | `vitest run src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts src/adapters/trf5/parsing src/adapters/trf5/encoding.test.ts` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/{detail,documents}.ts`, `parsing/*`, `schemas/payload.ts`; S3 untouched |
+| S5 | Bounded, forecastable, resumable CLI run end to end | PR 6 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 7 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
 **Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4 (detail parsing needs the validity-chain skeleton). S5 needs S1–S4 (wires CLI to the full loop). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
 
@@ -173,7 +199,7 @@ would be fiction.
 - [x] 2.12 RED (extend `scraper.test.ts`): write order is items -> coverage -> checkpoint; a crash between them leaves no checkpoint, so the unit re-runs; retrying a failed document re-issues only `fetchDocument`, never the cell's discovery.
 - [x] 2.13 GREEN implement checkpoint-write ordering and the document-only retry path (`retry-failed`).
 
-## S3: TRF5 session, search, and content-based validity (835 lines actual — complete)
+## S3: TRF5 session, search, and content-based validity (835 lines actual — accepted size:exception)
 
 Demonstrates: the TRF5 adapter primes a session and classifies every response by content, against redacted fixtures, over a stubbed transport only. 73 tests green (18 new to this slice).
 
