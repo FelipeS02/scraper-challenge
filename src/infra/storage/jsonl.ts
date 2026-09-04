@@ -43,7 +43,12 @@ export function readJsonlFile<T>(filePath: string): JsonlLoadResult<T> {
         console.warn(warning);
         return;
       }
-      throw new Error(`Malformed JSONL line ${index + 1} in ${filePath}: ${(error as Error).message}`);
+      throw new Error(
+        `Malformed JSONL line ${index + 1} in ${filePath}: ${(error as Error).message}`,
+        {
+          cause: error,
+        },
+      );
     }
   });
 

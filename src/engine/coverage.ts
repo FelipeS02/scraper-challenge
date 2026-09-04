@@ -8,7 +8,10 @@ import type { CoverageRecord, LedgerEntry } from './ports.js';
  */
 
 /** Saturation and cell state are judged against the adapter-declared cap only. */
-export function classifyCellState(resultCount: number, declaredCap: number): 'complete' | 'truncated' {
+export function classifyCellState(
+  resultCount: number,
+  declaredCap: number,
+): 'complete' | 'truncated' {
   return resultCount < declaredCap ? 'complete' : 'truncated';
 }
 

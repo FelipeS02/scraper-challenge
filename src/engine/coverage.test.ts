@@ -63,9 +63,15 @@ describe('computeSetHash', () => {
 describe('summarizeRunCoverage', () => {
   it('reports exact counts derived from the ledger, not an estimate', () => {
     const records: CoverageRecord[] = [
-      ...Array.from({ length: 100 }, (_, i) => coverageRecord({ unitKey: `c-${i}`, state: 'complete' })),
-      ...Array.from({ length: 5 }, (_, i) => coverageRecord({ unitKey: `t-${i}`, state: 'truncated' })),
-      ...Array.from({ length: 2 }, (_, i) => coverageRecord({ unitKey: `f-${i}`, state: 'failed' })),
+      ...Array.from({ length: 100 }, (_, i) =>
+        coverageRecord({ unitKey: `c-${i}`, state: 'complete' }),
+      ),
+      ...Array.from({ length: 5 }, (_, i) =>
+        coverageRecord({ unitKey: `t-${i}`, state: 'truncated' }),
+      ),
+      ...Array.from({ length: 2 }, (_, i) =>
+        coverageRecord({ unitKey: `f-${i}`, state: 'failed' }),
+      ),
     ];
 
     expect(summarizeRunCoverage(records)).toEqual({ complete: 100, truncated: 5, failed: 2 });

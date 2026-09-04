@@ -69,7 +69,11 @@ describe('JsonlFailureLedger', () => {
     const entries = await ledger.load();
 
     expect(entries).toHaveLength(2);
-    expect(entries[0]).toMatchObject({ itemId: 'item-1', documentId: 'doc-1', reason: 'transient:503' });
+    expect(entries[0]).toMatchObject({
+      itemId: 'item-1',
+      documentId: 'doc-1',
+      reason: 'transient:503',
+    });
     expect(entries[0]?.resolved).not.toBe(true);
     expect(entries[1]).toMatchObject({ itemId: 'item-1', documentId: 'doc-1', resolved: true });
   });
