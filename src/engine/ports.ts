@@ -168,3 +168,20 @@ export interface Clock {
   now(): Date;
   sleep(ms: number): Promise<void>;
 }
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogEvent {
+  readonly level: LogLevel;
+  readonly event: string; // stable machine-readable key, e.g. 'unit.started'
+  readonly fields: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Fire-and-forget observability port (core-run-control-and-output, "Structured
+ * Run Observability"). Emitting an event MUST NOT be able to fail, delay, or
+ * alter a run's outcome — the caller absorbs a throwing implementation itself.
+ */
+export interface Logger {
+  log(event: LogEvent): void;
+}
