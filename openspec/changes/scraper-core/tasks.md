@@ -223,7 +223,7 @@ Demonstrates: the TRF5 adapter primes a session and classifies every response by
 - [x] 3.13 GREEN implement `adapters/trf5/schemas/response-view.ts` + first three branches of `validity-chain.ts` (`invalidTokenShell`/`validDetail` branches stubbed pending S4).
 - [x] 3.14 Confirm every session/search/validity test in this slice runs against `StubTransport`/`FakeClock`, never a live-host base URL. Confirmed by grep: no `trf5.jus.br`/`pjett.`/`http(s)://` literal anywhere under `src/adapters/trf5`. `FakeClock` is not exercised in this slice — no adapter code here calls `Clock.sleep`; that composition is `engine/scraper.ts`'s concern (S2b), already proven against `FakeClock` there.
 
-## S4a: TRF5 detail parsing and payload assembly (~700 lines)
+## S4a: TRF5 detail parsing and payload assembly (729 lines actual — within budget, complete)
 
 **Split from the original S4**, before launch rather than at settle time, on the evidence of four
 consecutive overruns. S4 was one slice of eighteen tasks covering two deliverables that fail
@@ -235,20 +235,20 @@ unchanged, so the Requirement Coverage Map above still resolves.
 Demonstrates: a full, spec-conformant payload — every field correctly extracted and named —
 assembled from a redacted fixture only.
 
-- [ ] 4.1 RED `adapters/trf5/detail.test.ts`: a `ca` token with no primed session primes first, then fetches detail.
-- [ ] 4.2 GREEN implement `adapters/trf5/detail.ts`.
-- [ ] 4.3 RED `adapters/trf5/parsing/detail-page.test.ts` (header): número, data distribuição, classe+CNJ code, assunto hierarchy retaining CNJ codes at every level, jurisdição, órgãos, endereço, processo referência.
-- [ ] 4.4 GREEN implement header extraction in `parsing/detail-page.ts`.
-- [ ] 4.5 RED (extend, parties): ativo/passivo/outros parties with name/CPF/role/status; nested `ADVOGADO` lawyer carries name/OAB number/OAB state/CPF.
-- [ ] 4.6 GREEN implement parties extraction.
-- [ ] 4.7 RED (extend, movements): `processoEvento` rows preserved verbatim into `rawCells`; `cnjCode` stays `null` (row structure unmapped per RESEARCH §8).
-- [ ] 4.8 GREEN implement movements extraction.
-- [ ] 4.9 RED (extend, documents list): document rows enumerated with label and ids.
-- [ ] 4.10 GREEN implement document-list extraction.
-- [ ] 4.11 RED (extend `validity-chain.test.ts`): 200 + no header/parties block -> `invalidTokenShell` (D8: never by document-absence, never by byte size); 200 + header + parties + zero documents -> `validData`, item written.
-- [ ] 4.12 GREEN implement `adapters/trf5/schemas/payload.ts` (full schema) and wire it as the `validData` branch.
-- [ ] 4.13 RED `adapters/trf5/payload.test.ts`: `caseClass`/each `subjects[]` entry carries `cnjCode`+`label`; `parties.active/passive/others` nest `lawyers`; no Portuguese source field names appear as output property names; `cpf`/`oabNumber`/`oabState` preserved; envelope `itemId` equals payload `processNumber`.
-- [ ] 4.14 GREEN implement payload assembler + `SitePort.itemId`/`documentId`/`sourceUrl`.
+- [x] 4.1 RED `adapters/trf5/detail.test.ts`: a `ca` token with no primed session primes first, then fetches detail.
+- [x] 4.2 GREEN implement `adapters/trf5/detail.ts`.
+- [x] 4.3 RED `adapters/trf5/parsing/detail-page.test.ts` (header): número, data distribuição, classe+CNJ code, assunto hierarchy retaining CNJ codes at every level, jurisdição, órgãos, endereço, processo referência.
+- [x] 4.4 GREEN implement header extraction in `parsing/detail-page.ts`.
+- [x] 4.5 RED (extend, parties): ativo/passivo/outros parties with name/CPF/role/status; nested `ADVOGADO` lawyer carries name/OAB number/OAB state/CPF.
+- [x] 4.6 GREEN implement parties extraction.
+- [x] 4.7 RED (extend, movements): `processoEvento` rows preserved verbatim into `rawCells`; `cnjCode` stays `null` (row structure unmapped per RESEARCH §8).
+- [x] 4.8 GREEN implement movements extraction.
+- [x] 4.9 RED (extend, documents list): document rows enumerated with label and ids.
+- [x] 4.10 GREEN implement document-list extraction.
+- [x] 4.11 RED (extend `validity-chain.test.ts`): 200 + no header/parties block -> `invalidTokenShell` (D8: never by document-absence, never by byte size); 200 + header + parties + zero documents -> `validData`, item written.
+- [x] 4.12 GREEN implement `adapters/trf5/schemas/payload.ts` (full schema) and wire it as the `validData` branch.
+- [x] 4.13 RED `adapters/trf5/payload.test.ts`: `caseClass`/each `subjects[]` entry carries `cnjCode`+`label`; `parties.active/passive/others` nest `lawyers`; no Portuguese source field names appear as output property names; `cpf`/`oabNumber`/`oabState` preserved; envelope `itemId` equals payload `processNumber`.
+- [x] 4.14 GREEN implement payload assembler + `SitePort.itemId`/`documentId`/`sourceUrl`.
 ## S4b: TRF5 document fetch, decoding, and filing (~280 lines)
 
 Demonstrates: a document is fetched through its 302, decoded at the byte level, and filed under
