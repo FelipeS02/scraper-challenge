@@ -41,7 +41,7 @@ describe('search — expired ViewState triggers re-prime and a single replay', (
 describe('buildSearchRequestBody — the complete documented field set', () => {
   it('includes every documented field, populated ones with real values and the rest empty', () => {
     const body = buildSearchRequestBody(primedSession, {
-      numProcesso: '0801110-38.2024.4.05.8001',
+      numProcesso: '0123456-78.2026.4.05.8100',
       classeJudicial: 'APELACAO CIVEL',
       dataAutuacaoInicio: '01/09/2026',
       dataAutuacaoFim: '01/09/2026',
@@ -50,7 +50,7 @@ describe('buildSearchRequestBody — the complete documented field set', () => {
 
     expect(
       params.get('fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso'),
-    ).toBe('0801110-38.2024.4.05.8001');
+    ).toBe('0123456-78.2026.4.05.8100');
     expect(params.get('fPP:j_id189:classeJudicial')).toBe('APELACAO CIVEL');
     expect(params.get('fPP:dnp:nomeParte')).toBe(''); // documented but unset -> empty string, not omitted
     expect(params.get('fPP:j_id180:nomeAdv')).toBe('');
