@@ -17,11 +17,10 @@ strict_tdd: true
 
 testing:
   strict_tdd_note: >
-    Strict TDD is enabled by project preflight even though no runner is installed yet.
-    The recommended runner (see below) MUST be added before the first RED test can run;
-    treat "install the test runner" as the first task in the first sdd-tasks batch.
+    Strict TDD is enabled by project preflight. The recommended runner (see below) was
+    installed as the first S1 task; every task from S1 onward follows RED-GREEN-REFACTOR.
   runner:
-    installed: false
+    installed: true
     recommended: vitest
     recommended_dev_deps: [vitest, "@vitest/coverage-v8"]
     rationale: >
@@ -34,10 +33,10 @@ testing:
     coverage_command: "vitest run --coverage"
   layers:
     unit:
-      available: false
-      tool: vitest (recommended, not yet installed)
+      available: true
+      tool: vitest
     integration:
-      available: false
+      available: true
       tool: >
         vitest against a fake/stubbed HTTP transport implementing the same port as the
         axios-based client (hand-written fake or axios-mock-adapter); the 429/backoff
@@ -46,18 +45,18 @@ testing:
       available: false
       tool: "N/A by design — browser automation is forbidden by the challenge brief"
   coverage:
-    available: false
-    command: "vitest run --coverage (once @vitest/coverage-v8 is added)"
+    available: true
+    command: "vitest run --coverage"
   quality_tools:
     linter:
-      available: false
-      command: "—"
+      available: true
+      command: "pnpm lint"
     type_checker:
       available: true
       command: "pnpm typecheck"
     formatter:
-      available: false
-      command: "—"
+      available: true
+      command: "pnpm format:check"
 
 rules:
   proposal:
@@ -80,7 +79,9 @@ rules:
     - Flag any task that would require live-site 429 reproduction as out of scope (use stubs)
   apply:
     guidelines:
-      - Follow existing code patterns and the src/ layout (pje/, http/, storage/, domain/, partition/, logging/)
+      - "Follow the src/ layout: engine | adapters | infra | cli (engine is payload-generic;
+        adapters/trf5 is the only site adapter; infra holds driven adapters; cli + main.ts
+        are the composition root). Enforced by an ESLint no-restricted-imports rule on engine/."
       - Never test the 429/backoff path or session-recovery paths against the live PJe TRF5 site
     tdd: true # RED-GREEN-REFACTOR is mandatory (Strict TDD Mode: enabled)
     test_command: "vitest run"
