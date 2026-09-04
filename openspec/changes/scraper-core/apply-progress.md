@@ -8,7 +8,8 @@
 - S3 (3.1–3.14): complete — 835 lines actual, accepted `size:exception`.
 - S4a (4.1–4.14): complete — 729 lines actual, within the 800 budget.
 - S4b (4.15–4.18): complete — 266 authored `src/` lines.
-- **S4c (4c.1–4c.7): complete — 409 authored `src/` lines (this batch), within the 800 budget.**
+- S4c (4c.1–4c.7): complete — 409 authored `src/` lines, within the 800 budget.
+- **S4d (4d.1–4d.6): complete — 83 authored `src/` lines (this batch), within the 800 budget.**
 - S5, S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -614,3 +615,173 @@ the `retryFailedDocuments` persistence-coverage gap (wired but not independently
 7/7 S4c tasks complete (4c.1–4c.7). `vitest run`: 109/109 passing. `pnpm lint`: clean.
 `pnpm typecheck`: clean. `pnpm format:check`: clean (3 files needed `prettier --write` after
 authoring; re-verified clean afterward). Ready for `sdd-verify`, or `sdd-apply` again for S5.
+
+## S4d — Strict-TDD remediation for document persistence
+
+**Mode**: Strict TDD (this whole slice exists to repair a strict-TDD sequencing gap disclosed
+at the end of S4c).
+**Branch**: `feat/scraper-core-s4d-tdd-remediation` (forked off
+`feat/scraper-core-s4c-document-persistence`).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #8 in the chain, targeting the S4c
+branch.
+**Why this slice exists**: S4c's own apply-progress entry disclosed that tasks 4c.1–4c.6 were
+authored test-and-implementation-together, with RED evidence reconstructed afterward via
+`git stash`. A RED reconstructed against code that already exists proves only that the file
+was missing, not that the test detects a *wrong* implementation. This slice does not re-stage
+fake RED cycles over that existing code — it proves, by mutation, that each S4c test actually
+detects a defect, and applies genuine strict TDD to the two behaviors S4c left uncovered.
+**Scope discipline**: exactly tasks 4d.1–4d.6. No behavior S4c got right was changed — every
+mutation introduced during the audit was reverted before the next mutation, and the working
+tree is clean of mutations (`git diff` on `src/adapters/trf5/documents.ts`,
+`src/engine/scraper.ts`, and `src/infra/storage/fs-document-sink.ts` is empty).
+
+### 4d.1 — Defect-detection audit of the S4c suite
+
+Method: for each behavior, introduce ONE targeted mutation, run only the covering test file,
+confirm the failure and read the actual assertion message, then revert and confirm green
+again before the next mutation. All ten behaviors named in tasks.md 4d.1 were audited.
+
+| # | Behavior | Mutation | Covering file | Result | Observed failure (quoted) |
+|---|---|---|---|---|---|
+| 1 | Path keyed on `documentId`, never the label | `buildDocumentPath`: `` `${slug}.pdf` `` instead of `` `${documentId}-${slug}.pdf` `` when a slug exists | `documents.test.ts` | **Caught** — 4 tests failed | `expected '0123456-78.2026.4.05.8100/decisao.pdf' to be '0123456-78.2026.4.05.8100/12452668-de…'` (+ the 3-distinct-paths test: `expected 1 to be 3`) |
+| 2 | Hostile label discards the slug | `deriveSlug`: dropped the `!PATH_COMPONENT_SAFE.test(candidate)` branch, kept only the length check | `documents.test.ts` | **Caught** — exactly the hostile-label test, isolated | `Expected: "…/12452668.pdf" Received: "…/12452668-../../etc/passwd.pdf"` |
+| 3 | Empty/unrepresentable label degrades to `<documentId>.pdf` | `deriveSlug` returns `candidate` (not `null`) for the empty case; `buildDocumentPath`'s ternary changed from `slug ? …` (truthy) to `slug !== null ? …` (identity) | `documents.test.ts` | **Caught** — exactly the empty-label and CJK-label tests, isolated (hostile-label test unaffected) | `Expected: "…/12452668.pdf" Received: "…/12452668-.pdf"` (both cases) |
+| 4 | A different `ca`/session yields an identical path | Appended `Math.random().toString(36).slice(2,8)` to the returned path | `documents.test.ts` | **Caught** — 6 tests failed, including the dedicated stability test | `Expected: "…/z1054t-12452668-decisao.pdf" Received: "…/aixjtu-12452668-decisao.pdf"` |
+| 5 | The sink creates the per-process directory | `FsDocumentSink.write`: removed the `mkdirSync(dirname(finalPath), { recursive: true })` call | `fs-document-sink.test.ts` | **Caught** — all 3 tests failed | `Error: ENOENT: no such file or directory, open '…\0123456-78.2026.4.05.8100\12452668-decisao.pdf.tmp-…'` |
+| 6 | Written bytes equal fetched bytes | `writeFileSync(tempPath, bytes)` → wrote `bytes.slice(0, bytes.byteLength - 1)` (dropped the last byte) | `fs-document-sink.test.ts` | **Caught** — exactly the bytes-match test | `expected Uint8Array[ 1, 2, 3, 4 ] to deeply equal Uint8Array[ 1, 2, 3, 4, 5 ]` |
+| 7 | An interrupted write leaves no file that reads as complete | Wrote directly to `finalPath` instead of `tempPath` (skipped the temp-file step; the subsequent `renameSync` call was left in place but now renames a temp file that was never created) | `fs-document-sink.test.ts` | **Caught** — all 3 tests failed, including the crash-simulation test on the exact assertion it exists to protect | `expected true to be false` on `existsSync(join(dir, 'proc-1', 'doc-1.pdf'))` — a "complete" file existed despite the simulated rename crash |
+| 8 | `write()` reports the persisted size, not the received size | `return Promise.resolve(bytes.byteLength)` instead of `Promise.resolve(statSync(finalPath).size)` | `fs-document-sink.test.ts` | **NOT caught** by the existing 3 tests — see below | N/A (existing suite: 3/3 still passed) |
+| 9 | A successful fetch writes through the sink | `engine/scraper.ts`: removed the `documentSink.write(...)` call in `processUnit`'s fetch loop | `scraper.test.ts` | **Caught** — exactly the "writes a successfully fetched document" test | `expected [] to equal [ { bytes: …, path: "item-A/doc-1.pdf" } ]` |
+| 10 | A failed fetch writes no file, yet still writes the item and ledger entry | `engine/scraper.ts`: added an unconditional `documentSink.write(...)` call in the failure-ledger branch | `scraper.test.ts` | **Caught** — exactly the "writes no file when the document fetch fails" test | `expected [ { path: 'item-A/doc-1.pdf', … } ] to have a length of +0 but got 1` |
+
+**9/10 mutations caught by the existing S4c suite, for the right reason in every case** (the
+quoted assertion messages name the actual defect, never a module-not-found or unrelated
+import-time crash). Mutation #8 is a genuine gap in the S4c suite: nothing in
+`fs-document-sink.test.ts` distinguishes "reports the bytes it was given" from "reports the
+bytes actually on disk" — every existing scenario writes exactly the bytes it receives, so the
+two values are always equal by coincidence there.
+
+**Closing the gap (RED-first, genuine)**: added `fs-document-sink.test.ts`'s
+`'reports the size actually persisted on disk, not the byte length it received'`, which mocks
+`statSync` (via the file's existing `vi.mock('node:fs', …)`, extended to also wrap `statSync`)
+to return `999` for a 3-byte input. With mutation #8 still in place, this new test failed:
+`expected 3 to be 999` — a genuine RED, observed before any implementation change. Reverting
+mutation #8 (restoring `statSync(finalPath).size`) turned it green: `4 tests passed`. No
+production code changed — `FsDocumentSink.write` was already correct; only the missing test
+was added.
+
+### 4d.2/4d.3 — `retryFailedDocuments` sink coverage
+
+Extended `scraper.test.ts` with a new test,
+`'retryFailedDocuments writes the recovered document through DocumentSink'`, asserting
+`documentSink.writes` directly (S4c's existing `'retrying a failed document…'` test only
+asserted `fetchCalls`/`discoverCalls`/ledger resolution — it never inspected the sink, exactly
+as the launch prompt described).
+
+Run against the **unmodified** S4c implementation, this test **passed immediately**
+(`10 tests passed`, no failure) — no genuine RED was available, because S4c's task 4c.6 already
+wired `documentSink.write(...)` into `retryFailedDocuments` correctly. Rather than stage a false
+RED, non-vacuousness was confirmed by mutation instead: temporarily removed the
+`if (result.value.fileName) { await documentSink.write(...) }` block from
+`retryFailedDocuments`, re-ran the new test, and observed a genuine failure —
+`expected [] to equal [ { bytes: Uint8Array [9, 9], path: "item-A/doc-1.pdf" } ]` — proving the
+test is not vacuous. Reverted the mutation; the test passed again (`10 tests passed`). No
+production code change was needed for 4d.3: the call was already correct, only independently
+untested.
+
+### 4d.4/4d.5 — Accent-folding correctness
+
+S4c's `foldAccents` strips every character outside the printable-ASCII range (space through
+tilde) after NFD-normalizing. Verified directly (`node -e`, quoted in the launch context)
+that NFD decomposes every one of `á é í ó ú â ê î ô û ã õ ñ ç` and their uppercase forms into
+an ASCII base letter plus one combining mark (U+0300–U+036F, or U+0327 for ç/Ç) — and every
+combining mark falls outside the printable-ASCII range the strip already targets. So this
+specific character set was already folding correctly before this slice touched anything:
+`á→a, é→e, í→i, ó→o, ú→u, â→a, ê→e, î→i, ô→o, û→u, ã→a, õ→o, ñ→n, ç→c` (uppercase forms fold
+identically before the final `.toLowerCase()`), and `Petição` already folded to `peticao`.
+
+Added two tests to `documents.test.ts` covering this directly (rather than only indirectly via
+`Decisão`, which never exercises á/é/í/ó/ú/â/ê/î/ô/û/ñ): the full accented set concatenated,
+and the literal `Petição → peticao` case from the launch prompt. Run against the unmodified
+implementation, both **passed immediately** — no genuine RED was available, because the
+implementation was already correct for this exact character set (matching the launch prompt's
+own instruction: "If the existing approach already handles a character correctly, say so
+rather than inventing a failure").
+
+Non-vacuousness was confirmed by mutation: temporarily removed `.normalize('NFD')` from
+`foldAccents` (the change that would actually break this — without decomposition, an accented
+character is a single non-ASCII codepoint that gets stripped to nothing, not folded to its
+base letter). Re-running `documents.test.ts` showed 4 failures, including both new tests:
+`Expected: "…/12452668-peticao.pdf" Received: "…/12452668-petio.pdf"` (the combining mark
+survives without NFD in a way that silently drops the base letter for some inputs) and the
+full-set test failing identically. Reverted the mutation; all 13 tests passed again. No
+production code change was needed for 4d.5.
+
+### Strict-TDD compliance for S4d
+
+| Cycle | Genuine RED observed? | Reason if not |
+|---|---|---|
+| 4d.1 mutation audit (all 10 rows) | N/A — audit method, not a RED/GREEN cycle. Each mutation's failure *is* the recorded evidence; each revert restores green. | — |
+| 4d.1 gap closure (persisted-size test) | **Yes** — `expected 3 to be 999` against the still-mutated sink, before any GREEN | — |
+| 4d.2/4d.3 (retryFailedDocuments sink coverage) | **No** | The behavior under test (`retryFailedDocuments` calling `DocumentSink.write()`) was already correctly implemented in S4c (task 4c.6). Writing the assertion against the unmodified code could only pass or fail based on whether that wiring was correct — and it was. A true RED would have required either (a) a real defect to exist, which none did, or (b) writing the test against a deliberately-reverted implementation, which is the exact "fake RED against code we're about to un-delete" pattern this slice exists to reject. Non-vacuousness was proven by mutation instead (see above), which is the honest substitute available here. |
+| 4d.4/4d.5 (accent-folding) | **No** | Same shape of reason: the exact character set named in the task was already handled correctly by S4c's strip-after-NFD approach. No defect existed to reproduce as a RED. Non-vacuousness was proven by mutation instead (dropping `.normalize('NFD')`), which is disclosed above with the exact failing assertion. |
+
+Both "No" rows are disclosed honestly per the launch prompt's own instruction: "if a cycle
+cannot produce a real RED, say so and explain why rather than staging one." In both cases the
+underlying S4c code was already correct, so the value delivered by this slice is proof (via
+mutation, not narrative) that the code is correct and that the added tests would catch a
+regression — not a defect fix.
+
+### Test Summary
+
+- **Total tests added (S4d)**: 4 (1 in `fs-document-sink.test.ts` — persisted-size gap closure;
+  1 in `scraper.test.ts` — retryFailedDocuments sink coverage; 2 in `documents.test.ts` —
+  full accented-set and `Petição` folding)
+- **Total tests passing (S4d)**: 4/4
+- **Full-suite tests passing**: 113/113 (`vitest run`), up from 109/109 at S4c
+- **Mutations introduced during the audit**: 10 (4d.1) + 2 (non-vacuousness checks for 4d.2 and
+  4d.4) = 12, all reverted; working tree clean (`git diff` on the three audited implementation
+  files is empty)
+- **Tests that failed to detect their mutation**: **1 of 10** — mutation #8 (`write()`
+  reporting received size instead of persisted size). Closed with a new test in this slice.
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` → 3 files, 27 tests, all passed |
+| Runtime harness command/scenario and exact result | N/A — CLI not wired until S5 (per tasks.md S4d row); every scenario is proven through `StubTransport`/in-memory engine stores/a real temp directory, unchanged from S4c's runtime boundary |
+| Rollback boundary | `git diff` on `src/adapters/trf5/documents.ts`, `src/engine/scraper.ts`, `src/infra/storage/fs-document-sink.ts` is empty — nothing to roll back in implementation. Revert `src/infra/storage/fs-document-sink.test.ts`'s `statSync` mock and new test, `src/engine/scraper.test.ts`'s new `retryFailedDocuments` sink test, and `src/adapters/trf5/documents.test.ts`'s two new accent-folding tests to return to exactly S4c's committed state. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/infra/storage/fs-document-sink.test.ts` | Modified | Extended the `vi.mock('node:fs', …)` to also wrap `statSync`; added the persisted-vs-received-size test |
+| `src/engine/scraper.test.ts` | Modified | Added `'retryFailedDocuments writes the recovered document through DocumentSink'` |
+| `src/adapters/trf5/documents.test.ts` | Modified | Added the full accented-character-set test and the `Petição → peticao` test |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 4d.1–4d.6 `[x]`; recorded 83 authored `src/` lines actual |
+
+## Issues Found (S4d)
+
+None blocking. One genuine test-coverage gap was found and closed (mutation #8, `write()`'s
+persisted-vs-received size). No production defect was found in the S4c implementation itself —
+every other audited behavior was both correctly implemented and correctly tested.
+
+## Workload / PR Boundary (S4d)
+
+- Mode: chained PR slice (`feature-branch-chain`)
+- Current work unit: S4d — strict-TDD remediation for document persistence
+- Boundary: starts from S4c's merged state; ends with every S4c document-persistence test
+  proven to detect a defect (or, for the one gap found, a new test that does), plus genuine
+  strict-TDD coverage of the two behaviors S4c left untested. No S4c behavior was changed.
+- Estimated review budget impact: 83 authored `src/` lines (`git diff --numstat` against the
+  S4c branch tip, test files only, excluding `tasks.md`/`apply-progress.md` bookkeeping)
+  against the 800-line budget — well within budget, no `size:exception` needed.
+
+### Status (S4d)
+
+6/6 S4d tasks complete (4d.1–4d.6). `vitest run`: 113/113 passing. `pnpm lint`: clean.
+`pnpm typecheck`: clean. `pnpm format:check`: clean (1 file needed `prettier --write` after
+authoring the new sink test; re-verified clean afterward). Ready for `sdd-verify`, or
+`sdd-apply` again for S5.
