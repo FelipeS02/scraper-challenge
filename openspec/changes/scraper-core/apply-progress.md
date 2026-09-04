@@ -9,8 +9,9 @@
 - S4a (4.1–4.14): complete — 729 lines actual, within the 800 budget.
 - S4b (4.15–4.18): complete — 266 authored `src/` lines.
 - S4c (4c.1–4c.7): complete — 409 authored `src/` lines, within the 800 budget.
-- **S4d (4d.1–4d.6): complete — 83 authored `src/` lines (this batch), within the 800 budget.**
-- S5, S6: not started.
+- S4d (4d.1–4d.6): complete — 83 authored `src/` lines, within the 800 budget.
+- **S5a (5.12–5.18): complete — 575 authored `src/` lines (this batch) + 15 in `eslint.config.js`, within the 800 budget.**
+- S5b, S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
 
@@ -785,3 +786,228 @@ every other audited behavior was both correctly implemented and correctly tested
 `pnpm typecheck`: clean. `pnpm format:check`: clean (1 file needed `prettier --write` after
 authoring the new sink test; re-verified clean afterward). Ready for `sdd-verify`, or
 `sdd-apply` again for S5.
+
+## S5a — Structured logging port and implementations
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5a-structured-logging` (forked off
+`feat/scraper-core-s4d-tdd-remediation`, at the `948cb50` S5a-planning-split commit).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #9 in the chain, targeting the S4d
+branch.
+**Why this slice exists**: `design.md` line 25 declared `infra/logging/logger.ts` and
+`proposal.md` promised structured logs, but no task ever built either and no spec required
+them until this slice's planning split added `Structured Run Observability` and extended
+`Personal Data Handling Rules` — see `tasks.md`'s own S5a preamble.
+**Scope discipline**: exactly tasks 5.12–5.18. No `src/cli/*`, no `src/main.ts`, no
+`engine/budget.ts` — the loggers take level and destination as constructor arguments in this
+slice; S5b's `cli/args.ts` chooses them from the command line later.
+**Resumed after a provider rate limit**: an earlier attempt on this same work unit
+terminated on an HTTP 429 session limit before any file was written (working tree was
+clean at `948cb50`, no `src/infra/logging/` directory existed). This entry covers the full
+slice, produced in one continuous run from task 5.12.
+
+### Completed Tasks
+
+- [x] 5.12 RED `infra/logging/redacting-logger.test.ts` — a `LogEvent` whose `fields` carry
+      `cpf`, `partyName`, `jsessionid`, `viewState`, or `ca` reaches the wrapped `Logger`
+      with those values replaced; a CPF-shaped value under an unlisted key (`referenceNumber`)
+      is left untouched, proving redaction is keyed on field name, never on sniffing values.
+- [x] 5.13 GREEN declared `LogLevel`/`LogEvent`/`Logger` in `engine/ports.ts`; implemented
+      `withRedaction(inner: Logger): Logger` in `infra/logging/redacting-logger.ts` — a
+      decorator over any `Logger`, same composable shape as `withJitter`/`withCap`
+      (`engine/backoff.ts`). Redacted field set: `cpf`, `partyName`, `jsessionid`,
+      `viewState`, `ca` → `'[REDACTED]'`.
+- [x] 5.14 RED `infra/logging/jsonl-logger.test.ts` + `console-logger.test.ts` — the JSONL
+      logger appends one valid JSON object per line to `logs/run-<runId>.jsonl` (a non-ASCII
+      field, `Petição inicial`, round-trips byte-identical); a level below the configured
+      threshold writes nothing (file never created). The console logger writes exactly one
+      JSON line to `process.stderr.write`, never to `process.stdout.write`; below-threshold
+      writes nothing to either stream.
+- [x] 5.15 GREEN implemented `infra/logging/jsonl-logger.ts` (`JsonlLogger`, reusing
+      `infra/storage/jsonl.ts`'s `appendJsonlLine`) and `infra/logging/console-logger.ts`
+      (`ConsoleLogger`); added `engine/__fixtures__/recording-logger.ts` (`RecordingLogger`)
+      and `infra/logging/null-logger.ts` (`NullLogger`) as structural, non-branching fixtures.
+- [x] 5.16 RED (extended `engine/scraper.test.ts`) — the loop emits `unit.started`,
+      `unit.saturated`, `fetch.retry`, `session.reprimed`, `cooldown.triggered`,
+      `document.persisted`, `document.failed`, and `unit.completed` at the matching
+      lifecycle transitions, asserted through `RecordingLogger.events`, never by spying on
+      `console`. A `ThrowingLogger` that throws on every call does not change the run's item,
+      coverage, or checkpoint outcome.
+- [x] 5.17 GREEN added `logger: Logger` to `ScraperConfig`; wired a private
+      `emit(level, event, fields)` helper (try/catch, absorbs any throw) into
+      `retryFailedDocuments`, `processUnit`, and `runWithRetry`. Replaced the direct
+      `console.warn` in `infra/storage/jsonl.ts`'s `readJsonlFile` with
+      `logger.log({ event: 'jsonl.tornLineDropped', ... })`, behind a new optional
+      `logger: Logger = new NullLogger()` parameter (backward-compatible — every existing
+      call site keeps its 1-argument call).
+- [x] 5.18 Confirmed the seam: `grep -rn "infra/logging" src/engine` — empty.
+      `grep -rln "console\." src` outside `infra/logging/` — only
+      `jsonl-item-sink.test.ts`, which spies on `console.warn` to assert it is *not* called
+      (a negative proof, not a production call). Strengthened `eslint.config.js`'s
+      `no-console` rule from `'warn', { allow: ['warn','error'] }` to a global `'error'`,
+      carved out (`'off'`) only for `src/infra/logging/**/*.ts` — the same
+      build-enforced-seam pattern as the pre-existing `engine/**` adapter-import rule, so
+      both halves of this check are now lint-enforced, not just grep-confirmed. `pnpm check`
+      (typecheck + lint + format) clean.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 5.12/5.13 | `redacting-logger.test.ts` | Unit (pure) | N/A (new) | ✅ Module-not-found: `Cannot find module './redacting-logger.js'` | ✅ 2/2 passed | ✅ 2 cases: multi-field redaction + pass-through, value-sniffing negative case | ➖ None needed |
+| 5.14/5.15 | `jsonl-logger.test.ts` + `console-logger.test.ts` | Unit + real temp-dir I/O (jsonl) / Unit + spied `process.std{err,out}` (console) | N/A (new) | ✅ Module-not-found: `Cannot find module './jsonl-logger.js'` / `'./console-logger.js'` | ✅ 4/4 passed | ✅ 4 cases: append+non-ASCII round-trip, below-threshold no-op (jsonl); stderr-only, below-threshold no-op (console) | ➖ None needed |
+| 5.15 (null-logger, recording-logger) | `null-logger.test.ts` (recording-logger has no dedicated test — fixture precedent, see `stub-transport.ts`/`fake-site.ts`) | Unit (structural) | N/A (new) | N/A — purely structural, no branching (skip-triangulation allowance) | ✅ 1/1 passed | Triangulation skipped: single no-op method, one possible output | N/A |
+| 5.16/5.17 | `scraper.test.ts` | Unit + in-memory engine stores | ✅ 10/10 (from S4d) | ✅ 7/15 tests failed for the right reason (see transcript below) | ✅ 15/15 passed | ✅ 8 event categories × dedicated/extended assertions (see below) | ✅ Clean — refactored `processUnit`'s duplicate `classifyCellState` call into one shared `state` local, passed into `buildCoverageRecord` |
+| 5.17 (jsonl.ts) | `jsonl-item-sink.test.ts` | Unit + real temp-dir I/O | ✅ 5/5 (from S2a) | ✅ `expected [] to have a length of 1 but got +0` — before the `logger` parameter was wired | ✅ 6/6 passed | ➖ Single scenario (one torn-line case; the pass-through default is already covered by the 5 pre-existing tests calling the 1-arg form) | ➖ None needed |
+
+**5.16's RED transcript** (`pnpm exec vitest run src/engine/scraper.test.ts`, before `scraper.ts`
+emitted any event): 7 of the (then) 15 tests failed —
+`expected undefined to match object { level: 'warn', fields: {...} }` for `document.failed`,
+`cooldown.triggered`, `document.persisted`, `unit.saturated`, `fetch.retry`, and
+`session.reprimed`; `expected -1 to be greater than or equal to 0` for the `unit.started`
+index lookup. The 8th new test (`ThrowingLogger` safety) trivially "passed" against the
+unwired code, since nothing called `logger.log(...)` yet to throw — disclosed below rather
+than silently counted as a clean RED.
+
+**"Saturation split" mapped to `unit.saturated`, not an actual split call**: confirmed by
+reading `engine/scraper.ts` (this slice's own diff) and `design.md`'s own Partitioning
+pseudocode that `TraversalPort.split()`'s children-requeue path has never been wired into the
+engine loop in any slice S1 through S5a — S3's apply-progress explicitly flagged this as
+"out of S3's scope," and no later slice's task list revisits it before S6 (which only reuses
+`traversal.ts`'s split *function* for the frontier seed-search path, task 6.11/6.12 — still
+not the discover-loop's own saturation handling). The only observable "a cell saturated"
+signal the current engine loop produces is `classifyCellState(...) === 'truncated'`, so
+`unit.saturated` is emitted exactly there. This is disclosed as a deliberate mapping decision,
+not silently narrowed scope.
+
+**Cycle that could not produce a genuine RED**: the `ThrowingLogger` safety test
+("a Logger that throws does not fail the run or change its outcome") passed both before and
+after `scraper.ts` was wired to call `logger.log(...)` — before wiring, nothing called the
+throwing logger at all, so the test passed vacuously for the wrong reason; after wiring, it
+passes because the `emit()` helper's try/catch genuinely absorbs the throw. Non-vacuousness
+was confirmed by mutation: temporarily removed the `try { ... } catch {}` wrapper from
+`emit()` (calling `this.config.logger.log(...)` directly), re-ran the test, and observed a
+real failure — `Error: simulated logger failure` propagating out of `scraper.run()`,
+unhandled. Reverted the mutation; the test passed again. This matches the S4d precedent for
+disclosing a non-RED cycle honestly rather than staging a fake one.
+
+### Design decisions and deviations
+
+- **`LogEvent` carries no `timestamp` field.** Neither the RED tests nor the three spec
+  scenarios (Lifecycle transition observable, Failing logger does not fail the run, Log
+  output does not corrupt the run summary) require one; `JsonlLogger` is constructed
+  per-run with `runId`, not per-event, so correlating a run is already possible from the
+  file name alone. Adding an untested field would be scope creep beyond what 5.12–5.18 ask
+  for (design.md's "no over-engineering" constraint).
+- **`LEVEL_RANK` (`debug`/`info`/`warn`/`error` → 0..3) is duplicated identically in
+  `jsonl-logger.ts` and `console-logger.ts` rather than extracted to a shared file.** A
+  4-entry object literal used in exactly two places did not justify inventing a third
+  unlisted file; matches design.md's "Declined Abstractions" ethos for trivial shared
+  constants.
+- **`readJsonlFile`'s new `logger` parameter is optional, defaulting to `NullLogger`, and no
+  other call site (`jsonl-checkpoint-store.ts`, `jsonl-failure-ledger.ts`,
+  `jsonl-adapter-state-store.ts`) was updated to pass a real logger.** Task 5.17 scopes the
+  change to "replace the direct `console.warn` in `infra/storage/jsonl.ts`," not to wire a
+  logger through every store; wiring every store's `readJsonlFile` call to the run's actual
+  logger is `main.ts`'s composition-root job (S5b), matching S4b/S4c's precedent of
+  declaring functions ahead of their full call-site wiring.
+- **Redacted field-name set is fixed (`cpf`, `partyName`, `jsessionid`, `viewState`, `ca`),
+  not configurable.** Task 5.12 names exactly these five categories; no task in this slice's
+  scope asks for a caller-supplied list, and the engine's own emitted events (this slice)
+  never populate any of these five keys — the decorator exists as a defense-in-depth seam
+  for adapter-originated fields that might reach a log in a later slice (e.g. detail parsing
+  fields), consistent with the `Personal Data Handling Rules` requirement's general intent
+  for `logs/`.
+- **`unit.completed` fires only on the fully-processed path (after the checkpoint write),
+  never on a discovery failure or a 429 requeue.** Matches the literal pairing "unit
+  start/complete" in task 5.16: a requeued or failed unit did not complete, so it would be
+  misleading to emit a completion event for it. `unit.started` still fires unconditionally
+  at the top of `processUnit`, so a trace can distinguish "started but never completed" from
+  "started and completed" by unitKey correlation alone.
+- **Event levels are a judgment call** (`unit.started`/`unit.completed`/`document.persisted`
+  → `info`; `unit.saturated`/`fetch.retry`/`session.reprimed`/`cooldown.triggered`/
+  `document.failed` → `warn`), not specified by any task or spec scenario. Chosen so a
+  `warn`-threshold logger surfaces every retry/failure/gap signal while staying quiet on
+  the routine unit/document lifecycle.
+- **`ConsoleLogger` and `JsonlLogger` both serialize `LogEvent` as a raw JSON line**, not a
+  human-formatted string. Task 5.14 only specifies the destination (stderr-only /
+  `logs/run-<runId>.jsonl`) and the threshold gate, not a display format; JSON keeps both
+  loggers trivially parseable and consistent with the rest of this project's JSONL-first
+  output convention (design.md D5), and avoids inventing an unlisted formatting concern.
+
+### Test Summary
+
+- **Total tests added (S5a)**: 18 (2 `redacting-logger.test.ts`, 2 `jsonl-logger.test.ts`,
+  2 `console-logger.test.ts`, 1 `null-logger.test.ts`, 5 new `scraper.test.ts` tests +
+  3 extended existing `scraper.test.ts` assertions (no new `it()` blocks for those 3), 1 new
+  `jsonl-item-sink.test.ts` test) = 13 new test files' tests + 5 new scraper.test.ts tests =
+  18; plus 3 existing tests gained additional assertions without becoming new tests.
+- **Total tests passing (S5a)**: 18/18 new + all pre-existing tests still green
+- **Full-suite tests passing**: 126/126 (`vitest run`), up from 113/113 at S4d
+- **Layers used**: Unit pure (4: redacting-logger), Unit + real temp-dir I/O (2: jsonl-logger,
+  1: jsonl-item-sink), Unit + spied `process.std{err,out}` (2: console-logger), Unit
+  structural (1: null-logger), Unit + in-memory engine stores (scraper.test.ts, 15 total
+  including 5 new)
+- **Pure functions/decorators created**: `withRedaction`
+- **Classes created**: `JsonlLogger`, `ConsoleLogger`, `NullLogger`, `RecordingLogger`
+  (fixture)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/infra/logging src/engine/scraper.test.ts src/infra/storage/jsonl-item-sink.test.ts` → 6 files, 39 tests, all passed |
+| Runtime harness command/scenario and exact result | N/A — no CLI/composition-root wired yet (S5b's job, per tasks.md S5a row); every scenario is proven through `RecordingLogger`/`ThrowingLogger` over the existing in-memory-store engine loop and real temp-directory file I/O for the JSONL/console loggers, this slice's actual runtime boundary |
+| Rollback boundary | Delete `src/infra/logging/` and `src/engine/__fixtures__/recording-logger.ts`; revert `src/engine/ports.ts` (`LogLevel`/`LogEvent`/`Logger`), `src/engine/scraper.ts` (`logger` field, `emit()`, all `this.emit(...)` call sites, the `buildCoverageRecord` state-parameter refactor), `src/engine/scraper.test.ts`, `src/infra/storage/jsonl.ts` (`logger` parameter, `NullLogger` import), `src/infra/storage/jsonl-item-sink.test.ts`, and `eslint.config.js` (the `no-console` tightening + `infra/logging` carve-out). S1–S4d are untouched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/ports.ts` | Modified | Added `LogLevel`, `LogEvent`, `Logger` |
+| `src/infra/logging/redacting-logger.ts` | Created | `withRedaction` — field-name-keyed redaction decorator |
+| `src/infra/logging/redacting-logger.test.ts` | Created | 2 tests: multi-field redaction + pass-through, value-sniffing negative case |
+| `src/infra/logging/jsonl-logger.ts` | Created | `JsonlLogger` — appends to `logs/run-<runId>.jsonl` via `appendJsonlLine` |
+| `src/infra/logging/jsonl-logger.test.ts` | Created | 2 tests: append + non-ASCII round-trip, below-threshold no-op |
+| `src/infra/logging/console-logger.ts` | Created | `ConsoleLogger` — stderr-only JSON-line writer |
+| `src/infra/logging/console-logger.test.ts` | Created | 2 tests: stderr-only, below-threshold no-op |
+| `src/infra/logging/null-logger.ts` | Created | `NullLogger` — default no-op |
+| `src/infra/logging/null-logger.test.ts` | Created | 1 test: accepts any event, does nothing |
+| `src/engine/__fixtures__/recording-logger.ts` | Created | `RecordingLogger` — in-memory `Logger` test fixture |
+| `src/engine/scraper.ts` | Modified | Added `logger: Logger` to `ScraperConfig`; added `emit()` (try/catch-absorbing); wired 8 event emissions across `processUnit`, `runWithRetry`, `retryFailedDocuments`; refactored duplicate `classifyCellState` call into one shared `state` local |
+| `src/engine/scraper.test.ts` | Modified | `buildScraper` now wires a `RecordingLogger` by default (overridable); 5 new tests (`unit.started`/`unit.completed`, `unit.saturated`, `fetch.retry`, `session.reprimed`, `ThrowingLogger` safety); 3 existing tests extended with event assertions |
+| `src/infra/storage/jsonl.ts` | Modified | `readJsonlFile` gained an optional `logger: Logger = new NullLogger()` parameter; replaced `console.warn` with `logger.log({ event: 'jsonl.tornLineDropped', ... })` |
+| `src/infra/storage/jsonl-item-sink.test.ts` | Modified | Added a test proving the torn-line warning now reaches a given `Logger`, not `console.warn` |
+| `eslint.config.js` | Modified | `no-console` tightened from `['warn', { allow: ['warn','error'] }]` to a global `'error'`, carved out (`'off'`) for `src/infra/logging/**/*.ts` |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 5.12–5.18 `[x]`; recorded 575 authored `src/` lines actual (updated the per-slice estimate table) |
+
+## Issues Found (S5a)
+
+None blocking. See "Design decisions and deviations" above for the fixed redaction field
+set, the `unit.saturated`-as-saturation-split mapping (`TraversalPort.split()` remains
+unwired in the engine loop, a pre-existing gap disclosed rather than silently worked
+around), the `readJsonlFile` optional-logger backward-compatibility choice, and the
+one non-vacuous-by-mutation cycle (`ThrowingLogger` safety test).
+
+## Workload / PR Boundary (S5a)
+
+- Mode: chained PR slice (`feature-branch-chain`)
+- Current work unit: S5a — structured logging port and implementations
+- Boundary: starts from S4d's merged state (no `src/infra/logging/` directory, no `Logger`
+  port); ends with every S1–S4d lifecycle transition the engine loop makes observable
+  through a redaction-capable, fire-and-forget `Logger` port, with `NullLogger`/
+  `ConsoleLogger`/`JsonlLogger`/`RecordingLogger` implementations, but no CLI/composition
+  root wiring them yet (S5b).
+- Estimated review budget impact: 575 authored `src/` lines (`git diff --numstat` for
+  modified files + full line count for new files, excluding `tasks.md`/`apply-progress.md`
+  bookkeeping and `pnpm-lock.yaml`) + 15 lines in `eslint.config.js`, against the 800-line
+  budget and the ~330 estimate — 74% over the estimate but well within budget, no
+  `size:exception` needed; consistent with every prior slice in this change also exceeding
+  its estimate.
+
+### Status (S5a)
+
+7/7 S5a tasks complete (5.12–5.18). `vitest run`: 126/126 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean (engine-seam and console-seam both build-enforced by ESLint).
+`pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again for S5b (S5b
+requires this slice's `Logger` port and implementations, which now exist).
