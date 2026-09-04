@@ -6,8 +6,9 @@
 - S2a (2.3–2.9, 2.14): complete — 808 lines actual.
 - S2b (2.1–2.2, 2.10–2.13): complete — 663 lines actual.
 - S3 (3.1–3.14): complete — 835 lines actual, accepted `size:exception`.
-- **S4a (4.1–4.14): complete — 729 lines actual (this batch), within the 800 budget.**
-- S4b, S5, S6: not started.
+- S4a (4.1–4.14): complete — 729 lines actual, within the 800 budget.
+- **S4b (4.15–4.18): complete — 266 authored `src/` lines (this batch), well within budget.**
+- S5, S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
 
@@ -294,3 +295,118 @@ caught-before-commit real-process-number fixture mistake.
 
 S4a: 14/14 tasks complete (4.1–4.14). 729 lines committed to this slice (four work-unit commits).
 Ready for `sdd-verify`, or `sdd-apply` again for S4b.
+
+## S4b — TRF5 document fetch, decoding, and filing
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s4b-documents` (forked off `feat/scraper-core-s4a-detail-payload`)
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #6 in the chain, targeting the S4a branch.
+**Scope discipline**: exactly tasks 4.15–4.18. `site.ts`'s full `SitePort.fetchDocument`
+wiring is deferred to S5, matching S4a's precedent of declaring standalone functions
+ahead of their port-level wiring.
+
+### Completed Tasks
+
+- [x] 4.15 RED `encoding.test.ts` — `nomeArqProcDocBin=Decis%E3o` decodes to `Decisão` at
+      the byte level; a second accented case (`Ac%F3rd%E3o` → `Acórdão`) and a negative
+      case (`decodeURIComponent` throws `URIError` on the same input) triangulate it.
+- [x] 4.16 GREEN `encoding.ts` (`decodePercentEncodedLatin1`) — reads each `%XX` escape as
+      one raw byte before a single `latin1` decode; never routes through UTF-8.
+- [x] 4.17 RED `documents.test.ts` — three same-labeled `Decisão` `DocumentRow`s get three
+      distinct filenames derived only from `ca` + `idProcessoDocumento`; an unsafe filename
+      component is rejected; a 404 maps to `permanentError:notFound`; an unexpected status
+      maps to `hostDefect` instead of throwing.
+- [x] 4.18 GREEN `documents.ts` (`buildDocumentFilename`, `fetchDocument`) — follows the
+      302 redirect, validates filename components against `[A-Za-z0-9._-]`, and returns
+      `FetchOutcome<StoredDocument>` on every path (never throws).
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 4.15/4.16 | `encoding.test.ts` | Unit (pure) | N/A (new) | ✅ Module-not-found | ✅ 4/4 passed | ✅ 4 cases: primary decode, second accented label (proves byte-general, not a lookup), plain-label passthrough, `decodeURIComponent` negative case | ➖ None needed |
+| 4.17/4.18 | `documents.test.ts` | Unit + StubTransport | ✅ 90/90 (full suite pre-batch) | ✅ Module-not-found | ✅ 6/6 passed | ✅ 6 cases: distinct filenames from ids alone, unsafe-component rejection, 302-follow success, three-same-label end-to-end, 404→notFound, unexpected-status→hostDefect (with decoded-label assertion) | ✅ Clean |
+
+No task in this slice hit the "test passed on first run without an independent RED
+failure" pattern seen at S3's 3.6/3.7 and S4a's parties/movements/documents blocks: both
+`encoding.test.ts` and `documents.test.ts` failed on module-not-found before any
+production file existed, and every individual assertion added real, previously-absent
+coverage.
+
+### Design decisions and deviations
+
+- **`decodePercentEncodedLatin1` also maps `+` to a literal space.** Not required by the
+  RED test, but it is the correct `application/x-www-form-urlencoded` reading of a query
+  value and costs nothing extra; flagged for awareness rather than silently added.
+- **`fetchDocument`'s decoded `nomeArqProcDocBin` label is used only inside `hostDefect`
+  failure-reason strings, never for the stored filename.** This is what keeps
+  `encoding.ts` genuinely exercised by production code (not dead code) while still
+  satisfying "never from the remote label" for the filename itself — proven by the last
+  `documents.test.ts` case asserting the decoded `'Decisão'` appears in the reason string.
+- **Unmapped status codes on either leg of the fetch (not 302/404 on the first GET, not
+  200 on the redirect target) fall back to `hostDefect`, not `permanentError`.** Mirrors
+  S4a's `unclassified → hostDefect` precedent in `detail.ts`: an unrecognized response is
+  more likely a transient site anomaly than a definitively permanent failure, and
+  `hostDefect` still gets bounded retries (cap 2) before landing in the failure ledger.
+  RESEARCH.md documents only one doc-specific status code (404, case 4); every other
+  status is this slice's own judgment call, not a literal RESEARCH.md case.
+- **`site.ts`'s `SitePort.fetchDocument` wiring is not touched in this slice.** `site.ts`
+  still exports only the standalone constants/functions declared through S4a; connecting
+  `documents.ts`'s `fetchDocument` (and `TRF5Site.discover`) to the full `SitePort<TItem,
+  TDoc>` shape is S5's composition-root job, consistent with `site.ts`'s own header
+  comment.
+- **Real-process-number check**: grepped every new file's literals against
+  `docs/RESEARCH.md`'s previously-flagged real process number
+  (`0801110-38.2024.4.05.8001`) and against live-host substrings
+  (`trf5.jus.br`/`pjett.`/`http(s)://`) before committing — none present. The
+  `documentId`/`binId` numeric literals reused from `docs/RESEARCH.md`'s own document
+  table (e.g. `12452664`) are internal document/bin ids, not process numbers, and were
+  already used identically in S4a's `detail-page-valid.html` fixture.
+
+### Test Summary
+
+- **Total tests written (S4b)**: 10 (4 in `encoding.test.ts`, 6 in `documents.test.ts`)
+- **Total tests passing (S4b)**: 10
+- **Full-suite tests passing**: 96/96 (`vitest run`)
+- **Layers used**: Unit pure (4), Unit + StubTransport (6), Integration/E2E: N/A by design
+- **Pure functions created**: `decodePercentEncodedLatin1`, `buildDocumentFilename`,
+  `fetchDocument`, `decodedLabel` (internal)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/documents.test.ts src/adapters/trf5/encoding.test.ts` → 2 files, 10 tests, all passed |
+| Runtime harness command/scenario and exact result | N/A — CLI not wired until S5 (per tasks.md S4b row); every scenario is proven through `StubTransport` against a synthetic PDF fixture and inline `DocumentRow` fixtures, this slice's actual runtime boundary |
+| Rollback boundary | Delete `src/adapters/trf5/{documents,encoding}.ts`, their `.test.ts` files, and `src/adapters/trf5/__fixtures__/document-sample.pdf`. S1/S2a/S2b/S3/S4a are untouched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/adapters/trf5/encoding.ts` | Created | `decodePercentEncodedLatin1` — byte-level ISO-8859-1 percent-decoder |
+| `src/adapters/trf5/encoding.test.ts` | Created | 4 tests: primary decode, second accented label, passthrough, UTF-8 negative case |
+| `src/adapters/trf5/documents.ts` | Created | `buildDocumentFilename`, `fetchDocument` — 302-follow, id-only filename, `FetchOutcome<StoredDocument>` wiring |
+| `src/adapters/trf5/documents.test.ts` | Created | 6 tests: distinct filenames, unsafe-component rejection, 302-follow, three-same-label end-to-end, 404, unexpected-status |
+| `src/adapters/trf5/__fixtures__/document-sample.pdf` | Created | Synthetic PDF-shaped bytes, no personal data |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 4.15–4.18 `[x]` |
+
+## Issues Found (S4b)
+
+None blocking. See "Design decisions and deviations" above for the `hostDefect` fallback
+judgment call and the deferred `site.ts` wiring.
+
+## Workload / PR Boundary (S4b)
+
+- Mode: chained PR slice (`feature-branch-chain`)
+- Current work unit: S4b — TRF5 document fetch, decoding, and filing
+- Boundary: starts from S4a's merged state (`detail.ts`/`parsing/detail-page.ts`/
+  `schemas/payload.ts` untouched); ends with a fully tested `fetchDocument` + filename
+  derivation path. `site.ts` `SitePort` wiring intentionally not started (S5).
+- Estimated review budget impact: 266 authored `src/` lines (`git diff --numstat` against
+  the S4a branch tip, excluding `tasks.md`/`apply-progress.md` bookkeeping) against the
+  800-line budget and the ~280 estimate — within budget, no `size:exception` needed.
+
+### Status (S4b)
+
+4/4 S4b tasks complete (4.15–4.18). Ready for `sdd-verify`, or `sdd-apply` again for S5.
