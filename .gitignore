@@ -25,6 +25,7 @@ Thumbs.db
 # Local AI tooling state (machine-specific, not part of the deliverable)
 .atl/
 .engram/
+.codegraph/
 
 # Logs
 *.log
