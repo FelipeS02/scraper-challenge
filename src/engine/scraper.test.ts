@@ -454,6 +454,45 @@ describe('Scraper — write ordering and crash-resume', () => {
     expect(site.fetchCalls).toBe(1);
     expect(failureLedger.entries.some((entry) => entry.resolved === true)).toBe(true);
   });
+
+  it('retryFailedDocuments writes the recovered document through DocumentSink', async () => {
+    const site = new ScriptedSite();
+    const bytes = new Uint8Array([9, 9]);
+    site.scriptFetch('item-A', 'doc-1', [
+      {
+        kind: 'ok',
+        value: {
+          documentId: 'doc-1',
+          byteLength: bytes.byteLength,
+          contentType: null,
+          fileName: 'item-A/doc-1.pdf',
+          bytes,
+        },
+      },
+    ]);
+
+    const failureLedger = new MemoryFailureLedger();
+    failureLedger.entries.push({
+      itemId: 'item-A',
+      documentId: 'doc-1',
+      reason: 'permanentError:notFound',
+      observedAt: '2026-01-01T00:00:00.000Z',
+      item: { id: 'item-A' },
+      doc: { id: 'doc-1' },
+    });
+
+    const documentSink = new MemoryDocumentSink();
+    const { scraper } = buildScraper({
+      site,
+      traversal: new StubTraversal([]),
+      failureLedger,
+      documentSink,
+    });
+
+    await scraper.retryFailedDocuments();
+
+    expect(documentSink.writes).toEqual([{ path: 'item-A/doc-1.pdf', bytes }]);
+  });
 });
 
 describe('Scraper — document persistence (Document Persistence to Disk)', () => {
