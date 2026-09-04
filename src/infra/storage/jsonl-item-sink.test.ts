@@ -2,9 +2,16 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OutputRecord } from '../../engine/ports.js';
+import type { LogEvent, Logger, OutputRecord } from '../../engine/ports.js';
 import { readJsonlFile } from './jsonl.js';
 import { JsonlItemSink } from './jsonl-item-sink.js';
+
+class RecordingLogger implements Logger {
+  readonly events: LogEvent[] = [];
+  log(event: LogEvent): void {
+    this.events.push(event);
+  }
+}
 
 interface FakePayload {
   readonly label: string;
@@ -79,6 +86,22 @@ describe('JsonlItemSink', () => {
     expect(records[0]?.itemId).toBe('a');
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/torn/i);
+  });
+
+  it('reports a torn final line through the given Logger, never through console.warn', () => {
+    appendFileSync(filePath, `${JSON.stringify(record('a'))}\n`, 'utf-8');
+    appendFileSync(filePath, '{"itemId":"b","payload":{"lab', 'utf-8'); // torn, no trailing newline
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logger = new RecordingLogger();
+    const { warnings } = readJsonlFile<OutputRecord<FakePayload>>(filePath, logger);
+    warnSpy.mockRestore();
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(logger.events).toHaveLength(1);
+    expect(logger.events[0]).toMatchObject({ level: 'warn', event: 'jsonl.tornLineDropped' });
+    expect(logger.events[0]?.fields.filePath).toBe(filePath);
+    expect(warnings).toHaveLength(1);
   });
 
   it('treats a malformed non-final line as fatal', () => {

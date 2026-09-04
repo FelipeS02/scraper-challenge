@@ -1,5 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import type { Logger } from '../../engine/ports.js';
+import { NullLogger } from '../logging/null-logger.js';
 
 /**
  * Append-only JSONL persistence (design.md D5): one JSON object per line,
@@ -19,9 +21,16 @@ export interface JsonlLoadResult<T> {
 /**
  * A torn final line (the process was killed mid-write) is dropped with a
  * warning. A malformed line anywhere else is fatal — silent data loss is
- * worse than a hard stop (design.md "Resumability and Idempotency").
+ * worse than a hard stop (design.md "Resumability and Idempotency"). The
+ * warning is reported through `logger` only — no module under `src/` writes
+ * to the console outside `infra/logging/` (core-run-control-and-output,
+ * "Structured Run Observability"). `logger` defaults to a no-op so existing
+ * callers keep working unchanged.
  */
-export function readJsonlFile<T>(filePath: string): JsonlLoadResult<T> {
+export function readJsonlFile<T>(
+  filePath: string,
+  logger: Logger = new NullLogger(),
+): JsonlLoadResult<T> {
   if (!existsSync(filePath)) return { records: [], warnings: [] };
 
   const raw = readFileSync(filePath, 'utf-8');
@@ -40,7 +49,11 @@ export function readJsonlFile<T>(filePath: string): JsonlLoadResult<T> {
       if (isTornFinalLine) {
         const warning = `Dropped torn final line in ${filePath}: ${(error as Error).message}`;
         warnings.push(warning);
-        console.warn(warning);
+        logger.log({
+          level: 'warn',
+          event: 'jsonl.tornLineDropped',
+          fields: { filePath, message: (error as Error).message },
+        });
         return;
       }
       throw new Error(
