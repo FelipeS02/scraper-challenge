@@ -36,8 +36,19 @@ export default tseslint.config(
       // Floating promises are how scrapers silently drop work.
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
-      // `console` is the logger's own transport; everything else goes through it.
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      // Structured Run Observability: no module writes to the console directly —
+      // everything goes through the Logger port. `infra/logging/**` is the one
+      // carve-out below, since it IS the console transport.
+      'no-console': 'error',
+    },
+  },
+
+  // The logging implementation is the only place allowed to touch `console`
+  // directly (core-run-control-and-output, "Structured Run Observability").
+  {
+    files: ['src/infra/logging/**/*.ts'],
+    rules: {
+      'no-console': 'off',
     },
   },
 
