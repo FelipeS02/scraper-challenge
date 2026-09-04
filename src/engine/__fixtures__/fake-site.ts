@@ -42,7 +42,13 @@ export class FakeSite implements SitePort<FakeItem, FakeDoc> {
   fetchDocument(_item: FakeItem, doc: FakeDoc): Promise<FetchOutcome<StoredDocument>> {
     return Promise.resolve({
       kind: 'ok',
-      value: { documentId: doc.id, byteLength: 10, contentType: 'text/plain', fileName: null },
+      value: {
+        documentId: doc.id,
+        byteLength: 10,
+        contentType: 'text/plain',
+        fileName: null,
+        bytes: new Uint8Array(10),
+      },
     });
   }
 

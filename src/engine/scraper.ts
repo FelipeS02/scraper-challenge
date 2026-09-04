@@ -6,6 +6,7 @@ import type {
   CoverageRecord,
   CoverageSink,
   DiscoverResult,
+  DocumentSink,
   FailureLedger,
   ItemSink,
   OutputRecord,
@@ -29,6 +30,7 @@ export interface ScraperConfig<TItem, TDoc, TCursor> {
   readonly retryPolicy: RetryPolicyConfig;
   readonly clock: Clock;
   readonly itemSink: ItemSink<TItem>;
+  readonly documentSink: DocumentSink;
   readonly coverageSink: CoverageSink;
   readonly checkpointStore: CheckpointStore;
   readonly failureLedger: FailureLedger;
@@ -93,6 +95,9 @@ export class Scraper<TItem, TDoc, TCursor> {
       const result = await this.runWithRetry(() => this.config.site.fetchDocument(item, doc));
 
       if (result.ok) {
+        if (result.value.fileName) {
+          await this.config.documentSink.write(result.value.fileName, result.value.bytes);
+        }
         await this.config.failureLedger.resolve(entry.itemId, entry.documentId);
       } else if (!result.requeue) {
         await this.config.failureLedger.record({
@@ -132,7 +137,15 @@ export class Scraper<TItem, TDoc, TCursor> {
       let unitRequeue = false;
       for (const doc of docs) {
         const docResult = await this.runWithRetry(() => this.config.site.fetchDocument(item, doc));
-        if (docResult.ok) continue;
+        if (docResult.ok) {
+          // Persistence is the engine's concern, driven through DocumentSink — the
+          // adapter only returns bytes (trf5-adapter spec, "Document Persistence to
+          // Disk"). A failed fetch never reaches here, so no file is ever written for it.
+          if (docResult.value.fileName) {
+            await this.config.documentSink.write(docResult.value.fileName, docResult.value.bytes);
+          }
+          continue;
+        }
         if (docResult.requeue) {
           unitRequeue = true;
           break;
