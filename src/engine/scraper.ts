@@ -9,6 +9,8 @@ import type {
   DocumentSink,
   FailureLedger,
   ItemSink,
+  LogLevel,
+  Logger,
   OutputRecord,
   RunBounds,
   SitePort,
@@ -34,6 +36,7 @@ export interface ScraperConfig<TItem, TDoc, TCursor> {
   readonly coverageSink: CoverageSink;
   readonly checkpointStore: CheckpointStore;
   readonly failureLedger: FailureLedger;
+  readonly logger: Logger;
   readonly runId: string;
   readonly schemaVersion: number;
 }
@@ -61,6 +64,20 @@ export class Scraper<TItem, TDoc, TCursor> {
   private readonly seenItemIds = new Set<string>();
 
   constructor(private readonly config: ScraperConfig<TItem, TDoc, TCursor>) {}
+
+  /**
+   * Fire-and-forget event emission (core-run-control-and-output, "Structured
+   * Run Observability"): a throwing `Logger` must never fail, delay, or alter
+   * a run's outcome, so the engine absorbs it here rather than trusting every
+   * implementation to catch its own throw.
+   */
+  private emit(level: LogLevel, event: string, fields: Readonly<Record<string, unknown>>): void {
+    try {
+      this.config.logger.log({ level, event, fields });
+    } catch {
+      // Absorbed by design — see the method comment above.
+    }
+  }
 
   async run(bounds: RunBounds): Promise<void> {
     const checkpoints = await this.config.checkpointStore.load();
@@ -96,14 +113,29 @@ export class Scraper<TItem, TDoc, TCursor> {
 
       if (result.ok) {
         if (result.value.fileName) {
-          await this.config.documentSink.write(result.value.fileName, result.value.bytes);
+          const bytesWritten = await this.config.documentSink.write(
+            result.value.fileName,
+            result.value.bytes,
+          );
+          this.emit('info', 'document.persisted', {
+            itemId: entry.itemId,
+            documentId: entry.documentId,
+            path: result.value.fileName,
+            bytesWritten,
+          });
         }
         await this.config.failureLedger.resolve(entry.itemId, entry.documentId);
       } else if (!result.requeue) {
+        const reason = describeOutcome(result.outcome);
+        this.emit('warn', 'document.failed', {
+          itemId: entry.itemId,
+          documentId: entry.documentId,
+          reason,
+        });
         await this.config.failureLedger.record({
           itemId: entry.itemId,
           documentId: entry.documentId,
-          reason: describeOutcome(result.outcome),
+          reason,
           observedAt: this.config.clock.now().toISOString(),
           item,
           doc,
@@ -114,6 +146,8 @@ export class Scraper<TItem, TDoc, TCursor> {
 
   /** Returns `true` when the unit must be requeued (429 cooldown owns the wait). */
   private async processUnit(unit: WorkUnit<TCursor>): Promise<boolean> {
+    this.emit('info', 'unit.started', { unitKey: unit.unitKey, windowKey: unit.windowKey });
+
     const discoverResult = await this.runWithRetry(() => this.config.site.discover(unit));
 
     if (!discoverResult.ok) {
@@ -142,7 +176,16 @@ export class Scraper<TItem, TDoc, TCursor> {
           // adapter only returns bytes (trf5-adapter spec, "Document Persistence to
           // Disk"). A failed fetch never reaches here, so no file is ever written for it.
           if (docResult.value.fileName) {
-            await this.config.documentSink.write(docResult.value.fileName, docResult.value.bytes);
+            const bytesWritten = await this.config.documentSink.write(
+              docResult.value.fileName,
+              docResult.value.bytes,
+            );
+            this.emit('info', 'document.persisted', {
+              itemId,
+              documentId: this.config.site.documentId(doc),
+              path: docResult.value.fileName,
+              bytesWritten,
+            });
           }
           continue;
         }
@@ -150,27 +193,49 @@ export class Scraper<TItem, TDoc, TCursor> {
           unitRequeue = true;
           break;
         }
-        await this.config.failureLedger.record({
-          itemId,
-          documentId: this.config.site.documentId(doc),
-          reason: describeOutcome(docResult.outcome),
-          observedAt: this.config.clock.now().toISOString(),
-          item,
-          doc,
-        });
+        {
+          const reason = describeOutcome(docResult.outcome);
+          const documentId = this.config.site.documentId(doc);
+          this.emit('warn', 'document.failed', { itemId, documentId, reason });
+          await this.config.failureLedger.record({
+            itemId,
+            documentId,
+            reason,
+            observedAt: this.config.clock.now().toISOString(),
+            item,
+            doc,
+          });
+        }
       }
       if (unitRequeue) return true;
 
       await this.config.itemSink.write(this.buildEnvelope(item, itemId));
     }
 
-    await this.config.coverageSink.write(this.buildCoverageRecord(unit, discoverResult.value));
+    const cap = this.config.site.resultPageCap;
+    const state = classifyCellState(discoverResult.value.count, cap);
+    if (state === 'truncated') {
+      this.emit('warn', 'unit.saturated', {
+        unitKey: unit.unitKey,
+        resultCount: discoverResult.value.count,
+        cap,
+      });
+    }
+
+    await this.config.coverageSink.write(
+      this.buildCoverageRecord(unit, discoverResult.value, state),
+    );
     await this.config.checkpointStore.put({
       unitKey: unit.unitKey,
       windowKey: unit.windowKey,
       cursor: unit.cursor,
-      state: classifyCellState(discoverResult.value.count, this.config.site.resultPageCap),
+      state,
       observedAt: this.config.clock.now().toISOString(),
+    });
+    this.emit('info', 'unit.completed', {
+      unitKey: unit.unitKey,
+      windowKey: unit.windowKey,
+      state,
     });
     return false;
   }
@@ -186,18 +251,20 @@ export class Scraper<TItem, TDoc, TCursor> {
       const decision = decide(outcome, attempt, this.config.retryPolicy);
       switch (decision.action) {
         case 'retryAfter':
+          this.emit('warn', 'fetch.retry', { attempt, delayMs: decision.delayMs });
           await this.config.clock.sleep(decision.delayMs);
           attempt += 1;
           continue;
         case 'reprimeAndRetryNow':
+          this.emit('warn', 'session.reprimed', { attempt });
           await this.config.site.reprimeSession();
           attempt += 1;
           continue;
         case 'requeue': {
           const retryAfterMs = outcome.kind === 'transient' ? outcome.retryAfterMs : null;
-          this.config.rateLimiter.tripCooldown(
-            retryAfterMs ?? this.config.retryPolicy.backoff(attempt),
-          );
+          const cooldownMs = retryAfterMs ?? this.config.retryPolicy.backoff(attempt);
+          this.emit('warn', 'cooldown.triggered', { attempt, cooldownMs });
+          this.config.rateLimiter.tripCooldown(cooldownMs);
           return { ok: false, requeue: true, outcome };
         }
         case 'recordAndStop':
@@ -220,6 +287,7 @@ export class Scraper<TItem, TDoc, TCursor> {
   private buildCoverageRecord(
     unit: WorkUnit<TCursor>,
     result: DiscoverResult<TItem, TDoc>,
+    state: 'complete' | 'truncated',
   ): CoverageRecord {
     const itemIds = result.items.map((item) => this.config.site.itemId(item));
     const cap = this.config.site.resultPageCap;
@@ -230,7 +298,7 @@ export class Scraper<TItem, TDoc, TCursor> {
       unitKey: unit.unitKey,
       windowKey: unit.windowKey,
       facetValue: unit.facetValue,
-      state: classifyCellState(result.count, cap),
+      state,
       resultCount: result.count,
       declaredCap: cap,
       saturated: result.count >= cap,

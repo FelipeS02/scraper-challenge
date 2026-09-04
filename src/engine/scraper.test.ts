@@ -10,6 +10,8 @@ import type {
   FailureLedger,
   ItemSink,
   LedgerEntry,
+  LogEvent,
+  Logger,
   OutputRecord,
   RunBounds,
   SitePort,
@@ -21,6 +23,14 @@ import { RateLimiter } from './rate-limiter.js';
 import type { RetryPolicyConfig } from './retry-policy.js';
 import { Scraper } from './scraper.js';
 import type { FetchOutcome, WorkUnit } from './types.js';
+import { RecordingLogger } from './__fixtures__/recording-logger.js';
+
+/** Always throws — proves a failing Logger never fails or changes a run's outcome. */
+class ThrowingLogger implements Logger {
+  log(_event: LogEvent): void {
+    throw new Error('simulated logger failure');
+  }
+}
 
 /** Minimal non-TRF5 test payload — the loop is proven generic (design.md D1). */
 interface TestItem {
@@ -202,6 +212,7 @@ function buildScraper(overrides: {
   coverageSink?: MemoryCoverageSink;
   checkpointStore?: MemoryCheckpointStore;
   failureLedger?: MemoryFailureLedger;
+  logger?: Logger;
   concurrency?: number;
 }): {
   scraper: Scraper<TestItem, TestDoc, { readonly day: string }>;
@@ -210,12 +221,14 @@ function buildScraper(overrides: {
   coverageSink: MemoryCoverageSink;
   checkpointStore: MemoryCheckpointStore;
   failureLedger: MemoryFailureLedger;
+  logger: Logger;
 } {
   const itemSink = overrides.itemSink ?? new MemoryItemSink();
   const documentSink = overrides.documentSink ?? new MemoryDocumentSink();
   const coverageSink = overrides.coverageSink ?? new MemoryCoverageSink();
   const checkpointStore = overrides.checkpointStore ?? new MemoryCheckpointStore();
   const failureLedger = overrides.failureLedger ?? new MemoryFailureLedger();
+  const logger = overrides.logger ?? new RecordingLogger();
 
   const scraper = new Scraper({
     site: overrides.site,
@@ -229,11 +242,12 @@ function buildScraper(overrides: {
     coverageSink,
     checkpointStore,
     failureLedger,
+    logger,
     runId: 'run-1',
     schemaVersion: 1,
   });
 
-  return { scraper, itemSink, documentSink, coverageSink, checkpointStore, failureLedger };
+  return { scraper, itemSink, documentSink, coverageSink, checkpointStore, failureLedger, logger };
 }
 
 describe('Scraper — two-stage discover -> fetch loop', () => {
@@ -244,7 +258,7 @@ describe('Scraper — two-stage discover -> fetch loop', () => {
     ]);
     site.scriptFetch('item-A', 'doc-1', [{ kind: 'permanentError', reason: 'notFound' }]);
 
-    const { scraper, itemSink, failureLedger } = buildScraper({
+    const { scraper, itemSink, failureLedger, logger } = buildScraper({
       site,
       traversal: new StubTraversal([unit('A')]),
     });
@@ -255,6 +269,13 @@ describe('Scraper — two-stage discover -> fetch loop', () => {
     expect(itemSink.records[0]?.itemId).toBe('item-A');
     expect(failureLedger.entries).toHaveLength(1);
     expect(failureLedger.entries[0]).toMatchObject({ itemId: 'item-A', documentId: 'doc-1' });
+
+    const recorded = logger as RecordingLogger;
+    const documentFailed = recorded.events.find((event) => event.event === 'document.failed');
+    expect(documentFailed).toMatchObject({
+      level: 'warn',
+      fields: { itemId: 'item-A', documentId: 'doc-1', reason: 'notFound' },
+    });
   });
 
   it('skips the fetch stage entirely when discovery fails', async () => {
@@ -286,7 +307,10 @@ describe('Scraper — 429 wait-duration composition', () => {
       okDiscover([{ id: 'item-A' }], new Map()),
     ]);
 
-    const { scraper, itemSink } = buildScraper({ site, traversal: new StubTraversal([unit('A')]) });
+    const { scraper, itemSink, logger } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+    });
 
     const runPromise = scraper.run(bounds);
     await vi.advanceTimersByTimeAsync(4999);
@@ -296,6 +320,10 @@ describe('Scraper — 429 wait-duration composition', () => {
 
     expect(itemSink.records).toHaveLength(1);
     expect(site.discoverCalls).toBe(2); // requeued: discovery re-issued once cooldown elapsed
+
+    const recorded = logger as RecordingLogger;
+    const cooldown = recorded.events.find((event) => event.event === 'cooldown.triggered');
+    expect(cooldown).toMatchObject({ level: 'warn', fields: { attempt: 1, cooldownMs: 5000 } });
   });
 });
 
@@ -520,7 +548,7 @@ describe('Scraper — document persistence (Document Persistence to Disk)', () =
     ]);
 
     const documentSink = new MemoryDocumentSink();
-    const { scraper, itemSink } = buildScraper({
+    const { scraper, itemSink, logger } = buildScraper({
       site,
       traversal: new StubTraversal([unit('A')]),
       documentSink,
@@ -530,6 +558,13 @@ describe('Scraper — document persistence (Document Persistence to Disk)', () =
 
     expect(itemSink.records).toHaveLength(1);
     expect(documentSink.writes).toEqual([{ path: 'item-A/doc-1.pdf', bytes }]);
+
+    const recorded = logger as RecordingLogger;
+    const persisted = recorded.events.find((event) => event.event === 'document.persisted');
+    expect(persisted).toMatchObject({
+      level: 'info',
+      fields: { itemId: 'item-A', documentId: 'doc-1', path: 'item-A/doc-1.pdf', bytesWritten: 3 },
+    });
   });
 
   it('writes no file when the document fetch fails, while still writing the item and the ledger entry', async () => {
@@ -551,5 +586,117 @@ describe('Scraper — document persistence (Document Persistence to Disk)', () =
     expect(documentSink.writes).toHaveLength(0);
     expect(itemSink.records).toHaveLength(1);
     expect(failureLedger.entries).toHaveLength(1);
+  });
+});
+
+describe('Scraper — structured run observability (Structured Run Observability)', () => {
+  it('emits unit.started before discovery and unit.completed after the checkpoint write', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-A' }], new Map())]);
+
+    const { scraper, logger } = buildScraper({ site, traversal: new StubTraversal([unit('A')]) });
+
+    await scraper.run(bounds);
+
+    const recorded = logger as RecordingLogger;
+    const startedIndex = recorded.events.findIndex((event) => event.event === 'unit.started');
+    const completedIndex = recorded.events.findIndex((event) => event.event === 'unit.completed');
+
+    expect(startedIndex).toBeGreaterThanOrEqual(0);
+    expect(completedIndex).toBeGreaterThan(startedIndex);
+    expect(recorded.events[startedIndex]).toMatchObject({
+      level: 'info',
+      fields: { unitKey: 'A', windowKey: '2026-01-01' },
+    });
+    expect(recorded.events[completedIndex]).toMatchObject({
+      level: 'info',
+      fields: { unitKey: 'A', windowKey: '2026-01-01', state: 'complete' },
+    });
+  });
+
+  it('emits unit.saturated when a cell result count reaches the declared cap', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover(
+        [{ id: 'item-1' }, { id: 'item-2' }, { id: 'item-3' }, { id: 'item-4' }, { id: 'item-5' }],
+        new Map(),
+      ),
+    ]);
+
+    const { scraper, logger } = buildScraper({ site, traversal: new StubTraversal([unit('A')]) });
+
+    await scraper.run(bounds);
+
+    const recorded = logger as RecordingLogger;
+    const saturated = recorded.events.find((event) => event.event === 'unit.saturated');
+    expect(saturated).toMatchObject({
+      level: 'warn',
+      fields: { unitKey: 'A', resultCount: 5, cap: 5 },
+    });
+  });
+
+  it('emits fetch.retry with attempt and delay when a transient 5xx failure is retried', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      { kind: 'transient', status: 503, retryAfterMs: null },
+      okDiscover([{ id: 'item-A' }], new Map()),
+    ]);
+
+    const { scraper, logger } = buildScraper({ site, traversal: new StubTraversal([unit('A')]) });
+
+    await scraper.run(bounds);
+
+    const recorded = logger as RecordingLogger;
+    const retry = recorded.events.find((event) => event.event === 'fetch.retry');
+    expect(retry).toMatchObject({ level: 'warn', fields: { attempt: 1, delayMs: 1000 } });
+  });
+
+  it('emits session.reprimed when a sessionExpired outcome triggers a re-prime', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      { kind: 'sessionExpired' },
+      okDiscover([{ id: 'item-A' }], new Map()),
+    ]);
+
+    const { scraper, logger } = buildScraper({ site, traversal: new StubTraversal([unit('A')]) });
+
+    await scraper.run(bounds);
+
+    expect(site.reprimeCalls).toBe(1);
+    const recorded = logger as RecordingLogger;
+    const reprimed = recorded.events.find((event) => event.event === 'session.reprimed');
+    expect(reprimed).toMatchObject({ level: 'warn', fields: { attempt: 1 } });
+  });
+
+  it('a Logger that throws does not fail the run or change its outcome', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }]]])),
+    ]);
+    site.scriptFetch('item-A', 'doc-1', [
+      {
+        kind: 'ok',
+        value: {
+          documentId: 'doc-1',
+          byteLength: 1,
+          contentType: null,
+          fileName: 'item-A/doc-1.pdf',
+          bytes: new Uint8Array([1]),
+        },
+      },
+    ]);
+
+    const { scraper, itemSink, coverageSink, checkpointStore } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+      logger: new ThrowingLogger(),
+    });
+
+    await expect(scraper.run(bounds)).resolves.toBeUndefined();
+
+    expect(itemSink.records).toHaveLength(1);
+    expect(itemSink.records[0]?.itemId).toBe('item-A');
+    expect(coverageSink.records).toHaveLength(1);
+    expect(checkpointStore.records).toHaveLength(1);
   });
 });
