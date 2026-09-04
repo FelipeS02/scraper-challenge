@@ -1,14 +1,23 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FsDocumentSink } from './fs-document-sink.js';
 
-// `renameSync` is call-through by default (see beforeEach) — only the crash-
-// simulation test below overrides it for a single call via mockImplementationOnce.
+// `renameSync`/`statSync` are call-through by default (see beforeEach) — only
+// the crash-simulation and persisted-size tests below override them for a
+// single call via mockImplementationOnce.
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, renameSync: vi.fn(actual.renameSync) };
+  return { ...actual, renameSync: vi.fn(actual.renameSync), statSync: vi.fn(actual.statSync) };
 });
 
 describe('FsDocumentSink — Document Persistence to Disk (trf5-adapter spec)', () => {
@@ -52,5 +61,20 @@ describe('FsDocumentSink — Document Persistence to Disk (trf5-adapter spec)', 
     );
 
     expect(existsSync(join(dir, 'proc-1', 'doc-1.pdf'))).toBe(false);
+  });
+
+  it('reports the size actually persisted on disk, not the byte length it received', async () => {
+    const sink = new FsDocumentSink(dir);
+    // The mocked size (999) deliberately differs from the 3-byte input: if
+    // write() ever hardcoded `bytes.byteLength` instead of reading the real
+    // file back, this test would still pass by coincidence in every other
+    // case in this file, because none of them exercise a size mismatch.
+    vi.mocked(statSync).mockImplementationOnce(
+      () => ({ size: 999 }) as ReturnType<typeof statSync>,
+    );
+
+    const written = await sink.write('proc-1/doc-1.pdf', new Uint8Array([1, 2, 3]));
+
+    expect(written).toBe(999);
   });
 });
