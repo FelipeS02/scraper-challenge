@@ -7,7 +7,8 @@
 - S2b (2.1–2.2, 2.10–2.13): complete — 663 lines actual.
 - S3 (3.1–3.14): complete — 835 lines actual, accepted `size:exception`.
 - S4a (4.1–4.14): complete — 729 lines actual, within the 800 budget.
-- **S4b (4.15–4.18): complete — 266 authored `src/` lines (this batch), well within budget.**
+- S4b (4.15–4.18): complete — 266 authored `src/` lines.
+- **S4c (4c.1–4c.7): complete — 409 authored `src/` lines (this batch), within the 800 budget.**
 - S5, S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -410,3 +411,206 @@ judgment call and the deferred `site.ts` wiring.
 ### Status (S4b)
 
 4/4 S4b tasks complete (4.15–4.18). Ready for `sdd-verify`, or `sdd-apply` again for S5.
+
+## S4c — TRF5 document persistence to disk + stable paths
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s4c-document-persistence` (forked off `feat/scraper-core-s4b-documents`)
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #7 in the chain, targeting the S4b branch.
+**Why this slice exists**: a review after S4b found that nothing in S1–S4b ever writes document
+bytes to disk — `fetchDocument` measured `byteLength` and discarded the body, and no port
+persisted documents. Two spec requirements were added (`Document Persistence to Disk`,
+`Persisted Identifier Stability`) and one amended (`Stable Document Filename Derivation`,
+`ca`-keyed -> `processNumber`-keyed).
+**Scope discipline**: exactly tasks 4c.1–4c.7. `site.ts`'s `SitePort.fetchDocument` wiring
+remains deferred to S5 (S4b's precedent, unchanged by this slice).
+
+### Completed Tasks
+
+- [x] 4c.1 RED (extend `documents.test.ts`) — path is `<processNumber>/<idProcessoDocumento>-<slug>.pdf`;
+      three same-labeled `Decisão` documents get three distinct paths; a hostile label
+      (`../../etc/passwd`), an empty label, and a non-ASCII-after-folding label (CJK) all
+      degrade to `<processNumber>/<idProcessoDocumento>.pdf`; repeated calls (standing in for
+      "different `ca` across sessions", since `ca` is no longer a parameter at all) yield the
+      identical path.
+- [x] 4c.2 GREEN `documents.ts` — `buildDocumentPath(processNumber, documentId, label)` replaces
+      `buildDocumentFilename(ca, documentId)`. Slug derivation: NFD-normalize the (already
+      ISO-8859-1-decoded via `encoding.ts`'s `decodedLabel` helper) label, strip everything
+      outside printable ASCII (folds accents with no lookup table — see deviation note below),
+      lowercase, collapse whitespace to `-`, truncate to 60 chars; if the result is empty or
+      still contains a character outside `[a-z0-9._-]` (e.g. a literal `/` from a hostile
+      label), the slug is discarded entirely — never partially sanitized. `processNumber`/
+      `documentId` are each validated against `[A-Za-z0-9._-]+` before joining, matching the
+      existing `PATH_COMPONENT_SAFE` gate. `fetchDocument` now takes `processNumber` and
+      returns the fetched `bytes` on its `StoredDocument` value (previously discarded).
+- [x] 4c.3 RED `infra/storage/fs-document-sink.test.ts` — creates the per-process directory;
+      bytes on disk match the fetched body exactly; a `renameSync` failure mid-write (mocked
+      via `vi.mock('node:fs', ...)`, call-through by default) leaves no file at the final path.
+- [x] 4c.4 GREEN `infra/storage/fs-document-sink.ts` (`FsDocumentSink`) + `DocumentSink` port
+      declared in `engine/ports.ts`. Temp-file-then-rename, same crash-safety shape as the S2a
+      JSONL sinks: `writeFileSync` to `<finalPath>.tmp-<uuid>`, then `renameSync` into place;
+      on any failure the temp file is best-effort removed and the error re-thrown as a rejected
+      promise. `write()` returns `statSync(finalPath).size` — the real persisted size, not an
+      assumption from the input buffer length.
+- [x] 4c.5 RED (extend `engine/scraper.test.ts`) — a successful document fetch writes through
+      the `DocumentSink` with the real bytes; a failed fetch writes no file while the item and
+      ledger entry are still written exactly as before this slice.
+- [x] 4c.6 GREEN `engine/scraper.ts` — `documentSink: DocumentSink` added to `ScraperConfig`;
+      both `processUnit`'s fetch loop and `retryFailedDocuments` now call
+      `documentSink.write(value.fileName, value.bytes)` on a successful fetch (guarded on
+      `fileName` being non-null, which it always is when `fetchDocument` returns `ok`).
+- [x] 4c.7 Confirmed — `persisted-identifier-stability.test.ts` asserts a `buildDocumentPath`
+      result, a `TRF5Traversal`-seeded `TraversalCursor`, and a hand-built `CheckpointRecord`
+      each serialize to JSON containing neither the harvested `jsessionid`/`ViewState` from a
+      real primed session fixture, nor a `ca=` query token. The output envelope's `sourceUrl`
+      is unchanged by this slice and still embeds `ca` (S4a's `site.ts` `sourceUrl` derivation)
+      — this is by design per the new "Persisted Identifier Stability" requirement's own text:
+      a point-in-time locator MAY be persisted for provenance provided the record also carries
+      a session-independent handle, and the envelope's `itemId`/`payload.processNumber` is that
+      handle. `sourceUrl` becoming stale after the originating session expires does not make
+      the record unrecoverable — the item stays addressable by `processNumber`, and the
+      document itself is addressable by its own derived path (this slice's `buildDocumentPath`)
+      with no dependency on `sourceUrl` or `ca` at all.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 4c.1/4c.2 | `documents.test.ts` | Unit + StubTransport | ✅ 96/96 (full suite pre-batch) | ✅ Confirmed retroactively: `git stash` on `documents.ts` alone (test file kept) reproduced 7/11 failures — `buildDocumentPath is not a function` (×3) and a wrong-format-filename assertion failure on the `fetchDocument` end-to-end case. Disclosed as retroactive rather than sequenced-first (see note below). | ✅ 11/11 passed | ✅ 9 cases: happy path, 3-distinct-paths, hostile label, empty label, CJK label, repeated-call stability, 2 invalid-component rejections, 302-follow, 404, hostDefect | ✅ Clean |
+| 4c.3/4c.4 | `fs-document-sink.test.ts` | Unit + real temp-dir I/O | N/A (new file) | ✅ Confirmed retroactively: moving `fs-document-sink.ts` aside reproduced `Cannot find module` for all 3 tests. | ✅ 3/3 passed | ✅ 3 cases: bytes-match-exactly, no-lingering-temp-file, interrupted-rename-leaves-no-final-file | ✅ Clean |
+| 4c.5/4c.6 | `scraper.test.ts` | Unit + in-memory stores | ✅ 108/108 (full suite pre-batch minus the new test) | ⚠️ See note below — the "writes through DocumentSink" case failed retroactively (`[] to deeply equal [...]`); the "writes no file on failure" case passed on the pre-wiring code too, since neither the reverted nor the new code ever wrote a file on a failed fetch. | ✅ 2/2 passed | ✅ 2 cases: success writes real bytes (deliberately mismatched claimed `byteLength: 999` proves the sink, not the adapter's claim, is authoritative), failure writes nothing | ✅ Clean |
+| 4c.7 | `persisted-identifier-stability.test.ts` | Unit (confirmation) | ✅ 109/109 (post-4c.6) | N/A — this is a confirmation task, not new behavior; the assertions are true by construction of already-landed S3/S4c code | ✅ 3/3 passed on first run | ✅ 3 targets: document path, TraversalCursor, CheckpointRecord | N/A |
+
+**Note on RED sequencing (all of 4c.1–4c.6)**: this batch's test and implementation files were
+authored together rather than test-first with an intermediate `vitest run` checkpoint per task —
+a deviation from the strict RED-before-GREEN sequencing followed in S1–S4b. To avoid reporting a
+fabricated RED narrative, genuine RED evidence was reconstructed retroactively before this slice
+was marked complete: `git stash push -- <implementation file>` (for the two files that were
+modifications of tracked files: `documents.ts`, `scraper.ts`) or temporarily moving the file aside
+(for the two new files: `fs-document-sink.ts`) while keeping each corresponding test file in its
+final form, then running that test file alone and confirming real failures, then restoring the
+implementation and confirming green again. The failures observed (module-not-found, wrong
+filename format, empty-array-vs-populated-array assertion mismatches) are the same shape of
+failure a true test-first RED would have produced, so the tests are confirmed non-vacuous. This
+is disclosed as a process deviation, not a silently-reported clean RED — matching the spirit of
+the S3 3.6/3.7 and S4a parties/movements/documents disclosures, but going one step further since
+those were "passed immediately" cases and this one is "authored out of order, verified
+retroactively."
+
+### Design decisions and deviations
+
+- **Accent-folding uses NFD-normalize + strip-everything-outside-printable-ASCII, not the
+  Unicode combining-diacritical-marks block (U+0300 to U+036F) directly.** The literal
+  intended implementation was a regex targeting that exact code-point range, but this
+  repository's write/edit tooling round-trips a raw combining-mark character range identically
+  regardless of whether it is typed as literal glyphs or as escaped code-point text, making
+  that specific regex impossible to author reliably through the available editing tools in
+  this session. The chosen alternative — strip any character outside the literal space
+  (0x20) to tilde (0x7E) range after NFD decomposition — is semantically equivalent for this
+  use case (every NFD combining mark and every non-ASCII base character falls outside that
+  range) and additionally avoids ESLint's `no-control-regex` rule, which flagged a
+  control-character-anchored variant tried first. Verified against `documents.test.ts`'s CJK
+  ("unrepresentable") and Portuguese-accent ("Decisão" -> "decisao") cases, both passing.
+- **The slug is discarded wholesale, not partially sanitized, for any label containing so much
+  as one character outside `[a-z0-9._-]` after folding.** `deriveSlug` returns `null` (not a
+  best-effort sanitized string) the moment `PATH_COMPONENT_SAFE.test(candidate)` fails. This
+  is what makes the hostile-label scenario (`../../etc/passwd`) produce exactly
+  `<processNumber>/<idProcessoDocumento>.pdf` as the spec's scenario table requires, rather
+  than some dash-mangled-but-still-slug-shaped string — a partial-sanitization approach (e.g.
+  replacing `/` with `-`) would technically still be collision-free and non-escaping (no `/`
+  ever reaches the joined path), but would not match the spec's literal expected output.
+- **`StoredDocument` gained a mandatory `bytes: Uint8Array` field; `DocumentSink.write()`
+  returns `Promise<number>` (the real persisted size), not `Promise<void>`.** `ItemSink`/
+  `CoverageSink` return `void` because nothing downstream needs their write's result; the whole
+  point of `DocumentSink.write()`'s return value is to be the "actually written" source of
+  truth per the spec's own wording, so it could not follow the same void-return shape without
+  losing that property. `engine/scraper.ts` does not currently do anything further with the
+  returned count beyond awaiting it (no document-metadata ledger exists yet to record it into —
+  that plumbing, if ever added, is S5's composition-root concern, not this slice's).
+- **Both `processUnit`'s per-document fetch loop and `retryFailedDocuments` now call
+  `documentSink.write(...)` on a successful fetch.** The task list's wording (4c.6) names only
+  "the fetch stage of `engine/scraper.ts`", but `retryFailedDocuments` is also a fetch stage —
+  a resolved document-retry that never persists its bytes would silently resolve the failure
+  ledger entry for a file that was never written, which is exactly the class of bug this slice
+  exists to close. Covered implicitly by the existing `retrying a failed document...` test
+  (unchanged assertions, still green) rather than a new dedicated test, since the existing
+  `MemoryFailureLedger`-based test does not inspect `documentSink.writes` — flagging this as an
+  observation rather than a proven-by-test claim: the wiring is present and type-correct, but
+  no test in this batch asserts `documentSink.writes` after `retryFailedDocuments()` runs.
+- **`fs-document-sink.test.ts`'s crash-simulation test mocks `node:fs` via `vi.mock` with a
+  call-through default (`vi.fn(actual.renameSync)`), not `vi.spyOn`.** `vi.spyOn` on a
+  destructured Node ESM built-in export fails with "Cannot redefine property" (module namespace
+  objects are non-configurable in ESM) — confirmed by running the naive `vi.spyOn(fs,
+  'renameSync')` version first and observing that exact `TypeError`. `vi.mock`'s
+  `importOriginal` + `vi.fn(actual.fn)` pattern is the standard Vitest workaround, and it keeps
+  every other test in the file exercising the real filesystem (no other `renameSync` calls are
+  ever mocked; only the one crash-simulation test uses `mockImplementationOnce`).
+- **Real-process-number and live-host check**: grepped every new/changed file's literals
+  against `docs/RESEARCH.md`'s previously-flagged real process number
+  (`0801110-38.2024.4.05.8001`) and against live-host substrings (`trf5.jus.br`/`pjett.`/
+  `http(s)://`) before committing — none present. `documents.test.ts`'s `PROCESS_NUMBER`
+  constant (`0123456-78.2026.4.05.8100`) matches the launch prompt's own synthetic-style
+  example verbatim.
+
+### Test Summary
+
+- **Total tests written (S4c)**: 19 (9 new `documents.test.ts` cases replacing/extending the
+  prior 6; 3 new `fs-document-sink.test.ts`; 2 new `scraper.test.ts` document-persistence
+  cases; 3 new `persisted-identifier-stability.test.ts`; net new test count vs. the S4b branch
+  tip is 17, since 2 of the 9 `documents.test.ts` cases replace prior `buildDocumentFilename`
+  cases 1:1)
+- **Total tests passing (S4c)**: 109/109 full suite (`vitest run`)
+- **Layers used**: Unit pure (12), Unit + StubTransport (6), Unit + in-memory engine stores (2),
+  Unit + real temp-dir filesystem I/O (3), Integration/E2E: N/A by design (no live host, ever)
+- **Pure functions created**: `buildDocumentPath`, `foldAccents`, `deriveSlug`
+- **Classes created**: `FsDocumentSink`
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts src/adapters/trf5/persisted-identifier-stability.test.ts` → 4 files, 25 tests, all passed |
+| Runtime harness command/scenario and exact result | N/A — CLI not wired until S5 (per tasks.md S4c row); every scenario is proven through `StubTransport`/in-memory engine stores/a real temp directory, this slice's actual runtime boundary |
+| Rollback boundary | Delete `src/infra/storage/fs-document-sink.ts` + its test and `src/adapters/trf5/persisted-identifier-stability.test.ts`; revert `src/engine/ports.ts` (`StoredDocument.bytes`, `DocumentSink`), `src/engine/scraper.ts` (`documentSink` field + two write call sites), `src/engine/scraper.test.ts`, `src/engine/__fixtures__/fake-site.ts`, and `src/adapters/trf5/documents.ts`/`documents.test.ts` back to S4b's `ca`-derived `buildDocumentFilename`. S1/S2a/S2b/S3/S4a untouched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/ports.ts` | Modified | Added `StoredDocument.bytes: Uint8Array`; declared the `DocumentSink` port |
+| `src/engine/scraper.ts` | Modified | Added `documentSink: DocumentSink` to `ScraperConfig`; wired `documentSink.write(...)` into both `processUnit`'s fetch loop and `retryFailedDocuments` |
+| `src/engine/scraper.test.ts` | Modified | `MemoryDocumentSink`; `buildScraper` now wires it; 2 new document-persistence tests; 2 pre-existing `StoredDocument` literals updated with `bytes` |
+| `src/engine/__fixtures__/fake-site.ts` | Modified | `fetchDocument`'s `StoredDocument` literal updated with `bytes` |
+| `src/adapters/trf5/documents.ts` | Modified | `buildDocumentPath` replaces `buildDocumentFilename`; `fetchDocument` takes `processNumber`, returns `bytes` |
+| `src/adapters/trf5/documents.test.ts` | Modified | Full rewrite to the amended path-derivation contract; adds hostile/empty/CJK-label and path-stability cases |
+| `src/infra/storage/fs-document-sink.ts` | Created | `FsDocumentSink` — temp-file-then-rename `DocumentSink` implementation |
+| `src/infra/storage/fs-document-sink.test.ts` | Created | Bytes-match, no-lingering-temp-file, interrupted-rename tests |
+| `src/adapters/trf5/persisted-identifier-stability.test.ts` | Created | 4c.7 confirmation — document path/`TraversalCursor`/`CheckpointRecord` carry no session-scoped value |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 4c.1–4c.7 `[x]`, recorded 409 actual lines, updated the per-slice estimate table |
+
+## Issues Found (S4c)
+
+None blocking. See "Design decisions and deviations" above for the accent-folding tooling
+workaround, the wholesale-slug-discard choice, the `DocumentSink.write()` return-type choice,
+the `retryFailedDocuments` persistence-coverage gap (wired but not independently tested), and the
+`vi.mock`-over-`vi.spyOn` workaround for Node ESM built-ins.
+
+## Workload / PR Boundary (S4c)
+
+- Mode: chained PR slice (`feature-branch-chain`)
+- Current work unit: S4c — TRF5 document persistence to disk + stable paths
+- Boundary: starts from S4b's merged state (`detail.ts`/`parsing/detail-page.ts`/
+  `schemas/payload.ts`/S4b's `ca`-derived filename builder as the pre-slice baseline); ends
+  with fetched document bytes actually reaching disk under a `processNumber`-keyed,
+  session-independent path. `site.ts`'s `SitePort.fetchDocument` wiring intentionally not
+  started (still S5, per S4b's own precedent).
+- Estimated review budget impact: 409 authored `src/` lines (`git diff --stat` insertions+
+  deletions for modified files, plus full line count for new files, excluding
+  `tasks.md`/`apply-progress.md` bookkeeping) against the 800-line budget and the ~350
+  estimate — within budget, no `size:exception` needed.
+
+### Status (S4c)
+
+7/7 S4c tasks complete (4c.1–4c.7). `vitest run`: 109/109 passing. `pnpm lint`: clean.
+`pnpm typecheck`: clean. `pnpm format:check`: clean (3 files needed `prettier --write` after
+authoring; re-verified clean afterward). Ready for `sdd-verify`, or `sdd-apply` again for S5.

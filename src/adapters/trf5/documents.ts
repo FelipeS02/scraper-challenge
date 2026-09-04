@@ -4,29 +4,61 @@ import { decodePercentEncodedLatin1 } from './encoding.js';
 import type { DocumentRow } from './parsing/detail-page.js';
 
 /**
- * Filesystem-safe filename components only (trf5-adapter spec, "Stable Document
- * Filename Derivation"; design.md's remote-controlled-filenames threat note). The
- * filename is derived only from the adapter's own opaque `ca` token and the
- * server-declared `idProcessoDocumento` — never from `nomeArqProcDocBin`, because
- * multiple documents in one process legitimately share the same label
- * (docs/RESEARCH.md §2 Step 4, trap #2: three `Decisão` documents, one process).
+ * Filesystem-safe path components only (trf5-adapter spec, "Stable Document
+ * Filename Derivation" — amended in this slice). The path is derived only from
+ * the adapter's declared identity key `processNumber` and the server-declared
+ * `idProcessoDocumento` — never from the session-scoped `ca` token, whose
+ * stability across sessions is unverified (docs/RESEARCH.md open questions),
+ * and never from the label alone, because multiple documents in one process
+ * legitimately share the same label (docs/RESEARCH.md §2 Step 4, trap #2:
+ * three `Decisão` documents, one process). See "Persisted Identifier
+ * Stability" in core-run-control-and-output.
  */
-const FILENAME_SAFE = /^[A-Za-z0-9._-]+$/;
+const PATH_COMPONENT_SAFE = /^[A-Za-z0-9._-]+$/;
+const MAX_SLUG_LENGTH = 60;
+// Every NFD combining mark falls outside printable ASCII, so stripping
+// anything outside the printable-ASCII range after decomposition folds an
+// accented letter to its bare base letter (e.g. "a" + combining tilde -> "a")
+// with no hardcoded accent table. Literal space/tilde bounds (not \x escapes)
+// keep this outside no-control-regex's control-character concern.
+const NON_PRINTABLE_ASCII = /[^ -~]/g;
 
-export function buildDocumentFilename(ca: string, documentId: string): string {
-  if (!FILENAME_SAFE.test(ca) || !FILENAME_SAFE.test(documentId)) {
-    throw new Error(
-      `document filename components must match ${String(FILENAME_SAFE)}: ` +
-        `ca=${JSON.stringify(ca)} documentId=${JSON.stringify(documentId)}`,
-    );
-  }
-  return `${ca}-${documentId}.pdf`;
+function foldAccents(text: string): string {
+  return text.normalize('NFD').replace(NON_PRINTABLE_ASCII, '');
 }
 
 /**
- * Extracts and decodes `nomeArqProcDocBin` from the document link for human-readable
- * failure reasons only (trf5-adapter spec, "Document Byte-Level ISO-8859-1 Decoding")
- * — never for the stored filename, which `buildDocumentFilename` derives independently.
+ * The slug is decorative only — it never participates in uniqueness. A
+ * hostile, empty, or unrepresentable label degrades to `null` (no slug),
+ * never a collision and never a path-escaping component.
+ */
+function deriveSlug(label: string): string | null {
+  const candidate = foldAccents(label).toLowerCase().replace(/\s+/g, '-');
+  if (candidate.length === 0 || !PATH_COMPONENT_SAFE.test(candidate)) return null;
+  return candidate.slice(0, MAX_SLUG_LENGTH);
+}
+
+export function buildDocumentPath(
+  processNumber: string,
+  documentId: string,
+  label: string,
+): string {
+  if (!PATH_COMPONENT_SAFE.test(processNumber) || !PATH_COMPONENT_SAFE.test(documentId)) {
+    throw new Error(
+      `document path components must match ${String(PATH_COMPONENT_SAFE)}: ` +
+        `processNumber=${JSON.stringify(processNumber)} documentId=${JSON.stringify(documentId)}`,
+    );
+  }
+  const slug = deriveSlug(label);
+  const fileName = slug ? `${documentId}-${slug}.pdf` : `${documentId}.pdf`;
+  return `${processNumber}/${fileName}`;
+}
+
+/**
+ * Extracts and decodes `nomeArqProcDocBin` from the document link — feeds both
+ * human-readable failure reasons and the decorative slug (trf5-adapter spec,
+ * "Document Byte-Level ISO-8859-1 Decoding"). Never the sole uniqueness key,
+ * which `buildDocumentPath` derives from `processNumber` + `documentId` alone.
  */
 function decodedLabel(doc: DocumentRow): string {
   const match = /[?&]nomeArqProcDocBin=([^&]*)/.exec(doc.downloadUrl);
@@ -37,11 +69,14 @@ function decodedLabel(doc: DocumentRow): string {
  * Fetches one document by following its 302 redirect (docs/RESEARCH.md §2 Step 4).
  * Never throws on a fetch failure: returning a `FetchOutcome` failure kind is what
  * lets `engine/scraper.ts` record the failure in the ledger while still writing the
- * item S4a's `parseDetailPage`/`assembleTrfPayload` already extracted.
+ * item S4a's `parseDetailPage`/`assembleTrfPayload` already extracted. Returns the
+ * fetched bytes for the engine to persist through `DocumentSink` — this adapter
+ * never touches the filesystem itself (trf5-adapter spec, "Document Persistence
+ * to Disk").
  */
 export async function fetchDocument(
   transport: HttpTransport,
-  ca: string,
+  processNumber: string,
   doc: DocumentRow,
 ): Promise<FetchOutcome<StoredDocument>> {
   const label = decodedLabel(doc);
@@ -77,7 +112,7 @@ export async function fetchDocument(
 
   let fileName: string;
   try {
-    fileName = buildDocumentFilename(ca, doc.documentId);
+    fileName = buildDocumentPath(processNumber, doc.documentId, label);
   } catch {
     return { kind: 'permanentError', reason: 'schemaMismatch' };
   }
@@ -89,6 +124,7 @@ export async function fetchDocument(
       byteLength: fileResponse.body.byteLength,
       contentType: fileResponse.headers['content-type'] ?? null,
       fileName,
+      bytes: fileResponse.body,
     },
   };
 }

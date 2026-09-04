@@ -11,10 +11,10 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~4600 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c ~350, S5 ~550, S6 ~450) |
+| Estimated changed lines | ~4850 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d ~250, S5 ~550, S6 ~450) |
 | 800-line budget risk | Medium — the S4a/S4b split broke a four-slice overrun streak: S4a landed at 729 authored and S4b at 266, both inside budget for the first time. Split by deliverable rather than trusting an estimate |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5 -> S6 (S1+S2a+S2b hard-gate S3; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
@@ -83,10 +83,11 @@ and filename derivation (4.15–4.18) — rather than discovering the overage at
 | S4a | Full detail-page field inventory + spec-conformant payload assembly | PR 5 | `vitest run src/adapters/trf5/detail.test.ts src/adapters/trf5/parsing src/adapters/trf5/payload.test.ts src/adapters/trf5/schemas` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/detail.ts`, `parsing/*`, `schemas/payload.ts`; S3 untouched |
 | S4b | Document fetch through 302, byte-level decode, stable filename derivation | PR 6 | `vitest run src/adapters/trf5/documents.test.ts src/adapters/trf5/encoding.test.ts` | N/A — CLI not wired until S5 | Delete `src/adapters/trf5/{documents,encoding}.ts`; S4a untouched |
 | S4c | Document bytes actually persisted, under session-independent human-navigable paths | PR 7 | `vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` | N/A — CLI not wired until S5 | Delete `src/infra/storage/fs-document-sink.ts` and the `DocumentSink` port; revert the path builder to S4b's `ca`-derived filename |
-| S5 | Bounded, forecastable, resumable CLI run end to end | PR 8 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 9 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S4d | Every document-persistence test proven to detect a defect; the two behaviors S4c left uncovered done under real strict TDD | PR 8 | `vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` | N/A — CLI not wired until S5 | Revert `documents.ts` slug folding and drop the tests added here; S4c behavior is unchanged |
+| S5 | Bounded, forecastable, resumable CLI run end to end | PR 9 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter remain independently testable |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 10 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
-**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S5 needs S1–S4c (wires CLI to the full loop, including the document sink). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
+**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5 needs S1–S4d (wires CLI to the full loop, including the document sink). S6 is additive and may land last independently of S5's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
 
 ## Requirement Coverage Map
 
@@ -263,7 +264,7 @@ S4a already extracted.
 - [ ] 4.17 RED `adapters/trf5/documents.test.ts`: three same-labeled `Decisão` documents in one process get three distinct filenames, derived only from `ca` + `idProcessoDocumento` (`[A-Za-z0-9._-]`-validated), never from the remote label; a failed document fetch is ledgered without discarding the already-extracted item.
 - [ ] 4.18 GREEN implement `adapters/trf5/documents.ts` (302-follow, filename builder, `FetchOutcome` wiring for `fetchDocument`).
 
-## S4c: Document persistence to disk + stable paths (~350 lines)
+## S4c: Document persistence to disk + stable paths (409 lines actual — within budget, complete)
 
 **Added after S4b landed**, when a review found that nothing in S1–S4b ever writes document
 bytes to disk: `fetchDocument` measured `byteLength` and discarded the body, and no port
@@ -275,13 +276,34 @@ a file be *stored*. Two spec requirements were added (`Document Persistence to D
 Demonstrates: a fetched document actually reaches the filesystem, under a human-navigable
 path that survives the session that produced it.
 
-- [ ] 4c.1 RED (extend `adapters/trf5/documents.test.ts`): path is `<processNumber>/<idProcessoDocumento>-<slug>.pdf`; three same-labeled `Decisão` documents get three distinct paths; a hostile label (`../../etc/passwd`) and an empty label both degrade to `<processNumber>/<idProcessoDocumento>.pdf`; the same document derived twice with different `ca` values yields the identical path.
-- [ ] 4c.2 GREEN replace `buildDocumentFilename(ca, documentId)` with a path builder keyed on `processNumber` + `idProcessoDocumento`, plus decorative slug derivation (ISO-8859-1 decode via `encoding.ts`, accent-fold, lowercase, collapse to `[a-z0-9._-]`, truncate); every path component validated before joining. Update `fetchDocument` to take `processNumber` instead of `ca`.
-- [ ] 4c.3 RED `infra/storage/fs-document-sink.test.ts`: writing creates the per-process directory; bytes on disk match the fetched body exactly; a write interrupted before completion leaves no file that reads as complete (temp-file-then-rename, same crash-safety standard as the S2a JSONL sinks).
-- [ ] 4c.4 GREEN declare a `DocumentSink` port in `engine/ports.ts` and implement `infra/storage/fs-document-sink.ts`. Persistence stays an engine concern driven through a port — the adapter returns bytes and never touches the filesystem, exactly as it never touches `items.jsonl`.
-- [ ] 4c.5 RED (extend `engine/scraper.test.ts`): a successful document fetch writes through the `DocumentSink`; a failed fetch writes no file, still writes the item, and still records the ledger entry; `StoredDocument.byteLength` equals the bytes actually written, never the bytes merely received.
-- [ ] 4c.6 GREEN wire `DocumentSink` into the fetch stage of `engine/scraper.ts`.
-- [ ] 4c.7 Confirm no persisted identifier is session-scoped (`Persisted Identifier Stability`): assert that a derived document path, a `TraversalCursor`, and a `CheckpointRecord` contain no `ca`, `jsessionid`, or ViewState value. Record in `apply-progress.md` that the output envelope's `sourceUrl` remains a point-in-time locator by design, recoverable through the `processNumber` identity key.
+- [x] 4c.1 RED (extend `adapters/trf5/documents.test.ts`): path is `<processNumber>/<idProcessoDocumento>-<slug>.pdf`; three same-labeled `Decisão` documents get three distinct paths; a hostile label (`../../etc/passwd`) and an empty label both degrade to `<processNumber>/<idProcessoDocumento>.pdf`; the same document derived twice with different `ca` values yields the identical path.
+- [x] 4c.2 GREEN replace `buildDocumentFilename(ca, documentId)` with a path builder keyed on `processNumber` + `idProcessoDocumento`, plus decorative slug derivation (ISO-8859-1 decode via `encoding.ts`, accent-fold, lowercase, collapse to `[a-z0-9._-]`, truncate); every path component validated before joining. Update `fetchDocument` to take `processNumber` instead of `ca`.
+- [x] 4c.3 RED `infra/storage/fs-document-sink.test.ts`: writing creates the per-process directory; bytes on disk match the fetched body exactly; a write interrupted before completion leaves no file that reads as complete (temp-file-then-rename, same crash-safety standard as the S2a JSONL sinks).
+- [x] 4c.4 GREEN declare a `DocumentSink` port in `engine/ports.ts` and implement `infra/storage/fs-document-sink.ts`. Persistence stays an engine concern driven through a port — the adapter returns bytes and never touches the filesystem, exactly as it never touches `items.jsonl`.
+- [x] 4c.5 RED (extend `engine/scraper.test.ts`): a successful document fetch writes through the `DocumentSink`; a failed fetch writes no file, still writes the item, and still records the ledger entry; `StoredDocument.byteLength` equals the bytes actually written, never the bytes merely received.
+- [x] 4c.6 GREEN wire `DocumentSink` into the fetch stage of `engine/scraper.ts`.
+- [x] 4c.7 Confirm no persisted identifier is session-scoped (`Persisted Identifier Stability`): assert that a derived document path, a `TraversalCursor`, and a `CheckpointRecord` contain no `ca`, `jsessionid`, or ViewState value. Record in `apply-progress.md` that the output envelope's `sourceUrl` remains a point-in-time locator by design, recoverable through the `processNumber` identity key.
+
+## S4d: Strict-TDD remediation for document persistence (~250 lines)
+
+**Added after S4c landed.** S4c's actor disclosed that RED-before-GREEN was not sequenced for
+tasks 4c.1–4c.6: test and implementation were authored together and the RED evidence was
+reconstructed afterwards with `git stash`. The observed failures were real, but a RED
+reconstructed against an implementation that already exists proves only that the file was
+missing — not that the test can detect a wrong implementation. Strict TDD is enabled for this
+project and document persistence is the path where a silent defect loses files rather than
+raising an error.
+
+This slice does not re-stage fake RED cycles over existing code. It delivers the guarantee the
+RED phase was supposed to provide, by proving each S4c test actually detects a defect, and it
+applies genuine strict TDD to the two behaviors S4c left uncovered.
+
+- [ ] 4d.1 Defect-detection audit of the S4c suite. For each behavior below, introduce ONE targeted mutation in the implementation, run only its covering test, confirm it fails for the right reason, then revert the mutation: path keyed on `documentId` rather than the label; hostile label discards the slug; empty/unrepresentable label degrades to `<documentId>.pdf`; a different `ca` yields an identical path; the sink creates the per-process directory; written bytes equal fetched bytes; an interrupted write leaves no file that reads as complete; `write()` reports the persisted size rather than the received size; a successful fetch writes through the sink; a failed fetch writes no file yet still writes the item and the ledger entry. Record a mutation -> test -> observed-failure table in `apply-progress.md`. **Any mutation no test catches is a missing test: write that test RED-first, watch it fail against the mutation, then revert the mutation and confirm it passes.**
+- [ ] 4d.2 RED (extend `engine/scraper.test.ts`): `retryFailedDocuments` writes the recovered document through `DocumentSink`. Assert on the sink's recorded writes, not only on ledger resolution. S4c wired this call but no test inspects it — this is genuinely new coverage, so observe a real failure first.
+- [ ] 4d.3 GREEN whatever 4d.2 exposes.
+- [ ] 4d.4 RED (extend `adapters/trf5/documents.test.ts`): accent folding maps every character the site actually emits — `á é í ó ú â ê î ô û ã õ ñ ç` and their uppercase forms — to its ASCII base, rather than dropping it. S4c substituted a strip-non-printable-ASCII-after-NFD approach for combining-mark folding, so a label like `Petição` must fold to `peticao`, never to `peticao`-with-holes or `petico`.
+- [ ] 4d.5 GREEN implement correct combining-mark folding.
+- [ ] 4d.6 Record strict-TDD compliance for this slice in `apply-progress.md`: every cycle in 4d.2–4d.5 observed a genuine RED before its GREEN, with the failure output quoted. No reconstructed RED is acceptable in this slice — if a cycle cannot produce a real RED, say so and explain why rather than staging one.
 
 ## S5: CLI, bounds, and run control (~490 lines)
 

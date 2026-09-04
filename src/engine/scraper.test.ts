@@ -6,6 +6,7 @@ import type {
   CoverageRecord,
   CoverageSink,
   DiscoverResult,
+  DocumentSink,
   FailureLedger,
   ItemSink,
   LedgerEntry,
@@ -102,6 +103,14 @@ class MemoryItemSink implements ItemSink<TestItem> {
   }
 }
 
+class MemoryDocumentSink implements DocumentSink {
+  readonly writes: { path: string; bytes: Uint8Array }[] = [];
+  write(path: string, bytes: Uint8Array): Promise<number> {
+    this.writes.push({ path, bytes });
+    return Promise.resolve(bytes.byteLength);
+  }
+}
+
 class MemoryCoverageSink implements CoverageSink {
   readonly records: CoverageRecord[] = [];
   write(record: CoverageRecord): Promise<void> {
@@ -189,6 +198,7 @@ function buildScraper(overrides: {
   site: ScriptedSite;
   traversal: TraversalPort<{ readonly day: string }>;
   itemSink?: MemoryItemSink;
+  documentSink?: MemoryDocumentSink;
   coverageSink?: MemoryCoverageSink;
   checkpointStore?: MemoryCheckpointStore;
   failureLedger?: MemoryFailureLedger;
@@ -196,11 +206,13 @@ function buildScraper(overrides: {
 }): {
   scraper: Scraper<TestItem, TestDoc, { readonly day: string }>;
   itemSink: MemoryItemSink;
+  documentSink: MemoryDocumentSink;
   coverageSink: MemoryCoverageSink;
   checkpointStore: MemoryCheckpointStore;
   failureLedger: MemoryFailureLedger;
 } {
   const itemSink = overrides.itemSink ?? new MemoryItemSink();
+  const documentSink = overrides.documentSink ?? new MemoryDocumentSink();
   const coverageSink = overrides.coverageSink ?? new MemoryCoverageSink();
   const checkpointStore = overrides.checkpointStore ?? new MemoryCheckpointStore();
   const failureLedger = overrides.failureLedger ?? new MemoryFailureLedger();
@@ -213,6 +225,7 @@ function buildScraper(overrides: {
     retryPolicy,
     clock: new FakeClock(),
     itemSink,
+    documentSink,
     coverageSink,
     checkpointStore,
     failureLedger,
@@ -220,7 +233,7 @@ function buildScraper(overrides: {
     schemaVersion: 1,
   });
 
-  return { scraper, itemSink, coverageSink, checkpointStore, failureLedger };
+  return { scraper, itemSink, documentSink, coverageSink, checkpointStore, failureLedger };
 }
 
 describe('Scraper — two-stage discover -> fetch loop', () => {
@@ -298,7 +311,13 @@ describe('Scraper — dedup by adapter-declared identity key and envelope shape'
     site.scriptFetch('item-X', 'doc-1', [
       {
         kind: 'ok',
-        value: { documentId: 'doc-1', byteLength: 1, contentType: null, fileName: null },
+        value: {
+          documentId: 'doc-1',
+          byteLength: 1,
+          contentType: null,
+          fileName: null,
+          bytes: new Uint8Array([1]),
+        },
       },
     ]);
 
@@ -407,7 +426,13 @@ describe('Scraper — write ordering and crash-resume', () => {
     site.scriptFetch('item-A', 'doc-1', [
       {
         kind: 'ok',
-        value: { documentId: 'doc-1', byteLength: 1, contentType: null, fileName: null },
+        value: {
+          documentId: 'doc-1',
+          byteLength: 1,
+          contentType: null,
+          fileName: null,
+          bytes: new Uint8Array([1]),
+        },
       },
     ]);
 
@@ -428,5 +453,64 @@ describe('Scraper — write ordering and crash-resume', () => {
     expect(site.discoverCalls).toBe(0);
     expect(site.fetchCalls).toBe(1);
     expect(failureLedger.entries.some((entry) => entry.resolved === true)).toBe(true);
+  });
+});
+
+describe('Scraper — document persistence (Document Persistence to Disk)', () => {
+  it('writes a successfully fetched document through the DocumentSink using the real bytes', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }]]])),
+    ]);
+    const bytes = new Uint8Array([1, 2, 3]);
+    site.scriptFetch('item-A', 'doc-1', [
+      {
+        kind: 'ok',
+        value: {
+          documentId: 'doc-1',
+          // Deliberately wrong: the engine must never treat this as the persisted
+          // size. Only the sink's own write() result — checked in
+          // infra/storage/fs-document-sink.test.ts — is the source of truth for
+          // "bytes actually written".
+          byteLength: 999,
+          contentType: null,
+          fileName: 'item-A/doc-1.pdf',
+          bytes,
+        },
+      },
+    ]);
+
+    const documentSink = new MemoryDocumentSink();
+    const { scraper, itemSink } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+      documentSink,
+    });
+
+    await scraper.run(bounds);
+
+    expect(itemSink.records).toHaveLength(1);
+    expect(documentSink.writes).toEqual([{ path: 'item-A/doc-1.pdf', bytes }]);
+  });
+
+  it('writes no file when the document fetch fails, while still writing the item and the ledger entry', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }]]])),
+    ]);
+    site.scriptFetch('item-A', 'doc-1', [{ kind: 'permanentError', reason: 'notFound' }]);
+
+    const documentSink = new MemoryDocumentSink();
+    const { scraper, itemSink, failureLedger } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+      documentSink,
+    });
+
+    await scraper.run(bounds);
+
+    expect(documentSink.writes).toHaveLength(0);
+    expect(itemSink.records).toHaveLength(1);
+    expect(failureLedger.entries).toHaveLength(1);
   });
 });

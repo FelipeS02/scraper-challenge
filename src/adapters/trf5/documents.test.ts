@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { HttpResponse } from '../../engine/ports.js';
 import { loadFixtureBytes, StubTransport } from './__fixtures__/stub-transport.js';
-import { buildDocumentFilename, fetchDocument } from './documents.js';
+import { buildDocumentPath, fetchDocument } from './documents.js';
 import type { DocumentRow } from './parsing/detail-page.js';
+
+const PROCESS_NUMBER = '0123456-78.2026.4.05.8100';
 
 function documentRow(overrides: Partial<DocumentRow> = {}): DocumentRow {
   return {
@@ -34,33 +36,56 @@ function pdfResponse(): HttpResponse {
   };
 }
 
-describe('buildDocumentFilename — Stable Document Filename Derivation (trf5-adapter spec)', () => {
-  it('derives distinct filenames from ca + idProcessoDocumento only, never the label', () => {
-    const ca = 'stub-ca-token-0001';
-    const filenames = ['12452664', '12452668', '12452669'].map((documentId) =>
-      buildDocumentFilename(ca, documentId),
-    );
-
-    expect(new Set(filenames).size).toBe(3);
-    for (const fileName of filenames) {
-      expect(fileName).toMatch(/^stub-ca-token-0001-\d+\.pdf$/);
-    }
+describe('buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended)', () => {
+  it('derives a human-navigable path from processNumber + idProcessoDocumento, with a decorative slug', () => {
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', 'Decisão');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668-decisao.pdf`);
   });
 
-  it('rejects filename components outside [A-Za-z0-9._-]', () => {
-    expect(() => buildDocumentFilename('../escape', '12452668')).toThrow();
-    expect(() => buildDocumentFilename('stub-ca-token-0001', '../../etc/passwd')).toThrow();
+  it('gives three same-labeled documents three distinct paths, keyed only on idProcessoDocumento', () => {
+    const paths = ['12452664', '12452668', '12452669'].map((documentId) =>
+      buildDocumentPath(PROCESS_NUMBER, documentId, 'Decisão'),
+    );
+    expect(new Set(paths).size).toBe(3);
+  });
+
+  it('discards a hostile label and degrades to <processNumber>/<idProcessoDocumento>.pdf', () => {
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', '../../etc/passwd');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668.pdf`);
+  });
+
+  it('discards an empty label and degrades the same way', () => {
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', '');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668.pdf`);
+  });
+
+  it('discards an unrepresentable (non-ASCII-after-folding) label the same way', () => {
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', '判決書');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668.pdf`);
+  });
+
+  it('derives the identical path across repeated calls — there is no session token input at all', () => {
+    // The strongest form of "stable across a later session with a different ca"
+    // is that ca is not a parameter of this function in the first place.
+    const first = buildDocumentPath(PROCESS_NUMBER, '12452668', 'Decisão');
+    const second = buildDocumentPath(PROCESS_NUMBER, '12452668', 'Decisão');
+    expect(first).toBe(second);
+  });
+
+  it('rejects processNumber or documentId components outside [A-Za-z0-9._-]', () => {
+    expect(() => buildDocumentPath('../escape', '12452668', 'Decisão')).toThrow();
+    expect(() => buildDocumentPath(PROCESS_NUMBER, '../../etc/passwd', 'Decisão')).toThrow();
   });
 });
 
 describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding)', () => {
-  it('follows the 302 redirect and returns the fetched document under an id-derived filename', async () => {
+  it('follows the 302 redirect and returns the fetched document under a stable, id-derived path', async () => {
     const transport = new StubTransport([
       redirectResponse('stub://pjeconsulta/documentos/bin/12196568'),
       pdfResponse(),
     ]);
 
-    const outcome = await fetchDocument(transport, 'stub-ca-token-0001', documentRow());
+    const outcome = await fetchDocument(transport, PROCESS_NUMBER, documentRow());
 
     expect(transport.requests).toHaveLength(2);
     expect(transport.requests[0]?.url).toContain('idProcessoDocumento=12452668');
@@ -68,14 +93,14 @@ describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level I
     expect(outcome.kind).toBe('ok');
     if (outcome.kind === 'ok') {
       expect(outcome.value.documentId).toBe('12452668');
-      expect(outcome.value.fileName).toBe('stub-ca-token-0001-12452668.pdf');
+      expect(outcome.value.fileName).toBe(`${PROCESS_NUMBER}/12452668-decisao.pdf`);
       expect(outcome.value.contentType).toBe('application/pdf');
       expect(outcome.value.byteLength).toBeGreaterThan(0);
+      expect(outcome.value.bytes.byteLength).toBe(outcome.value.byteLength);
     }
   });
 
-  it('stores three same-labeled Decisão documents with three distinct filenames end to end', async () => {
-    const ca = 'stub-ca-token-0001';
+  it('stores three same-labeled Decisão documents with three distinct paths end to end', async () => {
     const docs = ['12452668', '12452669', '12452680'].map((documentId) =>
       documentRow({ documentId, binId: `bin-${documentId}`, label: 'Decisão' }),
     );
@@ -88,7 +113,7 @@ describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level I
 
     const fileNames: string[] = [];
     for (const doc of docs) {
-      const outcome = await fetchDocument(transport, ca, doc);
+      const outcome = await fetchDocument(transport, PROCESS_NUMBER, doc);
       expect(outcome.kind).toBe('ok');
       if (outcome.kind === 'ok') fileNames.push(outcome.value.fileName!);
     }
@@ -99,7 +124,7 @@ describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level I
   it('maps a 404 on the document link to a permanent notFound outcome, never throwing', async () => {
     const transport = new StubTransport([{ status: 404, headers: {}, body: new Uint8Array() }]);
 
-    const outcome = await fetchDocument(transport, 'stub-ca-token-0001', documentRow());
+    const outcome = await fetchDocument(transport, PROCESS_NUMBER, documentRow());
 
     expect(outcome).toEqual({ kind: 'permanentError', reason: 'notFound' });
   });
@@ -107,12 +132,12 @@ describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level I
   it('ledgers an unexpected status as a hostDefect FetchOutcome instead of throwing, so the already-extracted item is not discarded', async () => {
     const transport = new StubTransport([{ status: 500, headers: {}, body: new Uint8Array() }]);
 
-    const outcome = await fetchDocument(transport, 'stub-ca-token-0001', documentRow());
+    const outcome = await fetchDocument(transport, PROCESS_NUMBER, documentRow());
 
     expect(outcome.kind).toBe('hostDefect');
     if (outcome.kind === 'hostDefect') {
       // The byte-level decoded label appears in the reason, proving nomeArqProcDocBin was
-      // read as ISO-8859-1 (never mojibake) — even though it is never used for the filename.
+      // read as ISO-8859-1 (never mojibake) — even though it never determines the path.
       expect(outcome.reason).toContain('Decisão');
     }
   });
