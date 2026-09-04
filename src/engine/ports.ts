@@ -34,6 +34,19 @@ export interface StoredDocument {
   readonly byteLength: number;
   readonly contentType: string | null;
   readonly fileName: string | null;
+  // Adapter-returned bytes. The adapter never touches the filesystem (same
+  // separation as ItemSink); only the engine, through DocumentSink, persists them.
+  readonly bytes: Uint8Array;
+}
+
+export interface DocumentSink {
+  /**
+   * Persists document bytes at an adapter-derived relative path and returns the
+   * number of bytes actually written. The engine trusts this return value, not
+   * any byteLength the adapter merely claims (core-run-control-and-output,
+   * "Document Persistence to Disk").
+   */
+  write(relativePath: string, bytes: Uint8Array): Promise<number>;
 }
 
 export interface SitePort<TItem, TDoc> {
