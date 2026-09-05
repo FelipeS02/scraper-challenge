@@ -24,6 +24,8 @@ describe('JsonlCheckpointStore', () => {
     const record: CheckpointRecord = {
       unitKey: 'unit-1',
       windowKey: '2026-01-01',
+      facetValue: null,
+      label: '2026-01-01',
       cursor,
       state: 'complete',
       observedAt: '2026-01-01T00:00:00.000Z',
@@ -36,11 +38,32 @@ describe('JsonlCheckpointStore', () => {
     expect(JSON.stringify(loaded.get('unit-1')?.cursor)).toBe(JSON.stringify(cursor));
   });
 
+  it('round-trips facetValue and label alongside cursor — a checkpoint describes a complete WorkUnit', async () => {
+    const store = new JsonlCheckpointStore(filePath);
+    const record: CheckpointRecord = {
+      unitKey: '2026-01-01|APELAÇÃO CÍVEL',
+      windowKey: '2026-01-01',
+      facetValue: 'APELAÇÃO CÍVEL',
+      label: '2026-01-01 / APELAÇÃO CÍVEL',
+      cursor: { day: '2026-01-01' },
+      state: 'subdivided',
+      observedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    await store.put(record);
+    const loaded = await store.load();
+
+    expect(loaded.get(record.unitKey)?.facetValue).toBe('APELAÇÃO CÍVEL');
+    expect(loaded.get(record.unitKey)?.label).toBe('2026-01-01 / APELAÇÃO CÍVEL');
+  });
+
   it('keeps only the latest-by-observedAt record per unitKey on load', async () => {
     const store = new JsonlCheckpointStore(filePath);
     await store.put({
       unitKey: 'unit-1',
       windowKey: '2026-01-01',
+      facetValue: null,
+      label: '2026-01-01',
       cursor: { day: '2026-01-01' },
       state: 'failed',
       observedAt: '2026-01-01T00:00:00.000Z',
@@ -48,6 +71,8 @@ describe('JsonlCheckpointStore', () => {
     await store.put({
       unitKey: 'unit-1',
       windowKey: '2026-01-01',
+      facetValue: null,
+      label: '2026-01-01',
       cursor: { day: '2026-01-01' },
       state: 'complete',
       observedAt: '2026-01-02T00:00:00.000Z',

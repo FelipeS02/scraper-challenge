@@ -14,6 +14,7 @@ import type {
   Logger,
   OutputRecord,
   RunBounds,
+  SaturationInfo,
   SitePort,
   StoredDocument,
   TraversalPort,
@@ -42,11 +43,13 @@ interface TestDoc {
 
 /** Scripted, per-key outcome queues — never touches a live host or a real fake timer surprise. */
 class ScriptedSite implements SitePort<TestItem, TestDoc> {
-  readonly resultPageCap = 5;
   readonly identityKeyName = 'id';
   discoverCalls = 0;
   fetchCalls = 0;
   reprimeCalls = 0;
+  readonly discoveredUnits: WorkUnit<unknown>[] = [];
+
+  constructor(readonly resultPageCap: number | null = 5) {}
   private readonly discoverScript = new Map<
     string,
     FetchOutcome<DiscoverResult<TestItem, TestDoc>>[]
@@ -75,6 +78,7 @@ class ScriptedSite implements SitePort<TestItem, TestDoc> {
 
   discover(unit: WorkUnit<unknown>): Promise<FetchOutcome<DiscoverResult<TestItem, TestDoc>>> {
     this.discoverCalls += 1;
+    this.discoveredUnits.push(unit);
     const next = this.discoverScript.get(unit.unitKey)?.shift();
     if (!next) throw new Error(`no scripted discover outcome for ${unit.unitKey}`);
     return Promise.resolve(next);
@@ -96,12 +100,35 @@ class ScriptedSite implements SitePort<TestItem, TestDoc> {
 
 class StubTraversal implements TraversalPort<{ readonly day: string }> {
   readonly facetName = 'testFacet';
+  readonly splitCalls: {
+    unit: WorkUnit<{ readonly day: string }>;
+    saturated: SaturationInfo;
+  }[] = [];
+  private readonly splitScript = new Map<
+    string,
+    readonly WorkUnit<{ readonly day: string }>[] | null
+  >();
+
   constructor(private readonly units: readonly WorkUnit<{ readonly day: string }>[]) {}
+
   seed(): Promise<readonly WorkUnit<{ readonly day: string }>[]> {
     return Promise.resolve(this.units);
   }
-  split(): Promise<null> {
-    return Promise.resolve(null);
+
+  /** Absent from the script -> split() returns `null` (the existing default behavior). */
+  scriptSplit(
+    unitKey: string,
+    children: readonly WorkUnit<{ readonly day: string }>[] | null,
+  ): void {
+    this.splitScript.set(unitKey, children);
+  }
+
+  split(
+    unit: WorkUnit<{ readonly day: string }>,
+    saturated: SaturationInfo,
+  ): Promise<readonly WorkUnit<{ readonly day: string }>[] | null> {
+    this.splitCalls.push({ unit, saturated });
+    return Promise.resolve(this.splitScript.get(unit.unitKey) ?? null);
   }
 }
 
@@ -214,6 +241,7 @@ function buildScraper(overrides: {
   failureLedger?: MemoryFailureLedger;
   logger?: Logger;
   concurrency?: number;
+  maxSplitDepth?: number;
 }): {
   scraper: Scraper<TestItem, TestDoc, { readonly day: string }>;
   itemSink: MemoryItemSink;
@@ -243,6 +271,7 @@ function buildScraper(overrides: {
     checkpointStore,
     failureLedger,
     logger,
+    maxSplitDepth: overrides.maxSplitDepth ?? 3,
     runId: 'run-1',
     schemaVersion: 1,
   });
@@ -256,7 +285,9 @@ describe('Scraper — two-stage discover -> fetch loop', () => {
     site.scriptDiscover('A', [
       okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }]]])),
     ]);
-    site.scriptFetch('item-A', 'doc-1', [{ kind: 'permanentError', reason: 'notFound' }]);
+    site.scriptFetch('item-A', 'doc-1', [
+      { kind: 'permanentError', reason: 'notFound', detail: null },
+    ]);
 
     const { scraper, itemSink, failureLedger, logger } = buildScraper({
       site,
@@ -280,7 +311,9 @@ describe('Scraper — two-stage discover -> fetch loop', () => {
 
   it('skips the fetch stage entirely when discovery fails', async () => {
     const site = new ScriptedSite();
-    site.scriptDiscover('B', [{ kind: 'permanentError', reason: 'invalidTokenShell' }]);
+    site.scriptDiscover('B', [
+      { kind: 'permanentError', reason: 'invalidReference', detail: 'invalidTokenShell' },
+    ]);
 
     const { scraper, itemSink, failureLedger } = buildScraper({
       site,
@@ -371,6 +404,34 @@ describe('Scraper — dedup by adapter-declared identity key and envelope shape'
     });
     // the second occurrence is a dedup hit — its document is never re-fetched
     expect(site.fetchCalls).toBe(1);
+  });
+});
+
+describe('Scraper — checkpoint carries the whole opaque WorkUnit', () => {
+  it('persists facetValue and label alongside cursor, not just the cursor', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-A' }], new Map())]);
+
+    const facetedUnit: WorkUnit<{ readonly day: string }> = {
+      unitKey: 'A',
+      windowKey: '2026-01-01',
+      facetValue: 'APELAÇÃO CÍVEL',
+      label: '2026-01-01 / APELAÇÃO CÍVEL',
+      cursor: { day: '2026-01-01' },
+    };
+
+    const { scraper, checkpointStore } = buildScraper({
+      site,
+      traversal: new StubTraversal([facetedUnit]),
+    });
+
+    await scraper.run(bounds);
+
+    expect(checkpointStore.records[0]).toMatchObject({
+      unitKey: 'A',
+      facetValue: 'APELAÇÃO CÍVEL',
+      label: '2026-01-01 / APELAÇÃO CÍVEL',
+    });
   });
 });
 
@@ -572,7 +633,9 @@ describe('Scraper — document persistence (Document Persistence to Disk)', () =
     site.scriptDiscover('A', [
       okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }]]])),
     ]);
-    site.scriptFetch('item-A', 'doc-1', [{ kind: 'permanentError', reason: 'notFound' }]);
+    site.scriptFetch('item-A', 'doc-1', [
+      { kind: 'permanentError', reason: 'notFound', detail: null },
+    ]);
 
     const documentSink = new MemoryDocumentSink();
     const { scraper, itemSink, failureLedger } = buildScraper({
@@ -586,6 +649,214 @@ describe('Scraper — document persistence (Document Persistence to Disk)', () =
     expect(documentSink.writes).toHaveLength(0);
     expect(itemSink.records).toHaveLength(1);
     expect(failureLedger.entries).toHaveLength(1);
+  });
+});
+
+describe('Scraper — saturation-driven subdivision (Saturation-Driven Subdivision)', () => {
+  it('calls split() on a saturated unit, enqueues its children, and records the parent as subdivided', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover(
+        [{ id: 'item-1' }, { id: 'item-2' }, { id: 'item-3' }, { id: 'item-4' }, { id: 'item-5' }],
+        new Map(),
+      ),
+    ]);
+    site.scriptDiscover('A-child-1', [okDiscover([{ id: 'item-6' }], new Map())]);
+    site.scriptDiscover('A-child-2', [okDiscover([{ id: 'item-7' }], new Map())]);
+
+    const traversal = new StubTraversal([unit('A')]);
+    traversal.scriptSplit('A', [unit('A-child-1'), unit('A-child-2')]);
+
+    const { scraper, itemSink, coverageSink } = buildScraper({ site, traversal });
+
+    await scraper.run(bounds);
+
+    expect(traversal.splitCalls).toHaveLength(1);
+    expect(traversal.splitCalls[0]?.unit.unitKey).toBe('A');
+    expect(traversal.splitCalls[0]?.saturated).toEqual({ resultCount: 5, cap: 5 });
+
+    // The parent's own discovered items are real items and are still written
+    // (saturation is a cell-bookkeeping concern, not an item-discarding one);
+    // the two children's items are written on top, proving they were actually
+    // enqueued and processed, not merely requested.
+    expect(itemSink.records.map((r) => r.itemId).sort()).toEqual([
+      'item-1',
+      'item-2',
+      'item-3',
+      'item-4',
+      'item-5',
+      'item-6',
+      'item-7',
+    ]);
+    const parentCoverage = coverageSink.records.find((r) => r.unitKey === 'A');
+    expect(parentCoverage).toMatchObject({ state: 'subdivided', resultCount: 5 });
+  });
+
+  it('records a truncated gap and enqueues nothing when split() returns null (regression: null-split path unchanged)', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover(
+        [{ id: 'item-1' }, { id: 'item-2' }, { id: 'item-3' }, { id: 'item-4' }, { id: 'item-5' }],
+        new Map(),
+      ),
+    ]);
+
+    const traversal = new StubTraversal([unit('A')]); // scriptSplit never called -> split() returns null
+
+    const { scraper, coverageSink } = buildScraper({ site, traversal });
+
+    await scraper.run(bounds);
+
+    expect(traversal.splitCalls).toHaveLength(1);
+    const parentCoverage = coverageSink.records.find((r) => r.unitKey === 'A');
+    expect(parentCoverage).toMatchObject({ state: 'truncated' });
+  });
+
+  it('bounds a lineage to the configured max split depth, recording truncated without calling split() again', async () => {
+    const site = new ScriptedSite();
+    const saturatedPage = () =>
+      okDiscover(
+        [{ id: 'item-1' }, { id: 'item-2' }, { id: 'item-3' }, { id: 'item-4' }, { id: 'item-5' }],
+        new Map(),
+      );
+    site.scriptDiscover('A', [saturatedPage()]);
+    site.scriptDiscover('A-child', [saturatedPage()]); // still saturated at depth 1
+
+    const traversal = new StubTraversal([unit('A')]);
+    traversal.scriptSplit('A', [unit('A-child')]);
+    // Deliberately NOT scripting a split for 'A-child' — if the engine called
+    // split() on it anyway, ScriptedTraversal would return null by default,
+    // which would mask the depth-bound bug. splitCalls.length is the real
+    // assertion below, not the child's resulting state alone.
+
+    const { scraper, coverageSink } = buildScraper({ site, traversal, maxSplitDepth: 1 });
+
+    await scraper.run(bounds);
+
+    // Only the parent (depth 0 < maxSplitDepth 1) was ever split.
+    expect(traversal.splitCalls).toHaveLength(1);
+    expect(traversal.splitCalls[0]?.unit.unitKey).toBe('A');
+    // SaturationInfo carries only resultCount/cap — depth is engine-owned
+    // state, never handed to the port.
+    expect(Object.keys(traversal.splitCalls[0]?.saturated ?? {}).sort()).toEqual([
+      'cap',
+      'resultCount',
+    ]);
+
+    const childCoverage = coverageSink.records.find((r) => r.unitKey === 'A-child');
+    expect(childCoverage).toMatchObject({ state: 'truncated' });
+
+    // The child WorkUnit that actually reached discover() carries exactly the
+    // adapter-declared WorkUnit shape — no depth field was ever attached to it.
+    const childDiscoverArg = site.discoveredUnits.find((u) => u.unitKey === 'A-child');
+    expect(childDiscoverArg).toBeDefined();
+    expect(Object.keys(childDiscoverArg ?? {}).sort()).toEqual([
+      'cursor',
+      'facetValue',
+      'label',
+      'unitKey',
+      'windowKey',
+    ]);
+  });
+
+  it('resumes a subdivided checkpoint by re-splitting it directly, never re-discovering, skipping already-complete children', async () => {
+    const site = new ScriptedSite();
+    // 'A' (the subdivided parent) is deliberately NOT scripted for discover —
+    // if the engine re-discovered it, ScriptedSite would throw.
+    site.scriptDiscover('A-child-2', [okDiscover([{ id: 'item-2' }], new Map())]);
+
+    const traversal = new StubTraversal([unit('A')]); // seed() returns the same top-level unit as the original run
+    traversal.scriptSplit('A', [unit('A-child-1'), unit('A-child-2')]);
+
+    const checkpointStore = new MemoryCheckpointStore();
+    checkpointStore.records.push({
+      unitKey: 'A',
+      windowKey: '2026-01-01',
+      facetValue: null,
+      label: 'A',
+      cursor: { day: '2026-01-01' },
+      state: 'subdivided',
+      observedAt: '2026-01-01T00:00:00.000Z',
+    });
+    checkpointStore.records.push({
+      unitKey: 'A-child-1',
+      windowKey: '2026-01-01',
+      facetValue: null,
+      label: 'A-child-1',
+      cursor: { day: '2026-01-01' },
+      state: 'complete',
+      observedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const { scraper, itemSink } = buildScraper({ site, traversal, checkpointStore });
+
+    await scraper.run(bounds);
+
+    // Only A-child-2 was ever discovered: A was reconstructed and re-split
+    // directly, never re-discovered; A-child-1 was skipped as already complete.
+    expect(site.discoverCalls).toBe(1);
+    expect(traversal.splitCalls).toHaveLength(1);
+    expect(traversal.splitCalls[0]?.unit.unitKey).toBe('A');
+    expect(itemSink.records.map((r) => r.itemId)).toEqual(['item-2']);
+  });
+
+  it('never treats a null-cap site as saturated, regardless of result count', async () => {
+    const site = new ScriptedSite(null); // declares no result-page cap (design.md D11)
+    site.scriptDiscover('A', [
+      okDiscover(
+        [{ id: 'item-1' }, { id: 'item-2' }, { id: 'item-3' }, { id: 'item-4' }, { id: 'item-5' }],
+        new Map(),
+      ),
+    ]);
+
+    const traversal = new StubTraversal([unit('A')]);
+    const { scraper, coverageSink } = buildScraper({ site, traversal });
+
+    await scraper.run(bounds);
+
+    expect(traversal.splitCalls).toHaveLength(0); // never asked to subdivide
+    const record = coverageSink.records.find((r) => r.unitKey === 'A');
+    expect(record).toMatchObject({ state: 'complete', saturated: false, declaredCap: null });
+  });
+});
+
+describe('Scraper — site-agnostic failure vocabulary (Site-Agnostic Failure Vocabulary)', () => {
+  it("ledgers just the reason when a permanentError's detail is null", async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }]]])),
+    ]);
+    site.scriptFetch('item-A', 'doc-1', [
+      { kind: 'permanentError', reason: 'notFound', detail: null },
+    ]);
+
+    const { scraper, failureLedger } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+    });
+
+    await scraper.run(bounds);
+
+    expect(failureLedger.entries[0]?.reason).toBe('notFound');
+  });
+
+  it('ledgers reason:detail when a permanentError carries adapter-owned detail — same convention as transient:${status}', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }]]])),
+    ]);
+    site.scriptFetch('item-A', 'doc-1', [
+      { kind: 'permanentError', reason: 'invalidReference', detail: 'invalidTokenShell' },
+    ]);
+
+    const { scraper, failureLedger } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+    });
+
+    await scraper.run(bounds);
+
+    expect(failureLedger.entries[0]?.reason).toBe('invalidReference:invalidTokenShell');
   });
 });
 

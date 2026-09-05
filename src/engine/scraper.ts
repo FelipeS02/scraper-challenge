@@ -39,6 +39,13 @@ export interface ScraperConfig<TItem, TDoc, TCursor> {
   readonly logger: Logger;
   readonly runId: string;
   readonly schemaVersion: number;
+  /**
+   * Bounds how many times a single work-unit lineage may be subdivided.
+   * Exceeding it is treated exactly as a `null` result from `split()` — a
+   * misbehaving port whose children never shrink the work cannot loop
+   * forever (core-scraping-engine, "Saturation-Driven Subdivision").
+   */
+  readonly maxSplitDepth: number;
 }
 
 type RetryOutcome<T> =
@@ -54,7 +61,10 @@ function describeOutcome(outcome: FetchOutcome<unknown>): string {
     case 'hostDefect':
       return outcome.reason;
     case 'permanentError':
-      return outcome.reason;
+      // Same convention `transient:${status}` already uses: the site-agnostic
+      // reason crosses the seam alone; adapter-owned detail rides beside it,
+      // still visible to an operator reading failures.jsonl (design.md D12).
+      return outcome.detail === null ? outcome.reason : `${outcome.reason}:${outcome.detail}`;
     case 'ok':
       return 'ok';
   }
@@ -62,6 +72,13 @@ function describeOutcome(outcome: FetchOutcome<unknown>): string {
 
 export class Scraper<TItem, TDoc, TCursor> {
   private readonly seenItemIds = new Set<string>();
+  /**
+   * Engine-owned split-depth bookkeeping, keyed by `unitKey` — never a field
+   * on the adapter-generated `WorkUnit`, because the engine must not make an
+   * adapter maintain the engine's own loop-safety state (design.md
+   * Partitioning). A unit absent from this map is at depth 0 (seeded).
+   */
+  private readonly splitDepth = new Map<string, number>();
 
   constructor(private readonly config: ScraperConfig<TItem, TDoc, TCursor>) {}
 
@@ -81,11 +98,42 @@ export class Scraper<TItem, TDoc, TCursor> {
 
   async run(bounds: RunBounds): Promise<void> {
     const checkpoints = await this.config.checkpointStore.load();
-    const seeded = await this.config.traversal.seed(bounds);
-    const queue: WorkUnit<TCursor>[] = seeded.filter((candidate) => {
-      const checkpoint = checkpoints.get(candidate.unitKey);
+    const isPending = (unitKey: string): boolean => {
+      const checkpoint = checkpoints.get(unitKey);
       return !checkpoint || checkpoint.state === 'failed';
-    });
+    };
+
+    const seeded = await this.config.traversal.seed(bounds);
+    const queue: WorkUnit<TCursor>[] = seeded.filter((candidate) => isPending(candidate.unitKey));
+
+    // Resume: a `subdivided` checkpoint's persisted WorkUnit is reconstructed
+    // and passed straight to split() — never to discover() again (design.md
+    // D10, "Resume"). Re-issuing the parent's discover would return the same
+    // capped set it already recorded, a wasted request that teaches the
+    // engine nothing; skipping the parent outright would instead strand
+    // every child a kill interrupted, since children exist only in the
+    // in-memory queue.
+    for (const checkpoint of checkpoints.values()) {
+      if (checkpoint.state !== 'subdivided') continue;
+      const reconstructed: WorkUnit<TCursor> = {
+        unitKey: checkpoint.unitKey,
+        windowKey: checkpoint.windowKey,
+        facetValue: checkpoint.facetValue,
+        label: checkpoint.label,
+        cursor: checkpoint.cursor as TCursor,
+      };
+      const cap = this.config.site.resultPageCap;
+      const children = await this.config.traversal.split(reconstructed, {
+        resultCount: cap ?? 0,
+        cap,
+      });
+      if (!children) continue;
+      for (const child of children) {
+        if (!isPending(child.unitKey)) continue;
+        this.splitDepth.set(child.unitKey, 1);
+        queue.push(child);
+      }
+    }
 
     const workerSlots = Math.max(1, Math.min(this.config.pool.concurrency, queue.length));
     await this.config.pool.run(
@@ -94,7 +142,7 @@ export class Scraper<TItem, TDoc, TCursor> {
         for (;;) {
           const unit = queue.shift();
           if (!unit) return;
-          const requeue = await this.processUnit(unit);
+          const requeue = await this.processUnit(unit, queue);
           if (requeue) queue.push(unit);
         }
       },
@@ -145,7 +193,7 @@ export class Scraper<TItem, TDoc, TCursor> {
   }
 
   /** Returns `true` when the unit must be requeued (429 cooldown owns the wait). */
-  private async processUnit(unit: WorkUnit<TCursor>): Promise<boolean> {
+  private async processUnit(unit: WorkUnit<TCursor>, queue: WorkUnit<TCursor>[]): Promise<boolean> {
     this.emit('info', 'unit.started', { unitKey: unit.unitKey, windowKey: unit.windowKey });
 
     const discoverResult = await this.runWithRetry(() => this.config.site.discover(unit));
@@ -213,13 +261,30 @@ export class Scraper<TItem, TDoc, TCursor> {
     }
 
     const cap = this.config.site.resultPageCap;
-    const state = classifyCellState(discoverResult.value.count, cap);
-    if (state === 'truncated') {
-      this.emit('warn', 'unit.saturated', {
-        unitKey: unit.unitKey,
-        resultCount: discoverResult.value.count,
-        cap,
-      });
+    const resultCount = discoverResult.value.count;
+    let state: 'complete' | 'truncated' | 'subdivided' = classifyCellState(resultCount, cap);
+
+    if (state === 'truncated' && cap !== null) {
+      // classifyCellState only returns 'truncated' when a cap is declared, so
+      // this cell is genuinely saturated — never true for a null-cap adapter
+      // (core-coverage-accounting, "Site with no declared cap never saturates").
+      this.emit('warn', 'unit.saturated', { unitKey: unit.unitKey, resultCount, cap });
+
+      const depth = this.splitDepth.get(unit.unitKey) ?? 0;
+      if (depth < this.config.maxSplitDepth) {
+        const children = await this.config.traversal.split(unit, { resultCount, cap });
+        if (children !== null) {
+          state = 'subdivided';
+          for (const child of children) {
+            this.splitDepth.set(child.unitKey, depth + 1);
+            queue.push(child);
+          }
+        }
+        // else: split() reports it cannot subdivide further -> stays
+        // 'truncated', the explicit fallback (never the only path).
+      }
+      // else: max split depth already reached -> treated exactly as a `null`
+      // split result, without calling split() again for this lineage.
     }
 
     await this.config.coverageSink.write(
@@ -228,6 +293,8 @@ export class Scraper<TItem, TDoc, TCursor> {
     await this.config.checkpointStore.put({
       unitKey: unit.unitKey,
       windowKey: unit.windowKey,
+      facetValue: unit.facetValue,
+      label: unit.label,
       cursor: unit.cursor,
       state,
       observedAt: this.config.clock.now().toISOString(),
@@ -287,7 +354,7 @@ export class Scraper<TItem, TDoc, TCursor> {
   private buildCoverageRecord(
     unit: WorkUnit<TCursor>,
     result: DiscoverResult<TItem, TDoc>,
-    state: 'complete' | 'truncated',
+    state: 'complete' | 'truncated' | 'subdivided',
   ): CoverageRecord {
     const itemIds = result.items.map((item) => this.config.site.itemId(item));
     const cap = this.config.site.resultPageCap;
@@ -301,7 +368,10 @@ export class Scraper<TItem, TDoc, TCursor> {
       state,
       resultCount: result.count,
       declaredCap: cap,
-      saturated: result.count >= cap,
+      // A site with no declared cap never saturates (design.md D11) — this
+      // guard, not a bare `>=` comparison, is what keeps `null` from being
+      // silently coerced into "every count saturates" by JS's `>=` operator.
+      saturated: cap !== null && result.count >= cap,
       itemSetHash: computeSetHash(itemIds),
       observedAt: this.config.clock.now().toISOString(),
       failureReason: null,

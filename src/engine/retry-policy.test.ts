@@ -65,7 +65,11 @@ describe('decide — hostDefect outcome', () => {
 
 describe('decide — permanentError outcome', () => {
   it('never retries', () => {
-    const outcome: FetchOutcome<never> = { kind: 'permanentError', reason: 'notFound' };
+    const outcome: FetchOutcome<never> = {
+      kind: 'permanentError',
+      reason: 'notFound',
+      detail: null,
+    };
 
     expect(decide(outcome, 1, config)).toEqual({ action: 'recordAndStop' });
   });
