@@ -1,6 +1,32 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <html>
 <body id="resultadoPanel">
-<!-- synthetic fixture: zero rows; result-row extraction lands in S4 -->
+<!--
+  Synthetic fixture: real markup shape (redacted), no personal data and no
+  real process number/ca token -- see __fixtures__/README.md's checklist.
+  Each row mirrors docs/RESEARCH.md Step 3's real onclick pattern; the
+  visible anchor text is the process number, the onclick carries the
+  opaque per-process `ca` token.
+-->
+<table id="fPP:resultadoTable">
+  <tbody>
+    <tr>
+      <td>
+        <a class="processo-linha" onclick="openPopUp('Consulta publica', '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000001')">0000001-11.2024.4.05.8000</a>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <a class="processo-linha" onclick="openPopUp('Consulta publica', '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000002')">0000002-22.2024.4.05.8000</a>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <a class="processo-linha" onclick="openPopUp('Consulta publica', '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000003')">0000003-33.2024.4.05.8000</a>
+      </td>
+    </tr>
+  </tbody>
+</table>
+<div id="rodape">3 resultados encontrados</div>
 </body>
 </html>
