@@ -12,7 +12,7 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
 | Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d ~770, S5e ~390, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below |
-| 800-line budget risk | High for S5d specifically: its ~770 bottom-up estimate is 96% of the budget, and on this change every estimate has behaved as a floor. S5c landed at 1084 as an accepted `size:exception`; S5b stopped itself at 775 rather than repeat that |
+| 800-line budget risk | High for S5d specifically: its ~770 bottom-up estimate is 96% of the budget, and on this change every estimate has behaved as a floor. **`size:exception` granted for S5d on 2026-09-05**, joining S1, S3 and S5c. S5b stopped itself at 775 rather than overrun |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S5d -> S5e -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; S5b hard-gates S5d; S5d hard-gates S5e; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
@@ -159,13 +159,16 @@ testable without S5e existing, and S5e is wiring rather than logic.
 
 **Residual risk, stated rather than shaved:** S5d's ~770 is 96% of budget. If the redacted
 result fixture or the `discover()` validity-chain paths cost more than estimated, S5d will
-cross 800 the way S5b did. Two exits, and this is an owner decision before launch:
-(a) accept a `size:exception` for S5d up front, as S1, S3 and S5c each received, or (b) cut
-S5d further into `result-fragment.ts` + fixture (~350, self-contained parser work) and
-`TRF5Site` + ports guard (~420). Option (b) keeps both halves in budget but produces a first
-PR that adds a parser nothing calls yet — the exact shape the S5c review found unhelpful.
-Absent an explicit decision, S5d launches whole with the same mid-slice stop rule S5b used:
-stop and report at the budget line rather than push through.
+cross 800 the way S5b did.
+
+**Owner decision (2026-09-05): `size:exception` granted; S5d ships whole.** The alternative
+offered and declined was cutting S5d again into `result-fragment.ts` + fixture (~350) and
+`TRF5Site` + ports guard (~420); it keeps both halves in budget but makes the first PR a
+parser nothing calls yet — the shape the S5c review already found unhelpful. S5d therefore
+joins S1, S3 and S5c as an accepted `size:exception`, and does **not** carry S5b's mid-slice
+stop rule: it runs to completion. Reviewers should expect a PR at or above 800 lines and can
+treat the parser, the `SitePort` composition, and the ports audit as three separable review
+passes even though they land together.
 
 ### Suggested Work Units
 
@@ -722,10 +725,11 @@ already a complete, independently testable, in-budget deliverable on its own).
 Demonstrates: a real `SitePort` implementation, proven against redacted fixtures and the stub
 transport, closing the three-module gap S5b's apply discovered. No network, no CLI.
 
-Read the "S5d/S5e forecast (decide before launch)" section before starting: this estimate is
-96% of the 800-line budget and every estimate on this change has behaved as a floor. Apply the
-same mid-slice stop rule S5b used — stop and report at the budget line rather than push
-through — unless the owner has granted a `size:exception` up front.
+**`size:exception` granted by the owner on 2026-09-05: S5d ships whole.** The ~770 estimate is
+96% of the 800-line budget and every estimate on this change has behaved as a floor, so expect
+this slice to land above budget. It does not carry S5b's mid-slice stop rule — run it to
+completion. See the "S5d/S5e forecast (decide before launch)" section for the reasoning and
+the declined alternative.
 
 - [ ] 8.1 RED `adapters/trf5/parsing/result-fragment.test.ts`: a redacted multi-row search fragment yields one row per result with its process number and opaque `ca` token, in document order; a zero-row fragment yields an empty list rather than throwing; the observed row count is reported so the engine can compare it against `resultPageCap`.
 - [ ] 8.2 GREEN add the redacted multi-row fixture (real structure, no personal data — follow the S3/S4a fixture redaction convention) and replace the zero-row `search-ok.xml` stub whose comment deferred row extraction to S4.
