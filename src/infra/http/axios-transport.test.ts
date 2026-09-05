@@ -127,4 +127,31 @@ describe('AxiosTransport — HttpTransport over axios, never the live TRF5 host'
     const response = await isolated.send({ method: 'GET', url: `${baseUrl}/needs-cookie` });
     expect(new TextDecoder().decode(response.body)).toBe('');
   });
+
+  /**
+   * The site emits site-relative URLs in two places the adapter forwards verbatim:
+   * the `fPP` form action harvested by `session.ts`, and the `Location` header of
+   * the document 302 that `documents.ts` re-sends. Resolving them is a generic HTTP
+   * concern, so it belongs here alongside the timeout and cookie jar — the base
+   * VALUE carries the site knowledge and the composition root supplies it.
+   *
+   * `StubTransport` replays fixtures without parsing the URL, so the entire stubbed
+   * suite passed while the first live POST threw `TypeError: Invalid URL`.
+   */
+  it('resolves a site-relative URL against the configured base', async () => {
+    const transport = new AxiosTransport({ baseUrl });
+
+    const response = await transport.send({ method: 'POST', url: '/echo', body: 'ok' });
+
+    expect(response.status).toBe(200);
+    expect(new TextDecoder().decode(response.body)).toBe('ok');
+  });
+
+  it('leaves an absolute URL untouched even when a base is configured', async () => {
+    const transport = new AxiosTransport({ baseUrl: 'http://127.0.0.1:1/unused' });
+
+    const response = await transport.send({ method: 'GET', url: `${baseUrl}/echo` });
+
+    expect(response.status).toBe(200);
+  });
 });

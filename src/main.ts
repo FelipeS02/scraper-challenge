@@ -150,7 +150,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   }
 
   await runScraper(args, {
-    transport: new AxiosTransport(),
+    // The composition root is the one place that knows both the site and the
+    // transport, so it supplies the origin the site's relative URLs resolve
+    // against — the `fPP` form action and the document 302's `Location`.
+    transport: new AxiosTransport({ baseUrl: new URL(PRIMING_URL).origin }),
     clock: new SystemClock(),
     outputDir: 'output',
     logsDir: 'logs',

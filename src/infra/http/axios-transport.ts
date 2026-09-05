@@ -25,6 +25,15 @@ export interface AxiosTransportConfig {
   readonly timeoutMs?: number;
   /** Defaults to a fresh, private jar — a new instance never shares cookies with another. */
   readonly jar?: CookieJar;
+  /**
+   * Origin a site-relative request URL resolves against; absolute URLs ignore it.
+   * The site emits relative URLs the adapter forwards verbatim — the `fPP` form
+   * action and the document 302's `Location` header — and resolving them is a
+   * generic HTTP concern, the same category as the timeout and the cookie jar.
+   * The site knowledge is in the VALUE, supplied by the composition root, so this
+   * transport still knows nothing about TRF5 (design.md D1).
+   */
+  readonly baseUrl?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -60,6 +69,8 @@ export class AxiosTransport implements HttpTransport {
       maxRedirects: 0,
       responseType: 'arraybuffer',
       validateStatus: () => true,
+      // exactOptionalPropertyTypes forbids an explicit `baseURL: undefined`.
+      ...(config.baseUrl === undefined ? {} : { baseURL: config.baseUrl }),
     });
     (wrapper as CookieJarWrapper)(instance);
     (instance as unknown as JarCapable).defaults.jar = config.jar ?? new CookieJar();
