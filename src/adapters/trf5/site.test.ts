@@ -50,20 +50,36 @@ function pdfResponse(): HttpResponse {
   };
 }
 
-/** Builds a synthetic search-response fragment with `rows` distinct process rows. */
+/**
+ * Builds a search-response fragment with `rows` distinct process rows, in the
+ * shape a captured response actually has (see `__fixtures__/search-ok.xml`):
+ * `tr.rich-table-row`, the same `ca` repeated across two `openPopUp(...)`
+ * handlers, and the process number inside `<b class="btn-block">` between a class
+ * abbreviation and the subject. The earlier version of this helper generated
+ * `a.processo-linha` inside a bare table — markup that exists nowhere on the real
+ * portal — so these tests passed against a parser that harvested nothing live.
+ */
 function searchFragment(rows: number): HttpResponse {
   const anchors = Array.from({ length: rows }, (_, i) => {
     const seq = String(i + 1).padStart(7, '0');
     const ca = `stubca${String(i + 1).padStart(4, '0')}`;
+    const popup =
+      `openPopUp('Consulta publica', ` +
+      `'/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=${ca}')`;
     return (
-      `<tr><td><a class="processo-linha" onclick="openPopUp('Consulta publica', ` +
-      `'/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=${ca}')">` +
-      `${seq}-00.2026.4.05.8300</a></td></tr>`
+      `<tr class="rich-table-row">` +
+      `<td class="rich-table-cell"><a title="Ver Detalhes" onclick="${popup}"></a></td>` +
+      `<td class="rich-table-cell">APELACAO <a onclick="${popup}">` +
+      `<b class="btn-block">Ap ${seq}-00.2026.4.05.8300 - Assunto Sintetico</b></a>` +
+      ` PARTE UM X PARTE DOIS</td>` +
+      `<td class="rich-table-cell">Juntada de Peticao (14/05/2026 14:20:07)</td>` +
+      `</tr>`
     );
   }).join('\n');
   const xml =
     '<?xml version="1.0" encoding="ISO-8859-1"?>\n' +
-    `<html><body id="resultadoPanel"><table><tbody>${anchors}</tbody></table></body></html>`;
+    `<html><body><div id="fPP:processosGridPanel"><table class="rich-table">` +
+    `<tbody id="fPP:processosTable:tb">${anchors}</tbody></table></div></body></html>`;
   return {
     status: 200,
     headers: { 'content-type': 'text/xml' },

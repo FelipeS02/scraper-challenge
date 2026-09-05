@@ -1,32 +1,27 @@
-<?xml version="1.0" encoding="ISO-8859-1"?>
-<html>
-<body id="resultadoPanel">
+<?xml version="1.0"?>
 <!--
-  Synthetic fixture: real markup shape (redacted), no personal data and no
-  real process number/ca token -- see __fixtures__/README.md's checklist.
-  Each row mirrors docs/RESEARCH.md Step 3's real onclick pattern; the
-  visible anchor text is the process number, the onclick carries the
-  opaque per-process `ca` token.
+  Redacted CAPTURE of a real AJAX search response (36646 bytes, 30 rows, taken
+  2026-09-05 for dataAutuacao 10/03/2026), reduced to three rows. Process
+  numbers, party names, subjects and `ca` tokens are synthetic; the MARKUP is
+  the site's, verbatim in shape.
+
+  The fixture this replaced was invented end to end: `<body id="resultadoPanel">`,
+  `<table id="fPP:resultadoTable">`, `<a class="processo-linha">` and
+  `<div id="rodape">` appear nowhere on the real portal, and the parser written
+  against them harvested zero rows from every real response while the suite
+  stayed green.
+
+  Real structure, as captured:
+    - the a4j envelope updates `fPP:processosGridPanel`
+    - rows are `tr.rich-table-row` inside `tbody[id$=":tb"]`
+    - the `ca` token appears TWICE per row, in two `openPopUp(...)` onclick
+      handlers (the detail icon and the process link) — same value both times
+    - the process number sits inside `<b class="btn-block">`, prefixed by a class
+      abbreviation and followed by " - <subject>"
+    - the footer reports the total as "<n> resultados encontrados"
+    - when the 30-row cap is hit the panel also renders an `alert alert-danger`
+      banner saying so, which this fixture keeps for the saturated case
+
+  Do not reformat this file — see .prettierignore.
 -->
-<table id="fPP:resultadoTable">
-  <tbody>
-    <tr>
-      <td>
-        <a class="processo-linha" onclick="openPopUp('Consulta publica', '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000001')">0000001-11.2024.4.05.8000</a>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <a class="processo-linha" onclick="openPopUp('Consulta publica', '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000002')">0000002-22.2024.4.05.8000</a>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <a class="processo-linha" onclick="openPopUp('Consulta publica', '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000003')">0000003-33.2024.4.05.8000</a>
-      </td>
-    </tr>
-  </tbody>
-</table>
-<div id="rodape">3 resultados encontrados</div>
-</body>
-</html>
+<html lang="pt_BR" xmlns="http://www.w3.org/1999/xhtml"><head><title></title></head><body><div class="rich-panel col-sm-9" id="fPP:processosGridPanel"><div class="rich-panel-body panel" id="fPP:processosGridPanel_body"><dl id="fPP:j_id248" class="rich-messages" style="display: none;"><dt></dt></dl><table class="rich-table" id="fPP:processosTable"><thead class="rich-table-thead"><tr class="rich-table-subheader"><th class="rich-table-subheadercell"></th><th class="rich-table-subheadercell">Processo</th><th class="rich-table-subheadercell">&#218;ltima movimenta&#231;&#227;o</th></tr></thead><tfoot><tr class="rich-table-footer"><td class="rich-table-footercell" colspan="3" scope="colgroup"><div id="fPP:processosTable:j_id249" class="col-sm-12"><div class="pull-left" title="Pagina&#231;&#227;o"></div><div class="pull-right"><span class="text-muted">3 resultados encontrados</span></div></div></td></tr></tfoot><tbody id="fPP:processosTable:tb"><tr class="rich-table-row rich-table-firstrow"><td class="rich-table-cell" id="fPP:processosTable:10001:j_id255"><a href="javascript:void();" title="Ver Detalhes" class="btn btn-default btn-sm" onclick="openPopUp('Consulta p&#250;blica','/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000001')"><i class="fa fa-external-link"></i> <span class="sr-only">Ver detalhes do processo</span></a></td><td class="rich-table-cell" id="fPP:processosTable:10001:j_id257">APELA&#199;&#195;O / REMESSA NECESS&#193;RIA <a href="javascript:void();" onclick="openPopUp('Consulta p&#250;blica','/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000001')"><b class="btn-block">ApelRemNec 0000001-11.2024.4.05.8000 - Assunto Sintetico Um</b></a> PARTE SINTETICA UM X PARTE SINTETICA DOIS</td><td class="rich-table-cell" id="fPP:processosTable:10001:j_id263">Juntada de Peti&#231;&#227;o de peti&#231;&#227;o (outras) (14/05/2026 14:20:07)</td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="fPP:processosTable:10002:j_id255"><a href="javascript:void();" title="Ver Detalhes" class="btn btn-default btn-sm" onclick="openPopUp('Consulta p&#250;blica','/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000002')"><i class="fa fa-external-link"></i> <span class="sr-only">Ver detalhes do processo</span></a></td><td class="rich-table-cell" id="fPP:processosTable:10002:j_id257">RECURSO INOMINADO C&#205;VEL <a href="javascript:void();" onclick="openPopUp('Consulta p&#250;blica','/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000002')"><b class="btn-block">RecInoCiv 0000002-22.2024.4.05.8000 - Assunto Sintetico Dois</b></a> PARTE SINTETICA TRES X PARTE SINTETICA QUATRO</td><td class="rich-table-cell" id="fPP:processosTable:10002:j_id263">Conclusos para julgamento (02/06/2026 09:11:44)</td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="fPP:processosTable:10003:j_id255"><a href="javascript:void();" title="Ver Detalhes" class="btn btn-default btn-sm" onclick="openPopUp('Consulta p&#250;blica','/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000003')"><i class="fa fa-external-link"></i> <span class="sr-only">Ver detalhes do processo</span></a></td><td class="rich-table-cell" id="fPP:processosTable:10003:j_id257">AGRAVO DE INSTRUMENTO <a href="javascript:void();" onclick="openPopUp('Consulta p&#250;blica','/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=stubca0000000000000000000000000000000003')"><b class="btn-block">AG 0000003-33.2024.4.05.8000 - Assunto Sintetico Tres</b></a> PARTE SINTETICA CINCO X PARTE SINTETICA SEIS</td><td class="rich-table-cell" id="fPP:processosTable:10003:j_id263">Remetidos os autos para a Turma (20/06/2026 16:02:10)</td></tr></tbody></table></div></div><meta name="Ajax-Update-Ids" content="fPP:processosGridPanel" /><span id="ajax-view-state"><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id1" autocomplete="off" /></span><meta id="Ajax-Response" name="Ajax-Response" content="true" /></body></html>
