@@ -7,15 +7,21 @@ import type { CoverageRecord, LedgerEntry } from './ports.js';
  * into memory is the infra stores' job (`infra/storage/jsonl-*.ts`).
  */
 
-/** Saturation and cell state are judged against the adapter-declared cap only. */
+/**
+ * Saturation and cell state are judged against the adapter-declared cap only.
+ * `declaredCap === null` means the adapter declares no result-page cap at all
+ * (design.md D11) — such a cell never saturates and is always `complete`.
+ */
 export function classifyCellState(
   resultCount: number,
-  declaredCap: number,
+  declaredCap: number | null,
 ): 'complete' | 'truncated' {
+  if (declaredCap === null) return 'complete';
   return resultCount < declaredCap ? 'complete' : 'truncated';
 }
 
-export function isSaturated(resultCount: number, declaredCap: number): boolean {
+export function isSaturated(resultCount: number, declaredCap: number | null): boolean {
+  if (declaredCap === null) return false;
   return resultCount >= declaredCap;
 }
 
@@ -50,9 +56,14 @@ export function summarizeRunCoverage(records: readonly CoverageRecord[]): RunSum
   let truncated = 0;
   let failed = 0;
   for (const record of latestByUnit.values()) {
+    // `subdivided` is not a coverage gap and not a terminal state of its own —
+    // its real coverage is carried forward by its own children's records, so
+    // it contributes to none of the three tallies (core-coverage-accounting,
+    // "Run Summary Arithmetic"). Branching explicitly, rather than a
+    // catch-all `else failed += 1`, is what stops it being miscounted.
     if (record.state === 'complete') complete += 1;
     else if (record.state === 'truncated') truncated += 1;
-    else failed += 1;
+    else if (record.state === 'failed') failed += 1;
   }
   return { complete, truncated, failed };
 }
@@ -77,7 +88,16 @@ export function verifyPartitionInvariant(
 
   const results: PartitionInvariantResult[] = [];
   for (const [windowKey, group] of byWindow) {
-    const unfiltered = group.find((record) => record.facetValue === null);
+    // Latest-by-observedAt wins — the same rule summarizeRunCoverage already
+    // applies — never the first array match. A stale earlier observation
+    // (e.g. an interrupted first attempt later re-observed as `subdivided`
+    // after saturation) must never shadow the current persisted parent.
+    const unfiltered = group
+      .filter((record) => record.facetValue === null)
+      .reduce<CoverageRecord | undefined>(
+        (latest, record) => (!latest || record.observedAt >= latest.observedAt ? record : latest),
+        undefined,
+      );
     const facetRecords = group.filter((record) => record.facetValue !== null);
     if (!unfiltered || facetRecords.length === 0) continue;
 

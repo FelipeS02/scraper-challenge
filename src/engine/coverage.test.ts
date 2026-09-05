@@ -3,6 +3,7 @@ import type { CoverageRecord, LedgerEntry } from './ports.js';
 import {
   classifyCellState,
   computeSetHash,
+  isSaturated,
   pendingDocumentFailures,
   summarizeRunCoverage,
   verifyPartitionInvariant,
@@ -43,6 +44,24 @@ describe('classifyCellState', () => {
     expect(classifyCellState(5, 5)).toBe('truncated');
     expect(classifyCellState(5, 30)).toBe('complete');
   });
+
+  it('never classifies a cell as truncated when the adapter declares no cap (null)', () => {
+    expect(classifyCellState(0, null)).toBe('complete');
+    expect(classifyCellState(30, null)).toBe('complete');
+    expect(classifyCellState(1_000_000, null)).toBe('complete');
+  });
+});
+
+describe('isSaturated', () => {
+  it('is true at or above the adapter-declared cap', () => {
+    expect(isSaturated(30, 30)).toBe(true);
+    expect(isSaturated(29, 30)).toBe(false);
+  });
+
+  it('is always false when the adapter declares no cap (null)', () => {
+    expect(isSaturated(0, null)).toBe(false);
+    expect(isSaturated(1_000_000, null)).toBe(false);
+  });
 });
 
 describe('computeSetHash', () => {
@@ -75,6 +94,16 @@ describe('summarizeRunCoverage', () => {
     ];
 
     expect(summarizeRunCoverage(records)).toEqual({ complete: 100, truncated: 5, failed: 2 });
+  });
+
+  it('excludes a subdivided parent from all three tallies, counting only its children', () => {
+    const records: CoverageRecord[] = [
+      coverageRecord({ unitKey: 'parent', state: 'subdivided', resultCount: 30 }),
+      coverageRecord({ unitKey: 'child-1', state: 'complete' }),
+      coverageRecord({ unitKey: 'child-2', state: 'truncated' }),
+    ];
+
+    expect(summarizeRunCoverage(records)).toEqual({ complete: 1, truncated: 1, failed: 0 });
   });
 
   it('does not treat an earlier complete observation as invalidated by a later re-check', () => {
@@ -123,6 +152,35 @@ describe('verifyPartitionInvariant', () => {
 
     expect(results).toEqual([
       { windowKey: '2026-01-02', unfilteredCount: 30, facetSum: 10, holds: false },
+    ]);
+  });
+
+  it('sources the unfiltered count from the LATEST facetValue-null record, never the first array match', () => {
+    // A stale earlier observation (e.g. an interrupted first attempt, later re-observed
+    // as `subdivided` after saturation) must never shadow the current persisted parent.
+    const records: CoverageRecord[] = [
+      coverageRecord({
+        windowKey: '2026-01-03',
+        facetValue: null,
+        resultCount: 12,
+        state: 'complete',
+        observedAt: '2026-01-03T00:00:00.000Z',
+      }),
+      coverageRecord({
+        windowKey: '2026-01-03',
+        facetValue: null,
+        resultCount: 30,
+        state: 'subdivided',
+        observedAt: '2026-01-03T01:00:00.000Z',
+      }),
+      coverageRecord({ windowKey: '2026-01-03', facetValue: 'A', resultCount: 20 }),
+      coverageRecord({ windowKey: '2026-01-03', facetValue: 'B', resultCount: 25 }),
+    ];
+
+    const results = verifyPartitionInvariant(records);
+
+    expect(results).toEqual([
+      { windowKey: '2026-01-03', unfilteredCount: 30, facetSum: 45, holds: true },
     ]);
   });
 });
