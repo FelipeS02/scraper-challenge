@@ -14,28 +14,70 @@ import { describe, expect, it } from 'vitest';
  * audit catches the other.
  *
  * Only interfaces with at least one method are ever the target of a class's
- * `implements` clause in this codebase (verified: every `implements X` match
- * in `src/` names one of the interfaces below) — pure-data port shapes
- * (`WorkUnit`, `HttpRequest`, `RunBounds`, `CheckpointRecord`, ...) are
- * constructed as object literals, never implemented by a class, so scanning
- * every `ports.ts` export for `implements` would produce false positives.
- * This list is therefore hand-maintained, exactly like `REQUIREMENT_MAP` in
- * the sibling audit, and is sanity-checked the same way below.
+ * `implements` clause in this codebase — pure-data port shapes (`HttpRequest`,
+ * `RunBounds`, `CheckpointRecord`, ...) are constructed as object literals,
+ * never implemented by a class, so auditing every `ports.ts` export would
+ * produce false positives.
+ *
+ * That distinction is DERIVED from `ports.ts` rather than hand-listed. S5d
+ * originally kept the 12 behavioral names in a literal here, mirroring
+ * `REQUIREMENT_MAP` in the sibling audit — which reproduced, one level down,
+ * the exact failure this audit exists to prevent: a hand-maintained list that
+ * silently omits what nobody remembered to add. A 13th port added to
+ * `ports.ts` now enters this audit with no edit to this file.
  */
-const BEHAVIORAL_PORTS = [
-  'HttpTransport',
-  'SitePort',
-  'DocumentSink',
-  'TraversalPort',
-  'FrontierCapable',
-  'CheckpointStore',
-  'FailureLedger',
-  'ItemSink',
-  'CoverageSink',
-  'AdapterStateStore',
-  'Clock',
-  'Logger',
-] as const;
+
+interface PortInterface {
+  readonly name: string;
+  readonly body: string;
+}
+
+/** Strips block and line comments so prose parentheses cannot look like a method. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
+const INTERFACE_HEADER = /export\s+interface\s+([A-Za-z0-9_]+)[^{]*\{/g;
+
+/** Every `export interface` in `source`, with its body delimited by brace matching. */
+function parseExportedInterfaces(source: string): readonly PortInterface[] {
+  const parsed: PortInterface[] = [];
+  for (const header of source.matchAll(INTERFACE_HEADER)) {
+    const name = header[1];
+    if (name === undefined || header.index === undefined) continue;
+    const bodyStart = header.index + header[0].length;
+    let depth = 1;
+    let cursor = bodyStart;
+    while (cursor < source.length && depth > 0) {
+      const char = source[cursor];
+      if (char === '{') depth += 1;
+      else if (char === '}') depth -= 1;
+      cursor += 1;
+    }
+    parsed.push({ name, body: source.slice(bodyStart, cursor - 1) });
+  }
+  return parsed;
+}
+
+/** A member written as `name(...)` — the only shape a class can `implements`. */
+const METHOD_MEMBER = /(?:^|[;{}\n])\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:<[^>]*>)?\s*\(/;
+
+function declaresMethod(port: PortInterface): boolean {
+  return METHOD_MEMBER.test(port.body);
+}
+
+function deriveBehavioralPorts(portsSource: string): readonly string[] {
+  return parseExportedInterfaces(stripComments(portsSource))
+    .filter(declaresMethod)
+    .map((port) => port.name);
+}
+
+// `new URL('..', import.meta.url)` always resolves to a directory URL (trailing
+// slash) since the base includes a filename component; strip it so `walkTsFiles`'s
+// `slice(root.length + 1)` cuts exactly the path separator, not the next character.
+const SRC_ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, ''); // .../src
+const portsFilePath = join(SRC_ROOT, 'engine', 'ports.ts');
+const behavioralPorts = deriveBehavioralPorts(readFileSync(portsFilePath, 'utf-8'));
 
 /**
  * Interfaces this repository has already decided to leave without a
@@ -102,13 +144,91 @@ function findPortsWithNoProductionImplementation(
   });
 }
 
+describe('behavioral-port derivation — the port list is read from ports.ts, never hand-listed', () => {
+  it('classifies an interface with a method as behavioral and a pure-data shape as not', () => {
+    const source = `
+      export interface DataOnly {
+        readonly url: string;
+        readonly headers?: Readonly<Record<string, string>> | undefined;
+      }
+      export interface HasMethod {
+        readonly label: string;
+        doThing(input: string): Promise<void>;
+      }
+    `;
+    const parsed = parseExportedInterfaces(stripComments(source));
+    expect(parsed.map((i) => i.name)).toEqual(['DataOnly', 'HasMethod']);
+    expect(parsed.filter(declaresMethod).map((i) => i.name)).toEqual(['HasMethod']);
+  });
+
+  it('is not fooled by parentheses inside comments, or by a multi-line method signature', () => {
+    const source = `
+      export interface CommentTrap {
+        /** persisted by the engine (design.md D10), never the adapter */
+        readonly state: 'complete' | 'failed';
+      }
+      export interface MultiLine {
+        split(
+          unit: string,
+          saturated: number,
+        ): Promise<readonly string[] | null>;
+      }
+    `;
+    const parsed = parseExportedInterfaces(stripComments(source));
+    expect(parsed.filter(declaresMethod).map((i) => i.name)).toEqual(['MultiLine']);
+  });
+
+  it('puts a newly added port on the radar with no list to edit — the point of deriving', () => {
+    const withNewPort = `${readFileSync(portsFilePath, 'utf-8')}
+      export interface NewlyAddedPort {
+        doSomething(): Promise<void>;
+      }
+    `;
+    expect(deriveBehavioralPorts(withNewPort)).toContain('NewlyAddedPort');
+  });
+
+  it('still recognises every port the hand-maintained list named, and no pure-data shape', () => {
+    // Asserted as containment in BOTH directions, never as exact equality: a
+    // 13th port added to `ports.ts` must NOT require an edit here, or this
+    // anchor would quietly become the hand-maintained list it replaced.
+    // Dropping a name still fails (first block); classifying a data shape as a
+    // port still fails (second block); so it cannot pass vacuously either way.
+    const KNOWN_BEHAVIORAL_AT_S5D = [
+      'AdapterStateStore',
+      'CheckpointStore',
+      'Clock',
+      'CoverageSink',
+      'DocumentSink',
+      'FailureLedger',
+      'FrontierCapable',
+      'HttpTransport',
+      'ItemSink',
+      'Logger',
+      'SitePort',
+      'TraversalPort',
+    ];
+    const KNOWN_DATA_SHAPES_AT_S5D = [
+      'CheckpointRecord',
+      'CoverageRecord',
+      'DiscoverResult',
+      'HttpRequest',
+      'HttpResponse',
+      'LedgerEntry',
+      'LogEvent',
+      'OutputRecord',
+      'RunBounds',
+      'SaturationInfo',
+      'Seed',
+      'StoredDocument',
+    ];
+    for (const port of KNOWN_BEHAVIORAL_AT_S5D) expect(behavioralPorts).toContain(port);
+    for (const shape of KNOWN_DATA_SHAPES_AT_S5D) expect(behavioralPorts).not.toContain(shape);
+  });
+});
+
 describe('engine/ports.ts implementation audit — every behavioral port has a real implementation', () => {
-  // `new URL('..', import.meta.url)` always resolves to a directory URL (trailing
-  // slash) since the base includes a filename component; strip it so `walkTsFiles`'s
-  // `slice(root.length + 1)` cuts exactly the path separator, not the next character.
-  const srcRoot = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]+$/, ''); // .../src
-  const files = walkTsFiles(srcRoot, srcRoot, []);
-  const implementations = findImplementations(srcRoot, files);
+  const files = walkTsFiles(SRC_ROOT, SRC_ROOT, []);
+  const implementations = findImplementations(SRC_ROOT, files);
 
   it('scanned a non-trivial file set and found real implements clauses (sanity: not silently empty)', () => {
     expect(files.length).toBeGreaterThan(30);
@@ -129,7 +249,7 @@ describe('engine/ports.ts implementation audit — every behavioral port has a r
   });
 
   it('finds a non-fixture, non-test implementation for every behavioral port except the disclosed, tracked gaps', () => {
-    const untraced = findPortsWithNoProductionImplementation(BEHAVIORAL_PORTS, implementations);
+    const untraced = findPortsWithNoProductionImplementation(behavioralPorts, implementations);
     expect([...untraced].sort()).toEqual([...KNOWN_DEFERRED_GAPS].sort());
   });
 });
