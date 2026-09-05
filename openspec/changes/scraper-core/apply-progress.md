@@ -18,7 +18,13 @@
 - **S5d (8.1–8.9): complete — 601 authored `src/` lines actual, within the 800 budget (the
   pre-granted `size:exception` went unused). Closes the `parsing/result-fragment.ts` +
   `TRF5Site` gap S5b's apply discovered. See "S5d" below.**
-- S5e: not started (`infra/http/axios-transport.ts`, `main.ts`, README, config confirmation).
+- S5e (9.1–9.6): complete — 557 authored `src/` lines actual, within the 800 budget. Real
+  `AxiosTransport` + `main.ts` composition root; `pnpm scrape --dry-run` smoke-tested. See
+  "S5e" below.
+- **S5f: complete — 515 authored `src/` lines actual, within the 800 budget. Rebuilt detail
+  parsing against captured live responses; found and fixed the `pdfs/` wiring gap; first
+  live acceptance run against the real portal passed with real payloads and a real PDF.
+  See "S5f" below.**
 - S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -2079,3 +2085,263 @@ adapter modules (real, functionally significant, explicitly not fixed here), and
 6/6 S5e tasks complete (9.1–9.6; 9.6's live-host half is owner-pending by design). `vitest run`:
 204/204 passing. `pnpm typecheck`: clean. `pnpm lint`: clean. `pnpm format:check`: clean.
 `pnpm scrape --dry-run` smoke-tested successfully. Ready for `sdd-verify`.
+
+## S5f — Detail parsing rebuilt against captured responses
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5e-transport-composition-root` (continued on the same branch
+per this apply run's launch instructions; no new branch created).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #14 in the chain, targeting the S5e
+branch. Not pushed and no PR opened by this apply run.
+**No `size:exception` needed**: estimated ~450 authored `src/` lines against the 800-line
+budget; landed at 515 (64% of budget, 14% over its own estimate — the smallest overrun this
+change has measured for a single-deliverable slice).
+**Why this slice exists**: S5e's first live run drove out four defects in modules every
+earlier slice had marked "complete" (S5e/S5d disclosures + this slice's own launch prompt).
+Three were fixed in commits `c3d17a5`, `436f337`, `135d2e6`. The fourth — detail-page parsing
+built against invented markup instead of a captured response — is what this slice rebuilds.
+**Live network required and used**: every fixture below is a redacted cut of a response
+captured by running the production adapter/transport code against the real host on
+2026-09-05, per this slice's standing rule. No fixture was written by hand.
+
+### Completed Tasks
+
+- [x] 5f.1 Captured and redacted `detail-page-valid.html` (real 101318-byte detail page, process
+      `0005643-82.2001.4.05.8000`, dataAutuacao 10/03/2026) and `detail-page-invalid-token.html`
+      (real 25524-byte invalid-`ca` shell). See "Capture method" below.
+- [x] 5f.2 RED `schemas/response-view.test.ts` (new file) — `hasDetailHeaderBlock`/
+      `hasPartiesBlock` asserted true against the captured page; false today.
+- [x] 5f.3 GREEN `idBlockPresent()` regex helper in `response-view.ts` — matches `id="(?:[^"]*:)?name"`,
+      never a hardcoded prefix.
+- [x] 5f.4 RED `parsing/detail-page.test.ts` (full rewrite) — header, parties, movements,
+      documents, all against the captured fixture with real (redacted) expected values.
+- [x] 5f.5 GREEN full rewrite of `parsing/detail-page.ts` — see "Production rewrite" below.
+- [x] 5f.6 Covered by `response-view.test.ts`'s second case (both blocks false on the captured
+      invalid-token shell) plus the existing `validity-chain.test.ts` `invalidTokenShell` case,
+      now running against the real capture instead of an invented one.
+- [x] 5f.7 `docs/RESEARCH.md` §9 (ten dated sub-sections) — full reconciliation, see below.
+- [x] 5f.8 Live acceptance run — passed. See "Live Acceptance Evidence" below.
+- [x] 5f.9 Recorded, not fixed. See "Saturation on real data" below and `docs/RESEARCH.md` §9.9.
+
+### Capture method
+
+Two throwaway `tsx` scripts in the scratchpad directory (never committed) imported the
+production `AxiosTransport`, `primeSession`, `search`, and `parseResultFragment` modules
+directly by absolute path, primed a session, searched `10/03/2026` (30 rows), took the first
+row's `ca`, and fetched its detail page — exactly the production `TRF5Site.discover()` path,
+reproduced request by request. A second capture built a detail URL with a corrupted 40-byte
+hex `ca` against the same primed session to get the real invalid-token shell. A third
+diagnostic script (5f.9) reproduced the exact request sequence a saturated-day run drives
+(prime → prime → search 30 rows → 30 detail fetches → classes-catalogue POST) to inspect what
+`split()`'s own class-catalogue fetch receives under a real, already-aged session — read-only,
+no production code touched by it.
+
+Redaction (`redact-detail.cjs`, scratchpad-only): targeted string replacement on the raw
+latin1-decoded byte string — the process number (2 occurrences), one CNPJ-identified active
+party's name+CNPJ, one passive party's name+CPF, one lawyer's name/OAB/CPF, and the four `ca`
+tokens on `documentoSemLoginHTML` links (4 occurrences) — verified afterward by grepping the
+redacted output for every original value (zero matches). Document ids/bin ids/hashes were kept
+verbatim, matching the S4b precedent that these are not personal data. All file I/O used
+`latin1` encoding explicitly (`Buffer.toString('latin1')`/`fs.writeFileSync(path, str, 'latin1')`)
+to round-trip the site's own ISO-8859-1 bytes exactly — a UTF-8 round-trip would have corrupted
+every accented character, which is exactly what broke the `detail-page-valid-no-documents.html`
+fixture the first time it was touched with the accented literal label text (see below).
+
+### Production rewrite (`parsing/detail-page.ts`)
+
+The real detail page differs from the invented S4a fixture in every dimension the file
+touches:
+
+| Old assumption (S4a, invented) | Real shape (captured 2026-09-05) |
+|---|---|
+| `<div id="processoTrfViewView">` container, `#numeroProcesso` etc. spans inside it | A `<form id="j_id146:processoTrfViewView">` that HTML parsing **silently drops as an element** (nested `<form>` is invalid HTML) — detection must be a text/regex test (5f.3), and extraction cannot scope to "inside the container" at all |
+| Fields are separately-id'd elements | Fields are `.propertyView` label→value blocks, keyed by the visible Portuguese label text; two fields share one blank-labeled block each, with the real sub-label carried by a `<b>` tag inside the value |
+| `#assuntoList`, a nested `<ul>` hierarchy | One flat string, levels joined by `" - "`; the site itself truncates the last segment with no closing `")"` on the observed process |
+| `<ul class="advogados"><li><span class="advogado-linha">` nested under a party `<li>` | A flat `tbody` of sibling `<tr>` rows; a lawyer row is the next sibling whose line `<span>` has `class=""` instead of a party row's `class="text-bold"` |
+| `#processoEventoPanel tr.evento`, separate date/description cells | `tr.rich-table-row` (no `.evento` class anywhere on the page), ONE cell holding `"dd/mm/yyyy hh:mm:ss - description"` |
+| `a.documento-linha` | Two unrelated shapes in the same grid: legacy `a[href*="idBin="]` (still fetched) and a newer `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...` HTML-viewer link with `href="#"` (not fetched — disclosed follow-up) |
+
+Two new helpers carry this: `extractPropertyFields` (label→value map) and
+`extractBoldLabeledFields` (walks each `<b>` element's raw domhandler `.next` sibling chain,
+not cheerio's `.nextUntil()` — the value text after a `<b>` is a bare text node, and
+`.nextUntil()` only ever returns element siblings, silently dropping it). `isTag` from
+`domhandler` replaces a raw `node.type === 'tag'` string comparison ESLint's
+`no-unsafe-enum-comparison` rule correctly flagged.
+
+**A debugging trap worth recording**: an early version of `extractParties` selected
+`$tr.find('span').first()` to get a row's line text, on the assumption the party/lawyer line
+span was the first `<span>` in the row. It is not — the FIRST `<span>` in document order is an
+unclassed wrapper spanning the entire cell (including a `<style>` block and a nested `<ul>`),
+and `.text()` on it concatenated everything. Fixed by selecting `span.text-bold` (party) /
+`span[class=""]` (lawyer) specifically, confirmed with a targeted Node probe against the raw
+captured file before writing the fix.
+
+### Downstream tests updated to the real fixture (not new behavior, but real values changed)
+
+Five previously-green tests hardcoded the OLD invented fixture's specific values and broke
+once the fixture became the real capture — expected and disclosed, not silently patched:
+
+- `schemas/payload.test.ts` — `caseClass`, the lawyer's name/OAB/party group (moved from
+  active to passive in the real data), and the expected `itemId`.
+- `site.test.ts` — expected `processNumber`.
+- `main.test.ts` — `detail-page-valid-no-documents.html` (a synthetic, classification-only
+  fixture predating this slice's standing rule, kept synthetic by design since it exists to
+  prove wiring/classification, not field-extraction fidelity) needed a minimal `.propertyView`
+  block added so its `processNumber` still resolves under the new `.propertyView`-based
+  extraction — payload schema validation was silently failing to empty `processNumber`,
+  producing zero written items with no thrown error, until this was found.
+  **This fixture rewrite hit the same latin1/UTF-8 trap the redaction script was built to
+  avoid**: the Edit tool saves UTF-8, and the accented label `"Número Processo"` written
+  through it round-tripped as mojibake once `decodeLatin1` ran on it, so the field lookup
+  silently missed. Fixed by writing the file byte-for-byte via a Node script with explicit
+  `latin1` encoding, matching every other fixture in this codebase.
+
+### A second, real gap found while proving 5f.8's acceptance criterion: `pdfs/` never wired
+
+`.gitignore` and `README.md` have documented a top-level `pdfs/` output directory since S1.
+`main.ts` (S5e) instead wired `FsDocumentSink` at `join(outputDir, 'documents')` —
+`output/documents/`, never a separate `pdfs/` root. No test caught this because no test
+exercised a real document fetch through the full composition root before this slice's new
+`main.test.ts` case. Fixed RED-first: a new test scripted a real document fetch (302 + PDF
+bytes) through `runScraper()` and asserted the file landed under a distinct `pdfsDir`,
+confirmed to fail with `ENOENT` before the fix. GREEN: `RunDeps` gained a required `pdfsDir`
+field; `runScraper` wires `documentSink: new FsDocumentSink(deps.pdfsDir)` directly (no
+`outputDir` nesting); `main()`'s real CLI entry point defaults it to `'pdfs'`. This is the
+same shape of gap S4c, S5a, and S5d each disclosed before landing — a documented convention
+with no task or test ever wiring it — caught here because 5f.8's acceptance criterion
+(explicitly "a PDF lands under `pdfs/`") is exactly specific enough to expose it.
+
+### Live Acceptance Evidence (task 5f.8)
+
+Command: `pnpm scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 2 --max-documents 1 --max-requests 12`
+
+Observed console output (structured JSONL logs to stderr, `--log-level` default):
+
+```
+{"level":"info","event":"unit.started","fields":{"unitKey":"2026-03-10..2026-03-10","windowKey":"2026-03-10..2026-03-10"}}
+{"level":"info","event":"document.persisted","fields":{"itemId":"0005643-82.2001.4.05.8000","documentId":"6884863","path":"0005643-82.2001.4.05.8000/6884863-despacho-inspecao---2188---inspecao-geral-ordinaria---2025.pdf","bytesWritten":19441}}
+{"level":"warn","event":"unit.saturated","fields":{"unitKey":"2026-03-10..2026-03-10","resultCount":30,"cap":30}}
+{"level":"info","event":"unit.completed","fields":{"unitKey":"2026-03-10..2026-03-10","windowKey":"2026-03-10..2026-03-10","state":"truncated"}}
+Run summary (measured, not certified):
+  complete: 0
+  truncated: 1
+  failed: 0
+```
+
+Real observed evidence beyond the exit code (per this task's own explicit warning that exit
+status proves nothing on this host):
+
+| Evidence | Value |
+|---|---|
+| `output/items.jsonl` | 2 lines (bounded by `--max-items 2`); both real payloads |
+| First item's `processNumber` | `0005643-82.2001.4.05.8000` (a real, live process) |
+| First item's `caseClass` | `{"cnjCode":"1728","label":"APELAÇÃO / REMESSA NECESSÁRIA"}` — matches the capture exactly |
+| First item's `subjects` | 3 entries, the last one's `cnjCode: "10124"` recovered from the site's own truncated (no closing paren) text — the same live quirk found during capture, confirmed independently on a second live run |
+| First item's `parties.active`/`passive` counts | 1 / 1 |
+| First item's `movements` count | 7 |
+| First item's `documents` count | 8 (legacy `idBin` shape only, per this slice's disclosed scope) |
+| `pdfs/0005643-82.2001.4.05.8000/` | 1 file: `6884863-despacho-inspecao---2188---inspecao-geral-ordinaria---2025.pdf`, 19441 bytes on disk |
+| `output/coverage.jsonl` | 1 record, `state: "truncated"`, `resultCount: 30`, `declaredCap: 30`, `saturated: true` |
+| `output/state/failures.jsonl` | absent — zero failures on this run (contrast: an earlier same-day run by a different actor, found already present in `output/state/` before this apply run started and removed before this run, had ledgered `invalidReference:invalidTokenShell` against this exact date — the defect this slice fixes) |
+
+Acceptance criterion met: real payloads in `output/items.jsonl`, a real PDF under `pdfs/`,
+with byte counts and file paths recorded above — not inferred from a zero exit code.
+
+### Saturation on real data (task 5f.9 — recorded, not fixed)
+
+`unit.saturated` fired correctly (`resultCount: 30`, `cap: 30`), but the engine's own
+`split()` call returned `null`, so the cell finished `truncated` rather than `subdivided`.
+This is the first time S5c's subdivision mechanism has ever run against a real saturated day
+— every prior proof was against `StubTransport`.
+
+A read-only diagnostic script reproduced the exact request sequence a live run drives before
+reaching `split()` (prime → prime → search 30 rows → 30 detail fetches, all sharing one
+cookie-jar session) and then issued the same POST `classes.ts`'s `fetchClassCatalogue` makes,
+using the untouched traversal session captured at the very start of the run. Result: `200
+text/xml`, 52904 bytes — not a `login.seam` redirect — but only 6 `<li>` elements matched a
+naive scan, far short of the documented ~132-entry catalogue. The live run's own count was a
+clean `0` (`bounded.length === 0`); the reproduction's count (`6`) does not match it exactly,
+so the precise trigger is not fully pinned down — but both runs agree the catalogue fetch is
+unreliable under a real, already-aged session, and `classes.ts`'s `parseClassCatalogue` has no
+content-based validity check at all (unlike every other TRF5 response schema in this
+codebase): it blindly scans the whole document for `<li>` with no scope to the suggestion
+box's own container, so it cannot distinguish "the real catalogue" from a handful of unrelated
+`<li>` elements elsewhere on whatever page it actually received. Full writeup in
+`docs/RESEARCH.md` §9.9. **Not fixed in this slice** — task 5f.9's explicit instruction.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 5f.2/5f.3 | `schemas/response-view.test.ts` | Unit (real fixture) | ✅ 9/9 (existing validity-chain tests) | ✅ `expected false to be true` | ✅ 2/2 passed | ✅ 2 cases: valid page (both true), invalid-token shell (both false) | ✅ Clean |
+| 5f.4/5f.5 | `parsing/detail-page.test.ts` | Unit (real fixture) | N/A (full rewrite of an existing suite) | ✅ 4/4 blocks failed for the right reason (empty processNumber, empty parties, empty movements, empty documents) | ✅ 4/4 passed | ✅ header (all 8 fields incl. truncated subject), parties (party+lawyer+CNPJ fallthrough), movements (first+last of 7), documents (first of 8 + full-length assertion) | ✅ Clean — `bySuffixId`/`extractPropertyFields`/`extractBoldLabeledFields` factored out, each single-purpose |
+| 5f.8 (pdfsDir) | `main.test.ts` | Integration (`StubTransport`, real fs temp dirs) | ✅ 2/2 (existing S5e cases) | ✅ `ENOENT` — the target path never existed before the fix | ✅ 1/1 passed | ➖ Single scenario (one document, one path) — the fix itself is structural (a single string-literal target change), triangulation would not exercise different logic | ✅ Clean |
+
+### Test Summary
+
+- **Total tests added (S5f)**: 5 (2 `response-view.test.ts` + 1 new `main.test.ts` pdfsDir case;
+  the 4 `detail-page.test.ts` blocks replace 4 existing ones rather than adding net-new cases)
+- **Total tests passing (S5f)**: 219/219 full suite (`vitest run`), up from 218 measured
+  mid-slice before the pdfsDir fix, up from 204 at S5e
+- **Layers used**: Unit against real captured fixtures (6), Integration against `StubTransport`
+  + real fs temp dirs (1), live-host integration via throwaway capture/diagnostic scripts (3
+  scripts, never committed, per this slice's launch instructions)
+- **Downstream tests updated (not new coverage, real-value corrections)**: 3 files, 5 tests —
+  `payload.test.ts` (3), `site.test.ts` (1), `main.test.ts`'s existing case (1, via the
+  `detail-page-valid-no-documents.html` fixture fix)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/parsing src/adapters/trf5/schemas src/adapters/trf5/detail.test.ts src/main.test.ts` → all passing (exact count: 8 test files in that glob set, all green) |
+| Runtime harness command/scenario and exact result | `pnpm scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 2 --max-documents 1 --max-requests 12` against the real live TRF5 host — see "Live Acceptance Evidence" above for full observed evidence (byte counts, file paths, real field values) |
+| Rollback boundary | Revert `src/adapters/trf5/schemas/response-view.ts` to prefix-exact id matching, delete `src/adapters/trf5/schemas/response-view.test.ts`, revert `src/adapters/trf5/parsing/detail-page.ts`/`detail-page.test.ts` to the S4a `#id`-selector version, revert `src/adapters/trf5/schemas/payload.test.ts`/`src/adapters/trf5/site.test.ts` to their old expected values, revert `src/main.ts`'s `RunDeps.pdfsDir` addition and `src/main.test.ts`'s new case, revert `docs/RESEARCH.md` §9 and the `openspec/changes/scraper-core/tasks.md` S5f section. The redacted fixtures (`detail-page-valid.html`, `detail-page-invalid-token.html`, `detail-page-valid-no-documents.html`) stay — they are evidence, not code, matching the S5f task table's own stated rollback convention. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/adapters/trf5/__fixtures__/detail-page-valid.html` | Replaced | Real captured, redacted 101318-byte (+ header comment) detail page, replacing the invented 2635-byte one |
+| `src/adapters/trf5/__fixtures__/detail-page-invalid-token.html` | Replaced | Real captured, redacted 25524-byte invalid-`ca` shell |
+| `src/adapters/trf5/__fixtures__/detail-page-valid-no-documents.html` | Modified | Added a minimal real-shaped `.propertyView` block so `main.test.ts`'s existing case still resolves a valid `processNumber` under the new extraction |
+| `src/adapters/trf5/schemas/response-view.ts` | Modified | `idBlockPresent()` suffix/bare-id regex helper replaces two hardcoded `bodyText.includes('id="..."')` checks |
+| `src/adapters/trf5/schemas/response-view.test.ts` | Created | 2 tests: real valid page (both blocks true), real invalid-token shell (both false) |
+| `src/adapters/trf5/parsing/detail-page.ts` | Rewritten | `.propertyView`/bold-label field extraction, flat-string subject splitting, flat sibling-row party+lawyer extraction, single-cell movement splitting, dual-shape (legacy-only) document extraction |
+| `src/adapters/trf5/parsing/detail-page.test.ts` | Rewritten | All 4 test blocks against the real captured fixture with real (redacted) expected values |
+| `src/adapters/trf5/schemas/payload.test.ts` | Modified | `caseClass`, lawyer expectation (moved to passive party), `itemId` updated to real captured/redacted values |
+| `src/adapters/trf5/site.test.ts` | Modified | Expected `processNumber` updated |
+| `src/main.ts` | Modified | `RunDeps.pdfsDir` (required); `runScraper` wires `FsDocumentSink(deps.pdfsDir)`; `main()` defaults `pdfsDir: 'pdfs'` |
+| `src/main.test.ts` | Modified | New test proving a document round-trips through `pdfsDir`, separate from `outputDir`; both existing tests updated to supply `pdfsDir` |
+| `docs/RESEARCH.md` | Modified | New §9, ten dated sub-sections reconciling every discovery in this slice |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 5f.1–5f.9 `[x]` with result notes; updated the S5f header and the running-estimate line |
+| `openspec/changes/scraper-core/apply-progress.md` | Modified | This section; corrected the stale top-of-file cumulative summary (S5e/S5f were missing) |
+
+## Issues Found (S5f)
+
+None blocking. See "A second, real gap found" above (the `pdfs/` wiring drift, fixed) and
+"Saturation on real data" above (the subdivision reliability finding, disclosed and recorded
+per the task's explicit instruction, not fixed). The CNPJ-party and born-digital-document gaps
+are recorded as known follow-ups in `tasks.md`'s S5f section and `docs/RESEARCH.md` §9.5/§9.7.
+
+## Workload / PR Boundary (S5f)
+
+- Mode: chained PR slice (`feature-branch-chain`), no `size:exception` needed
+- Current work unit: S5f — detail parsing rebuilt against captured responses (tasks 5f.1–5f.9)
+- Boundary: starts from S5e's merged state (a runnable but detail-parsing-broken CLI); ends
+  with a live run that reaches every sink with real data, a real PDF on disk, and `docs/
+  RESEARCH.md` reconciled with everything measured. S6 (`--frontier`) intentionally not
+  started.
+- Estimated review budget impact: 515 authored `src/` lines (`git diff --numstat` against the
+  S5e branch tip, excluding fixtures/`tasks.md`/`apply-progress.md`/`docs/RESEARCH.md`)
+  against the 800-line budget and the ~450 estimate — 64%/114% respectively. No exception
+  needed. (Redacted fixture files, `docs/RESEARCH.md`, and the two SDD artifacts add
+  substantial additional diff size not counted in this figure, consistent with the project's
+  standing convention of counting authored `src/` risk only.)
+
+### Status (S5f)
+
+9/9 S5f tasks complete (5f.1–5f.9). `vitest run`: 219/219 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean. `pnpm format:check`: clean. Live acceptance run against the real TRF5 host
+passed with real observed evidence (see above). Ready for `sdd-verify`, or `sdd-apply` again
+for S6.

@@ -447,3 +447,161 @@ the minimum a technically competent implementation owes the people in the record
 *Method note: the exact a4j POST body was recovered from a Jam recording of a manual
 browsing session, which made the full field set visible without guesswork. Everything
 after that was reproduced independently with `curl`.*
+
+---
+
+## 9. Reconciliation — what the first live runs actually returned (2026-09-05)
+
+S5e wired a real transport and a real composition root for the first time. Every live
+run since has driven out a defect in a module this document, or an earlier slice, had
+already marked "verified" or "complete" — because a fixture built to match this
+document's prose is not the same thing as a fixture built from a captured response.
+This section corrects every prose claim the live traffic actually contradicted.
+Nothing below is guesswork: each row was reproduced by running the production adapter
+code (never a hand-written script) against the live host and inspecting the raw bytes.
+
+### 9.1 The search trigger is a `<script>` component, not a hidden-input `onclick`
+
+§2 Step 2 names `fPP:j_id244` as "the trigger" but describes it only as "a different
+control", which reads like a hidden input. It is not: the visible button's own
+`onclick` is unreachable (`return executarReCaptcha();;A4J.AJAX.Submit(...)` — the
+`A4J.AJAX.Submit` call sits after a `return` and never runs), and the control that
+actually fires the search is defined inside a `<script id="fPP:j_id244">` element, not
+an attribute on any visible control. A structural scan has to look inside `<script>`
+bodies for a self-referential `A4J.AJAX.Submit(...,{'parameters':{'x':'x'}})` call and
+prefer it over any `onclick`-based candidate — scanning `onclick` attributes alone
+finds the button and silently searches nothing (fixed in `c3d17a5`; see
+`session.ts`'s `findSubmitTriggerId`).
+
+### 9.2 The zero-result footer has no number at all
+
+§3 shows the saturated footer as `"30 resultados encontrados"`, which is accurate. It
+does not show the OTHER end of that scale: a genuinely empty result set renders the
+identical table structure with an **empty** `<tbody>` and a footer reading
+`"resultados encontrados"` — no `"0"`, no number of any kind. Treating an absent
+number as a parse failure, or assuming a leading digit is always present, both break
+on this case (fixed in `135d2e6`).
+
+### 9.3 The detail page is label-keyed, not id-keyed, and every id carries a server-generated prefix
+
+§2 Step 5's component-id table (`processoTrfViewView`, `processoPartesPoloAtivoResumidoList`,
+…) is accurate as a list of **ids that exist on the page** — but every one of them
+carries a server-generated form prefix (e.g. `j_id146:processoTrfViewView`, never a
+bare `processoTrfViewView`), confirming §1's own warning that ids are not a stable
+contract. Two consequences follow that this document did not previously spell out:
+
+- **A selector must match the suffix (`[id$=":name"]`), never assume a bare id.**
+- **The header's own container cannot be selected as an element at all.** It renders
+  as `<form id="j_id146:processoTrfViewView">` nested inside an already-open RichFaces
+  tab `<form>`. HTML forbids nested `<form>` elements, and the HTML parsing algorithm
+  silently drops a nested `<form>` START tag rather than erroring — so no DOM element
+  ever carries that id once the page is parsed, even though the id string is still
+  present in the raw markup. Detection of "is this a detail page" has to work on the
+  raw text (a regex/substring test), and field extraction cannot scope to "inside the
+  header container" at all.
+
+Inside that (non-existent-as-an-element) header, individual fields are **not**
+separately-id'd spans (`#numeroProcesso`, `#dataDistribuicao`, …, as an earlier
+invented fixture assumed). Every field is a `.propertyView` block —
+`.name label` carries the visible Portuguese label text, `.value` carries the value —
+and extraction has to walk every `.propertyView` on the page and key off that label
+text. Two fields ("Órgão Julgador Colegiado" + "Endereço", and "Órgão Julgador") share
+a *blank*-labeled `.propertyView` each, with the real sub-label carried by a `<b>` tag
+inside the value instead of `.name label`.
+
+### 9.4 "Assunto" is a flat, sometimes-truncated string — not a nested list
+
+§2 Step 5 lists "Assunto (repeating, hierarchical, each with CNJ codes)" without
+showing the markup. The real markup is **one flat string**, hierarchy levels joined by
+`" - "`, each with its own trailing `(code)` — never a nested `<ul>`. On at least one
+observed process, the site itself truncates the last segment with no closing `")"` at
+all (`"...Reforma Agrária (10124"`, no `)`) — a genuine site-side rendering limit, not
+a capture artifact. A parser that requires a closing paren silently drops that last
+subject's code.
+
+### 9.5 Parties are a flat table; a lawyer is a following sibling row, not a nested list
+
+§2 Step 5 describes lawyers as "nested" under a party, and an earlier invented fixture
+modeled that as `<ul class="advogados"><li>`. The real markup has no such nesting: a
+party and every lawyer under it are **sibling `<tr>` rows** in the same table body. The
+only structural signal distinguishing them is a `<span class="text-bold">` wrapping a
+party's line, versus an explicit-but-empty `<span class="">` wrapping a lawyer's line
+that directly follows it — a lawyer row belongs to the party row immediately above it.
+
+One data shape the row-parsing regex does not cover: a **CNPJ-identified party** (a
+legal entity, e.g. a federal agency) renders as `"NAME - CNPJ: xx.xxx.xxx/xxxx-xx
+(ROLE)"`. The existing `CPF:`-only pattern does not match it; the party is still
+recorded (whole line as name, `cpf: null`, `role: 'UNKNOWN'`), never dropped, but its
+CNPJ is not captured into a dedicated field. Disclosed, not fixed in S5f — no
+requirement currently asks for a CNPJ-carrying schema.
+
+### 9.6 Movements are one cell, not two — "date - description" as a single string
+
+§2 Step 5 names `processoEvento` as the movements table but does not show its row
+shape. The real row is `tr.rich-table-row` (no `.evento` class anywhere on the page),
+one cell holding `"dd/mm/yyyy hh:mm:ss - description"` as a single string, and a second
+(usually empty) "Documento" cell. §8's "row structure not yet mapped" is now resolved
+for the date/description split; the CNJ code per movement remains unmapped exactly as
+§8 already flagged.
+
+### 9.7 The documents grid mixes two unrelated delivery mechanisms
+
+§2 Step 4's document scheme (`?idBin=&numeroDocumento=&nomeArqProcDocBin=&idProcessoDocumento=`,
+a 302 straight to a PDF) is confirmed accurate — it is still present on live pages and
+is what this scraper fetches. What §2 Step 4 does not mention, because it was not yet
+observed: the same documents grid also renders **"born-digital" documents** through a
+completely different link, `documentoSemLoginHTML.seam?ca=<hash>&idProcessoDoc=<id>`,
+distinguishable by an `<i class="fa fa-external-link">` icon versus the PDF row's
+`<i class="fa fa-file-pdf-o">`, and by having `href="#"` (the real target lives only
+inside the `onclick`'s `openPopUp(...)` call). Fetching that URL returns **200
+`text/html`** — an in-browser rendered document editor view, complete with an
+electronic-signature block, not a PDF at all, and not a 302 anywhere in the chain.
+This scraper enumerates only the legacy `idBin` shape and skips the newer one; a
+process whose documents are *entirely* born-digital yields zero fetchable documents,
+not an error. Disclosed, not fixed in S5f.
+
+### 9.8 `pdfs/` was reserved since S1, never wired until S5f
+
+The `.gitignore` entry and README both documented a top-level `pdfs/` output directory
+since the very first slice. The actual document sink wired in `main.ts` (S5e) pointed
+at `output/documents/` instead — a drift no test caught, because no test exercised a
+real document fetch end to end through the composition root before S5f. Fixed in S5f:
+`RunDeps` now carries an explicit `pdfsDir`, defaulting to `pdfs/` in the real CLI
+entry point.
+
+### 9.9 Saturation-driven subdivision (`split()`) is unproven against real data, and its own class-catalogue fetch looks unreliable live
+
+§3's judicial-class partition (the "second axis") was designed and unit-tested against
+`StubTransport`, but S5c never had a live saturated day to subdivide until S5f's
+acceptance run. Result: `unit.saturated` fired correctly (resultCount 30, cap 30), but
+the follow-up `split()` call returned `null` (no children), so the cell finished
+`truncated` rather than `subdivided` — the *reporting* is honest (a coverage gap is
+recorded, not hidden), but the subdivision mechanism itself did not fire.
+
+A read-only reproduction (same call shape: prime → prime → search 30 rows → 30 detail
+fetches → classes-catalogue POST, all sharing the one cookie-jar session) got a `200
+text/xml` response for the classes catalogue, but with only a handful of `<li>`
+elements — far short of the documented ~132-entry catalogue — rather than a
+recognizable `login.seam` session-expiry redirect. `classes.ts`'s `parseClassCatalogue`
+has no content-based validity check at all (unlike every other TRF5 response schema in
+this codebase, which all run through `classifyValidity`): it blindly scans the whole
+document for `<li>` elements with no scope to the suggestion box's own container, so it
+cannot tell "the real catalogue" apart from a handful of unrelated `<li>` elements
+elsewhere on whatever page it actually received. The exact live count (a clean `0`) and
+the reproduction's count (a nonzero handful) do not match, so the precise mechanism is
+not fully pinned down — but the reproduction confirms the catalogue fetch is fragile
+under a real, already-aged run session, which is enough to explain an unreliable
+`bounded.length`. **Recorded, not fixed** — task 5f.9's explicit instruction, and
+consistent with the standing rule that a live discovery is disclosed before it is
+chased.
+
+### 9.10 Budget's request count is a logical-operation count, not an HTTP call count
+
+Not a markup discovery, but worth recording alongside the others: `--max-requests`
+counts one `recordRequest()` per `discover()` call and one per document fetch — never
+the number of actual HTTP round trips either makes internally. `TRF5Site.discover()`
+alone can issue 1 search POST + up to 30 detail GETs for a single "request" as the
+budget counts it. `--max-requests 12` therefore does not bound the live acceptance
+run's actual HTTP traffic to 12 — it bounds the number of *work units and document
+fetches* the engine attempts. Observed directly on the acceptance run below; not a new
+defect, just a reconciliation of what the flag actually measures.
