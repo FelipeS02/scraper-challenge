@@ -52,6 +52,17 @@ export default tseslint.config(
     },
   },
 
+  // Human-facing run output (the dry-run forecast and the run summary) MUST
+  // remain on stdout, never interleaved with log events (core-run-control-and-
+  // output, "Structured Run Observability"). Narrowed to exactly these two
+  // files — not a blanket allowance for `src/cli/**`.
+  {
+    files: ['src/cli/dry-run.ts', 'src/cli/summary.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
   // Enforced adapter seam: the engine is payload-generic and must never import
   // an adapter, a transport, or an HTML parser directly — only through the ports
   // declared in engine/ports.ts. This is a build-time seam, not a convention.
