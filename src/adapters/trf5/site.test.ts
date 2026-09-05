@@ -115,7 +115,7 @@ describe('TRF5Site.discover — composes session priming, search, row parsing an
     expect(outcome.value.count).toBe(3);
     expect(outcome.value.items).toHaveLength(3);
     const item = outcome.value.items[0]!;
-    expect(item.processNumber).toBe('0712345-90.2024.4.05.8300');
+    expect(item.processNumber).toBe('0123456-78.2026.4.05.8100');
     expect(outcome.value.documentsByItemId.get(item.processNumber)).toEqual(item.documents);
     // Detail fetches reuse the already-primed session -- no extra priming GET per row.
     expect(transport.requests.filter((r) => r.url === PRIMING_URL)).toHaveLength(1);

@@ -12,7 +12,10 @@ describe('assembleTrfPayload — Judicial Record Payload Contract (trf5-adapter 
   it('carries cnjCode and label on caseClass and every subjects[] entry', () => {
     const payload = assembleTrfPayload(detail, SOURCE_URL);
     expect(payload).not.toBeNull();
-    expect(payload?.caseClass).toEqual({ label: 'APELACAO CIVEL', cnjCode: '198' });
+    expect(payload?.caseClass).toEqual({
+      label: 'APELAÇÃO / REMESSA NECESSÁRIA',
+      cnjCode: '1728',
+    });
     expect(payload?.subjects.length).toBeGreaterThan(0);
     for (const subject of payload?.subjects ?? []) {
       expect(subject).toHaveProperty('cnjCode');
@@ -22,13 +25,16 @@ describe('assembleTrfPayload — Judicial Record Payload Contract (trf5-adapter 
 
   it('nests parties.active/passive/others, each with a lawyers[] array', () => {
     const payload = assembleTrfPayload(detail, SOURCE_URL);
-    expect(payload?.parties.active[0]?.lawyers[0]).toEqual({
-      name: 'BELTRANO ADVOGADO',
-      oabNumber: '00000-X',
-      oabState: 'PE',
-      cpf: '111.111.111-11',
+    // Active is CNPJ-identified in the real captured fixture (a federal
+    // agency), with no nested lawyer row; the lawyer sits on the passive
+    // party instead — matches the real data shape, not the old invented one.
+    expect(payload?.parties.active[0]?.lawyers).toEqual([]);
+    expect(payload?.parties.passive[0]?.lawyers[0]).toEqual({
+      name: 'ADVOGADO SINTETICO UM',
+      oabNumber: '0000B',
+      oabState: 'AL',
+      cpf: '000.000.000-01',
     });
-    expect(payload?.parties.passive[0]?.lawyers).toEqual([]);
   });
 
   it('never emits a source page Portuguese form/query-parameter name as a payload property name', () => {
@@ -55,6 +61,6 @@ describe('assembleTrfPayload — Judicial Record Payload Contract (trf5-adapter 
     expect(payload).not.toBeNull();
     if (!payload) throw new Error('unreachable — asserted above');
     expect(itemId(payload)).toBe(payload.processNumber);
-    expect(itemId(payload)).toBe('0712345-90.2024.4.05.8300');
+    expect(itemId(payload)).toBe('0123456-78.2026.4.05.8100');
   });
 });
