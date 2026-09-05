@@ -27,6 +27,7 @@ describe('JsonlCheckpointStore', () => {
       facetValue: null,
       label: '2026-01-01',
       cursor,
+      resultCount: 12,
       state: 'complete',
       observedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -46,6 +47,7 @@ describe('JsonlCheckpointStore', () => {
       facetValue: 'APELAÇÃO CÍVEL',
       label: '2026-01-01 / APELAÇÃO CÍVEL',
       cursor: { day: '2026-01-01' },
+      resultCount: 30,
       state: 'subdivided',
       observedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -65,6 +67,7 @@ describe('JsonlCheckpointStore', () => {
       facetValue: null,
       label: '2026-01-01',
       cursor: { day: '2026-01-01' },
+      resultCount: 0,
       state: 'failed',
       observedAt: '2026-01-01T00:00:00.000Z',
     });
@@ -74,6 +77,7 @@ describe('JsonlCheckpointStore', () => {
       facetValue: null,
       label: '2026-01-01',
       cursor: { day: '2026-01-01' },
+      resultCount: 3,
       state: 'complete',
       observedAt: '2026-01-02T00:00:00.000Z',
     });

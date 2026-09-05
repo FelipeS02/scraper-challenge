@@ -431,6 +431,11 @@ describe('Scraper — checkpoint carries the whole opaque WorkUnit', () => {
       unitKey: 'A',
       facetValue: 'APELAÇÃO CÍVEL',
       label: '2026-01-01 / APELAÇÃO CÍVEL',
+      // The observed result count at discovery time, not a value derived from
+      // the declared cap — this is what lets a later resume reconstruct real
+      // SaturationInfo instead of fabricating it (design.md D10, "Re-split
+      // inputs").
+      resultCount: 1,
     });
   });
 });
@@ -759,8 +764,8 @@ describe('Scraper — saturation-driven subdivision (Saturation-Driven Subdivisi
     ]);
   });
 
-  it('resumes a subdivided checkpoint by re-splitting it directly, never re-discovering, skipping already-complete children', async () => {
-    const site = new ScriptedSite();
+  it('resumes a subdivided checkpoint by re-splitting it directly, never re-discovering, skipping already-complete children, and passes the persisted observed result count — not the declared cap — as SaturationInfo', async () => {
+    const site = new ScriptedSite(); // declares resultPageCap: 5 (default)
     // 'A' (the subdivided parent) is deliberately NOT scripted for discover —
     // if the engine re-discovered it, ScriptedSite would throw.
     site.scriptDiscover('A-child-2', [okDiscover([{ id: 'item-2' }], new Map())]);
@@ -775,6 +780,12 @@ describe('Scraper — saturation-driven subdivision (Saturation-Driven Subdivisi
       facetValue: null,
       label: 'A',
       cursor: { day: '2026-01-01' },
+      // Deliberately greater than the site's declared cap (5): a site whose
+      // search reports more matches than it displays can persist a
+      // resultCount the cap alone could never produce. Passing `cap` here
+      // instead of this value is exactly the fabrication this test exists to
+      // catch.
+      resultCount: 7,
       state: 'subdivided',
       observedAt: '2026-01-01T00:00:00.000Z',
     });
@@ -784,6 +795,7 @@ describe('Scraper — saturation-driven subdivision (Saturation-Driven Subdivisi
       facetValue: null,
       label: 'A-child-1',
       cursor: { day: '2026-01-01' },
+      resultCount: 1,
       state: 'complete',
       observedAt: '2026-01-01T00:00:00.000Z',
     });
@@ -797,6 +809,10 @@ describe('Scraper — saturation-driven subdivision (Saturation-Driven Subdivisi
     expect(site.discoverCalls).toBe(1);
     expect(traversal.splitCalls).toHaveLength(1);
     expect(traversal.splitCalls[0]?.unit.unitKey).toBe('A');
+    // The real assertion for this test's title: SaturationInfo carries the
+    // persisted observed count (7), never the declared cap (5) substituted
+    // for it.
+    expect(traversal.splitCalls[0]?.saturated).toEqual({ resultCount: 7, cap: 5 });
     expect(itemSink.records.map((r) => r.itemId)).toEqual(['item-2']);
   });
 

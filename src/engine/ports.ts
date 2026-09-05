@@ -103,6 +103,12 @@ export interface CheckpointRecord {
   readonly facetValue: string | null;
   readonly label: string;
   readonly cursor: unknown; // adapter-opaque, round-tripped byte-identical
+  // The observed result count at the moment this cell was last classified —
+  // read back verbatim, never re-derived from `declaredCap`. This is what
+  // lets a `subdivided` parent's SaturationInfo be reconstructed from the
+  // persisted checkpoint on resume, instead of fabricating it from the
+  // declared cap (design.md D10, "Re-split inputs").
+  readonly resultCount: number;
   readonly state: 'complete' | 'truncated' | 'failed' | 'subdivided';
   readonly observedAt: string;
 }

@@ -123,8 +123,13 @@ export class Scraper<TItem, TDoc, TCursor> {
         cursor: checkpoint.cursor as TCursor,
       };
       const cap = this.config.site.resultPageCap;
+      // The observed count from the moment this parent was ledgered
+      // `subdivided`, read back verbatim off its own checkpoint — never the
+      // declared cap. A site whose search reports more matches than it
+      // displays would otherwise have its real coverage number silently
+      // replaced by a plausible-looking substitute.
       const children = await this.config.traversal.split(reconstructed, {
-        resultCount: cap ?? 0,
+        resultCount: checkpoint.resultCount,
         cap,
       });
       if (!children) continue;
@@ -296,6 +301,7 @@ export class Scraper<TItem, TDoc, TCursor> {
       facetValue: unit.facetValue,
       label: unit.label,
       cursor: unit.cursor,
+      resultCount,
       state,
       observedAt: this.config.clock.now().toISOString(),
     });

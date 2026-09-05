@@ -47,6 +47,7 @@ describe('Persisted Identifier Stability (core-run-control-and-output spec)', ()
       facetValue: null,
       label: '2026-01-01..2026-01-01',
       cursor: { dateFrom: '2026-01-01', dateTo: '2026-01-01' },
+      resultCount: 12,
       state: 'complete',
       observedAt: '2026-01-01T00:00:00.000Z',
     };
