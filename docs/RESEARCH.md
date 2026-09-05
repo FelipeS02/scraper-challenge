@@ -605,3 +605,40 @@ budget counts it. `--max-requests 12` therefore does not bound the live acceptan
 run's actual HTTP traffic to 12 — it bounds the number of *work units and document
 fetches* the engine attempts. Observed directly on the acceptance run below; not a new
 defect, just a reconciliation of what the flag actually measures.
+
+### 9.11 The 429 mechanism was unreachable in production until S5g — never a live observation, now stub-proven end to end
+
+Not a markup discovery — a defect in this codebase, found by the full-change verify
+report and closed by S5g. `FetchOutcome.transient` (the union member the whole
+resilience policy is built around) had exactly zero production construction sites:
+`retry-policy.ts` and `scraper.ts` both correctly handled it, `rate-limiter.test.ts`
+correctly proved `RateLimiter` in isolation, and every test still passed, because
+nothing ever built the value those correct consumers were waiting for. A 429 on any of
+the three TRF5 request paths (search, detail, document fetch) fell through to
+content-based classification instead — on the document path it became a generic
+`hostDefect` (bounded per-worker retry only); on search and detail it was worse, since
+neither path read `status` at all, so an empty 429 body could even misclassify as a
+valid empty result. `engine/http-status.ts` (`classifyHttpStatus`) now runs first on
+all three paths, before any content or validity-chain classification.
+
+**Still true, and unchanged by this slice**: as of 2026-09-05, **a 429 has never once
+been observed from this host** — not during S1's reconnaissance (§5, "On case 6"), and
+not across every live run since, including S5f's full acceptance run against the real
+portal. The whole mechanism — classification, the global cooldown, `Retry-After`
+precedence, and the failed unit returning to the queue rather than the failure ledger —
+is proven exclusively against a stubbed `HttpTransport` and `vi.useFakeTimers()`
+(`engine/http-status.test.ts`, the three adapter-level 429-precedence tests in
+`site.test.ts`/`detail.test.ts`/`documents.test.ts`, and
+`adapters/trf5/global-cooldown.test.ts`'s end-to-end drive through the real `TRF5Site`).
+This is not a gap — `core-resilience-policy`'s own "Stubbed-Transport Test Isolation"
+requirement mandates exactly this, precisely because provoking a real 429 against a
+court's production server is not acceptable reconnaissance (§5, "On case 6").
+
+"Retry-After Precedence" is satisfied for **delta-seconds form only**
+(`Retry-After: 5` -> `5000`ms). An HTTP-date value, a negative value, a non-numeric
+value, or an absent header all resolve to `null`, deferring to the existing
+`retryAfterMs ?? config.backoff(attempt)` fallback already correct in both consumers.
+This is a deliberate, disclosed narrowing (S5g task 5g.3): HTTP-date parsing needs the
+engine's injected `Clock` to resolve "now" against, and no response ever observed
+against this host — real or reconstructed — has carried a `Retry-After` header in any
+form. Left as an explicit follow-up, not silently unsupported.

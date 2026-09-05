@@ -25,6 +25,13 @@
   parsing against captured live responses; found and fixed the `pdfs/` wiring gap; first
   live acceptance run against the real portal passed with real payloads and a real PDF.
   See "S5f" below.**
+- **S5g: complete — 594 authored `src/` lines actual, within the 800 budget (forecast ~280 —
+  more than double, driven almost entirely by the two integration/audit tests: 246 lines for
+  the real-adapter global-cooldown end-to-end test, 154 for the outcome-construction audit).
+  Made the 429/global-cooldown mechanism reachable in production for the first time since S1
+  by classifying 429/5xx at the transport boundary before content classification runs on all
+  three TRF5 request paths; added a guard against this exact class of gap recurring; corrected
+  the 4.17/4.18 tasks.md bookkeeping defect. See "S5g" below.**
 - S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -2344,4 +2351,223 @@ are recorded as known follow-ups in `tasks.md`'s S5f section and `docs/RESEARCH.
 9/9 S5f tasks complete (5f.1–5f.9). `vitest run`: 219/219 passing. `pnpm typecheck`: clean.
 `pnpm lint`: clean. `pnpm format:check`: clean. Live acceptance run against the real TRF5 host
 passed with real observed evidence (see above). Ready for `sdd-verify`, or `sdd-apply` again
+for S6.
+
+## S5g — HTTP status classification: making the 429 mechanism reachable
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5e-transport-composition-root` (continued on the same branch
+per this apply run's launch instructions; no new branch created).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #15 in the chain, targeting the S5f
+work. Not pushed and no PR opened by this apply run.
+**No `size:exception` needed**: estimated ~280 authored `src/` lines against the 800-line
+budget; landed at 594 (74% of budget, over double its own estimate — the two new
+integration/audit tests, `global-cooldown.test.ts` (246 lines) and
+`outcome-construction-audit.test.ts` (154 lines), account for 400 of the 594 by themselves;
+the actual production wiring — `http-status.ts` plus the three call sites in `site.ts`/
+`detail.ts`/`documents.ts` — is under 90 lines).
+**Why this slice exists**: the full-change verify report (`verify-report.md`) found that no
+production code anywhere constructed `FetchOutcome.transient` — the literal appeared exactly
+once, as a type declaration in `engine/types.ts:12`. `retry-policy.ts` and `scraper.ts` both
+correctly handled it, `rate-limiter.test.ts` correctly proved `RateLimiter` in isolation, and
+every test passed throughout — because nothing ever built the value those correct consumers
+were waiting for. The global rate limiter was decorative in production: `rateLimiter.acquire()`
+was awaited before every request, correctly, but waited on a gate nothing ever closed.
+**No live network used or required**: `core-resilience-policy`'s own "Stubbed-Transport Test
+Isolation" requirement mandates every 429/backoff/session-recovery scenario run against a
+stubbed `HttpTransport` and a fake clock, never the live host — this slice needed, and used,
+zero real requests. A 429 status line and a `Retry-After` header are RFC 9110 protocol facts,
+not portal-invented markup, so this is a disclosed, deliberate exception to S5f's "no fixture
+is written by hand" rule (which governs response bodies), not a violation of it.
+
+### Completed Tasks
+
+- [x] 5g.1 RED `engine/http-status.test.ts` — `classifyHttpStatus` maps 429/502/503/504 to
+      `transient` carrying the status; returns `null` for 200/302/404 so content-based
+      classification (and `documents.ts`'s own 404 handling) keeps ownership of every status
+      this host actually uses. `parseRetryAfterMs` cases exercised in the same file/cycle
+      (5g.3's RED, landed together since both functions live in one small, tightly coupled
+      module — see the TDD note below).
+- [x] 5g.2 GREEN `engine/http-status.ts` (`classifyHttpStatus`) — placed in `engine/` per
+      design.md's own instruction ("classified at the transport boundary before the chain
+      runs"), not redesigned.
+- [x] 5g.3 RED then GREEN `parseRetryAfterMs` — delta-seconds only; HTTP-date, negative,
+      non-numeric, and absent all resolve to `null`. Landed in the same file/cycle as 5g.1/5g.2
+      (see TDD note).
+- [x] 5g.4 RED three new tests, one per file — `site.test.ts` (search), `detail.test.ts`
+      (detail), `documents.test.ts` (document fetch) — each asserting a stubbed 429 classifies
+      as `transient` before any content/validity-chain classification runs. Confirmed genuinely
+      RED for three different reasons: `site.ts` returned a silent `{ kind: 'ok', count: 0 }`
+      (a 429's empty body parses as a genuine zero-row result — the most dangerous of the
+      three, since it looks like success); `detail.ts` returned
+      `permanentError:invalidTokenShell`; `documents.ts` returned `hostDefect`.
+- [x] 5g.5 GREEN wired `classifyHttpStatus` as the first check, before content classification,
+      in `site.ts`'s `discover()` (after the search POST), `detail.ts`'s `fetchDetail` (after
+      the detail GET), and `documents.ts`'s `fetchDocument` (after the initial GET, before the
+      existing 404/302 checks).
+- [x] 5g.6 RED then GREEN `adapters/trf5/global-cooldown.test.ts` — a new, dedicated
+      integration test composing the REAL `engine/scraper.ts` `Scraper` with the REAL
+      `TRF5Site` (production `site.ts` → `search.ts` → `classifyHttpStatus`) over a stubbed
+      `HttpTransport`, concurrency 2, three work units. One unit's search POST answers 429
+      (with `Retry-After: 3`); the test asserts (a) `cooldown.triggered` fires with
+      `cooldownMs: 3000`, (b) the failure ledger stays empty throughout, (c) at t=2999ms no
+      unit has completed, and (d) at t=3000ms every unit (including the requeued one) has a
+      checkpoint and exactly 4 POSTs were ever issued (the 429, its successful retry, and the
+      other two units' single successful searches). Confirmed genuinely RED by literally
+      stashing `site.ts`'s 5g.5 wiring and re-running this exact test file — it fails on the
+      `cooldown.triggered` assertion, `undefined` where `{ level: 'warn', ... }` was expected,
+      because without the wiring `TRF5Site.discover()` never produces a `transient` outcome for
+      this unit to route through `decide()`/`tripCooldown` in the first place.
+- [x] 5g.7 RED then GREEN `engine/outcome-construction-audit.test.ts` — derives the
+      `FetchOutcome` variant list from `engine/types.ts` (never hand-listed, same discipline as
+      `ports-implementation-audit.test.ts`), scans every non-test, non-`__fixtures__/`,
+      non-`types.ts` `.ts` file under `src/` for a real object-literal construction of each
+      variant, and fails if any variant has zero. Confirmed genuinely RED against the real
+      pre-5g.5 tree: stashed `engine/http-status.ts` + the three wired adapter files and
+      re-ran this suite — `transient` was the only unconstructed variant, exactly as the
+      full-change verify report found. The test file's own internal RED-proof (a mutation test
+      matching the sibling audits' precedent) reproduces the same result without needing a
+      stash, by filtering only the `transient` matches contributed by those four files out of
+      the match set (never removing their OTHER, pre-existing matches for `ok`/`hostDefect`/
+      `permanentError`, which predate this slice).
+- [x] 5g.8 Verified and corrected the tasks.md bookkeeping defect. See "Task 4.17/4.18
+      verification" below.
+- [x] 5g.9 `docs/RESEARCH.md` §9.11 added — reconciles that a 429 has still never been
+      observed from this host (true as of 2026-09-05, unchanged since S1's reconnaissance and
+      every live run since, including S5f's acceptance run), that the whole mechanism
+      (classification, global cooldown, `Retry-After` precedence, failed-unit-returns-to-queue)
+      is now stub-proven end to end, and that "Retry-After Precedence" is satisfied for
+      delta-seconds form only. `core-resilience-policy`'s `spec.md` itself needed no edit: its
+      requirements already describe the intended behavior correctly (they were never wrong —
+      the task breakdown simply never assigned the producer-side work), and editing a spec
+      during `sdd-apply` is out of this phase's role; the reconciliation lives in
+      `docs/RESEARCH.md`, the project's living research/discovery log.
+
+### Task 4.17/4.18 verification (5g.8)
+
+Read both tasks' literal text against `documents.test.ts`'s 14 pre-existing tests plus
+`engine/scraper.test.ts`'s pre-existing document-failure test:
+
+- **4.17** ("three same-labeled `Decisão` documents... get three distinct filenames, derived
+  only from `ca` + `idProcessoDocumento`..."): the "three distinct filenames" and
+  `[A-Za-z0-9._-]`-validation claims are fully covered (`documents.test.ts`'s
+  `buildDocumentPath` describe block, 9 tests). The literal `ca`-keyed wording is now stale,
+  not uncovered: S4c amended this exact requirement to `processNumber`-keyed (recorded in
+  tasks.md's own Requirement Coverage Map, "Stable Document Filename Derivation: S4b
+  (`ca`-derived) / S4c (amended: `processNumber` + slug)") for a stronger stability guarantee
+  (`ca` is session-scoped; `processNumber` is not). The current, amended behavior is fully
+  tested — including a dedicated "there is no session token input at all" case. "A failed
+  document fetch is ledgered without discarding the already-extracted item" is proven at the
+  engine level (`engine/scraper.test.ts`, `'still writes the item when its document fetch
+  fails, and records the document failure'`, pre-existing since S1/S2), not inside
+  `documents.test.ts` — because `documents.ts` has no access to items, sinks, or the ledger at
+  all; its own contribution to that guarantee is returning a `FetchOutcome` failure kind
+  instead of throwing, which `documents.test.ts` does prove directly (404 → `permanentError`,
+  unexpected status → `hostDefect`, both without throwing).
+- **4.18** ("GREEN implement `adapters/trf5/documents.ts` (302-follow, filename builder,
+  `FetchOutcome` wiring for `fetchDocument`)"): implemented exactly as described and fully
+  exercised — 302-follow (2 tests), `buildDocumentPath` as the (amended) filename builder (9
+  tests), `FetchOutcome` wiring for every branch including this slice's own new 429-precedence
+  branch (4 tests: 429, 404, unexpected-status/hostDefect, ok).
+
+Both marked `[x]`. No part of either task was left uncovered — the only correction needed was
+recognizing that S4c's disclosed amendment superseded the literal `ca`-keyed wording, not that
+anything was actually missing.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 5g.1/5g.2/5g.3 | `engine/http-status.test.ts` | Unit (pure) | N/A (new) | ✅ Module-not-found | ✅ 11/11 passed | ✅ 11 cases: 429 (bare + Retry-After), 502/503/504, 200/302/404 null, delta-seconds, zero-seconds, HTTP-date, negative, non-numeric, absent | ➖ None needed |
+| 5g.4/5g.5 (site.ts) | `site.test.ts` (new block) | Unit + StubTransport | ✅ 9/9 (existing) | ✅ `{kind:'ok', count:0}` ≠ expected `transient` | ✅ 1/1 passed | ➖ Single scenario (the precedence check itself is structural, one call site) | ✅ Clean |
+| 5g.4/5g.5 (detail.ts) | `detail.test.ts` (new block) | Unit + StubTransport | ✅ 4/4 (existing) | ✅ `hostDefect` ≠ expected `transient` | ✅ 1/1 passed | ➖ Single scenario | ✅ Clean |
+| 5g.4/5g.5 (documents.ts) | `documents.test.ts` (new block) | Unit + StubTransport | ✅ 14/14 (existing) | ✅ `hostDefect` (wrong reason) ≠ expected `transient` | ✅ 1/1 passed | ➖ Single scenario | ✅ Clean |
+| 5g.6 | `adapters/trf5/global-cooldown.test.ts` | Integration (real `Scraper` + real `TRF5Site` + `StubTransport`, `vi.useFakeTimers()`) | N/A (new file); confirmed 238/238 full-suite green immediately before this task | ✅ Confirmed retroactively by stashing `site.ts`'s wiring: `cooldownEvent` was `undefined` | ✅ 1/1 passed | ➖ Single scenario by design (concurrency 2, 3 units, 1 forced 429) — the claim is about production wiring, not about enumerating retry-policy branches already covered elsewhere | ✅ Clean |
+| 5g.7 | `engine/outcome-construction-audit.test.ts` | Unit (static analysis over real source files) | N/A (new file) | ✅ Confirmed retroactively by stashing `http-status.ts` + the 3 wired adapter files: `['transient']` was the only unconstructed kind | ✅ 4/4 passed | ✅ Includes its own internal RED-proof test (mutation-style, matching `ports-implementation-audit.test.ts`'s precedent) | ➖ None needed |
+
+**Note on 5g.1/5g.2/5g.3 sequencing**: `classifyHttpStatus` and `parseRetryAfterMs` were
+written and tested together in one RED/GREEN cycle rather than two sequential ones, because
+they are tightly coupled (the former calls the latter directly) and live in one small,
+newly-created file — splitting them into two artificial cycles would not have produced any
+independent RED evidence beyond what the combined 11-test RED already gave (confirmed
+module-not-found before any implementation existed).
+
+**Note on 5g.6/5g.7's retroactive RED confirmation**: both were written, then verified
+genuinely RED by temporarily reverting the exact production files their claim depends on
+(`git stash push -- <files>`, re-run, confirm real failure, `git stash pop`, confirm green
+again) rather than a strict test-first sequencing — because both are audits/integration proofs
+*of* the 5g.1–5g.5 wiring, so they could only meaningfully RED once that wiring already existed
+to be reverted. This is the same disclosed pattern S4c used for its own retroactive RED
+confirmations, applied here for the same reason (a proof-of-integration test cannot RED before
+the thing it integrates exists).
+
+### Test Summary
+
+- **Total tests added (S5g)**: 19 — 11 (`http-status.test.ts`) + 1 (`site.test.ts`) + 1
+  (`detail.test.ts`) + 1 (`documents.test.ts`) + 1 (`global-cooldown.test.ts`) + 4
+  (`outcome-construction-audit.test.ts`, including its own derivation-sanity and RED-proof
+  tests)
+- **Total tests passing (S5g)**: 238/238 full suite (`vitest run`), up from 219 at S5f
+- **Layers used**: Unit pure (11), Unit + `StubTransport` (3), Integration (real `Scraper` +
+  real `TRF5Site` + `StubTransport` + `vi.useFakeTimers()`, 1), Static-analysis-over-source (4)
+- **Pure functions created**: `classifyHttpStatus`, `parseRetryAfterMs`
+- **Retroactive RED confirmations**: 2 (5g.6, 5g.7 — see note above), by literal
+  `git stash push -- <file>` / re-run / confirm real failure / `git stash pop` / confirm green
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/engine/http-status.test.ts src/adapters/trf5/site.test.ts src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts src/adapters/trf5/global-cooldown.test.ts src/engine/outcome-construction-audit.test.ts` → 6 files, 46 tests, all passed |
+| Runtime harness command/scenario and exact result | N/A — `core-resilience-policy`'s own "Stubbed-Transport Test Isolation" requirement forbids exercising 429/backoff/cooldown behavior against the live host; `adapters/trf5/global-cooldown.test.ts` (real `Scraper` + real `TRF5Site` over a stubbed transport, `vi.useFakeTimers()`) is this slice's actual runtime boundary, not a live acceptance run |
+| Rollback boundary | Delete `src/engine/http-status.ts` + its test, `src/adapters/trf5/global-cooldown.test.ts`, `src/engine/outcome-construction-audit.test.ts`; revert the 429-precedence blocks added to `src/adapters/trf5/{site,detail,documents}.ts` and their `.test.ts` files back to their S4c/S5f state; revert `docs/RESEARCH.md` §9.11 and the `openspec/changes/scraper-core/tasks.md` S5g section and the 4.17/4.18 checkbox correction. S1–S5f are untouched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/http-status.ts` | Created | `classifyHttpStatus`, `parseRetryAfterMs` — transport-boundary 429/5xx classification |
+| `src/engine/http-status.test.ts` | Created | 11 tests: 429/502/503/504 classification, 200/302/404 null, Retry-After parsing (delta-seconds, zero, HTTP-date, negative, non-numeric, absent) |
+| `src/adapters/trf5/site.ts` | Modified | `discover()` calls `classifyHttpStatus` on the search response before content classification |
+| `src/adapters/trf5/site.test.ts` | Modified | +1 test: stubbed 429 search response classifies as `transient` |
+| `src/adapters/trf5/detail.ts` | Modified | `fetchDetail` calls `classifyHttpStatus` on the detail response before content classification |
+| `src/adapters/trf5/detail.test.ts` | Modified | +1 test: stubbed 429 detail response classifies as `transient` |
+| `src/adapters/trf5/documents.ts` | Modified | `fetchDocument` calls `classifyHttpStatus` on the initial response before the 404/302 checks |
+| `src/adapters/trf5/documents.test.ts` | Modified | +1 test: stubbed 429 on the document link classifies as `transient` |
+| `src/adapters/trf5/global-cooldown.test.ts` | Created | Real `Scraper` + real `TRF5Site` + `StubTransport` + `vi.useFakeTimers()`: a real 429 response trips the global cooldown, pauses further requests, and returns the failed unit to the queue |
+| `src/engine/outcome-construction-audit.test.ts` | Created | Derives `FetchOutcome` variants from `types.ts`; audits every non-test/fixture `src/` file for a real construction site per variant; includes a mutation-style RED-proof |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 5g.1–5g.9 `[x]`; corrected 4.17/4.18 from `[ ]` to `[x]` with the amendment/coverage note (5g.8) |
+| `docs/RESEARCH.md` | Modified | New §9.11 — 429-mechanism reconciliation (still never observed live; now stub-proven end to end; Retry-After delta-seconds-only) |
+| `openspec/changes/scraper-core/apply-progress.md` | Modified | This section; updated the top-of-file cumulative summary |
+
+## Issues Found (S5g)
+
+None blocking. The pre-existing race in `TRF5Site.ensureSession()` (two concurrent workers
+each seeing a null session and both priming) surfaced while designing `global-cooldown.test.ts`
+and was worked around in the test (`await site.reprimeSession()` before `scraper.run()`), not
+fixed in production — it is out of this slice's scope and not new: it existed identically
+before S5g and does not affect correctness (the last write to `this.session` wins, and both
+primed sessions are independently valid), only a harmless extra priming GET under concurrent
+first-use. Flagged here for awareness, not silently absorbed.
+
+## Workload / PR Boundary (S5g)
+
+- Mode: chained PR slice (`feature-branch-chain`), no `size:exception` needed
+- Current work unit: S5g — HTTP status classification, making the 429 mechanism reachable
+  (tasks 5g.1–5g.9)
+- Boundary: starts from S5f's merged state (429 classification unreachable, `documents.ts`'s
+  4.17/4.18 bookkeeping unmarked); ends with the 429/global-cooldown mechanism reachable and
+  stub-proven end to end on all three TRF5 request paths, a standing audit guarding against
+  this exact class of gap recurring, the tasks.md bookkeeping defect corrected, and
+  `docs/RESEARCH.md` reconciled. S6 (`--frontier`) intentionally not started.
+- Estimated review budget impact: 594 authored `src/` lines (`git diff`/new-file line counts
+  against the S5f tip, excluding `tasks.md`/`apply-progress.md`/`docs/RESEARCH.md`) against the
+  800-line budget and the ~280 estimate — 74%/212% respectively. No exception needed, but this
+  is the largest estimate-to-actual overrun ratio measured in this change; see the two
+  integration/audit test files' sizes in the slice header above for why.
+
+### Status (S5g)
+
+9/9 S5g tasks complete (5g.1–5g.9). `vitest run`: 238/238 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean. `pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again
 for S6.
