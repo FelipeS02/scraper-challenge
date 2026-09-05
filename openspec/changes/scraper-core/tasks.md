@@ -11,8 +11,8 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~7250 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c ~950–1300 estimated, S5b ~520, S6 ~450) — corrected running total; the figure previously carried here (~4850) had not been recomputed since S4c/S4d/S5a landed |
-| 800-line budget risk | Medium overall since the S4a/S4b split broke a four-slice overrun streak — but **S5c is forecast High**, see "S5c forecast (decide before launch)" below |
+| Estimated changed lines | ~7500 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b ~520, S6 ~450) — corrected running total; S5c landed above even its own ~950–1300 high-end forecast |
+| 800-line budget risk | Medium overall since the S4a/S4b split broke a four-slice overrun streak — **S5c landed at 1084, an accepted `size:exception`**, see "S5c forecast (decide before launch)" below |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
@@ -376,7 +376,7 @@ line.
 - [x] 5.17 GREEN add `logger` to `ScraperConfig` and emit those events from `engine/scraper.ts`; replace the direct `console.warn` in `infra/storage/jsonl.ts` with a `Logger` call, so no module under `src/` writes to the console outside `infra/logging/`. Result: 15/15 `scraper.test.ts` green. `readJsonlFile` gained an optional `logger: Logger = new NullLogger()` parameter (RED-first: a new `jsonl-item-sink.test.ts` case observed `expected [] to have a length of 1 but got +0` before the parameter was wired), replacing its `console.warn` call with `logger.log({ event: 'jsonl.tornLineDropped', ... })`.
 - [x] 5.18 Confirm the seam holds: `pnpm lint` still passes with `engine/**` importing nothing from `infra/logging/**` (the engine depends on the `Logger` port only), and no `console.` call remains under `src/` outside `infra/logging/`. Result: confirmed — `grep -rn "infra/logging" src/engine` empty; `grep -rln "console\." src` outside `infra/logging/` returns only a test file that spies on `console.warn` to assert it is *not* called (no production `console.` call remains); `eslint.config.js`'s existing engine-seam rule plus a new `no-console: 'error'` global rule (carved out for `src/infra/logging/**`) make both checks build-enforced, not just grep-confirmed. `pnpm check` (typecheck + lint + format) clean.
 
-## S5c: Saturation-driven subdivision wired end to end (~950–1300 lines — likely exceeds the 800-line budget, see forecast above)
+## S5c: Saturation-driven subdivision wired end to end (1084 authored `src/` lines actual — accepted `size:exception`, see forecast above)
 
 **Added between S5a and S5b**, when `design.md`'s D10–D12 decisions and the amended
 `core-scraping-engine`/`core-coverage-accounting` specs landed after the original S1–S6 plan
@@ -395,123 +395,193 @@ invariant reads the correct persisted parent, resume re-splits without re-search
 misbehaving `split()` cannot loop forever, and the engine's own failure vocabulary and
 result-cap type stay honest about a site that declares neither.
 
-- [ ] 7.1 Update `engine/types.ts` (`FetchOutcome.permanentError`: drop `invalidTokenShell`,
+- [x] 7.1 Update `engine/types.ts` (`FetchOutcome.permanentError`: drop `invalidTokenShell`,
       add `reason: 'notFound' | 'invalidReference' | 'schemaMismatch'` + `detail: string | null`,
       D12) and `engine/ports.ts` (`SitePort.resultPageCap: number | null`,
       `CoverageRecord.declaredCap: number | null`, `CoverageRecord.state`/`CheckpointRecord.state`
       gain `'subdivided'`, `CheckpointRecord` gains `facetValue: string | null` + `label: string`,
       D10/D11) — type-only, no RED test (no runtime behavior), same precedent as 1.5.
-- [ ] 7.2 RED extend `engine/coverage.test.ts`: `classifyCellState(count, null)` always returns
+      Result: done — both files carry exactly this shape; `FetchOutcome.permanentError.reason`
+      is `'notFound' | 'invalidReference' | 'schemaMismatch'` with no site-specific literal.
+- [x] 7.2 RED extend `engine/coverage.test.ts`: `classifyCellState(count, null)` always returns
       `'complete'` regardless of count; `isSaturated(count, null)` is always `false`; both still
       classify correctly against a numeric cap exactly as today.
-- [ ] 7.3 GREEN implement the `null`-cap branch in `classifyCellState`/`isSaturated`
+      Result: covered — `coverage.test.ts` asserts both null-cap invariants directly. No isolated
+      RED-before-GREEN transcript was captured for this exact pair during this run (see the S5c
+      lost-RED disclosure in `apply-progress.md`); non-vacuousness is instead proven in this
+      slice's mutation audit (audit #10), which flips the null-cap guard and observes the
+      covering test fail for the right reason.
+- [x] 7.3 GREEN implement the `null`-cap branch in `classifyCellState`/`isSaturated`
       (`engine/coverage.ts:11-20`).
-- [ ] 7.4 RED extend `engine/coverage.test.ts`: `summarizeRunCoverage` excludes every
+      Result: done — `declaredCap === null` short-circuits both functions to
+      `'complete'`/`false` before the numeric comparison ever runs.
+- [x] 7.4 RED extend `engine/coverage.test.ts`: `summarizeRunCoverage` excludes every
       `subdivided` record from the `complete`/`truncated`/`failed` tallies entirely; a ledger
       with one `subdivided` parent plus two children (one `complete`, one `truncated`) reports
       exactly `{ complete: 1, truncated: 1, failed: 0 }`, proving the parent is never
       double-counted alongside its own children.
-- [ ] 7.5 GREEN fix `summarizeRunCoverage` (`engine/coverage.ts:52-56`): branch explicitly on
+      Result: covered — see `apply-progress.md` mutation audit #6 (reverting the explicit branch
+      to a catch-all `else failed += 1` is caught by exactly this test, for exactly this reason).
+- [x] 7.5 GREEN fix `summarizeRunCoverage` (`engine/coverage.ts:52-56`): branch explicitly on
       `'complete' | 'truncated' | 'subdivided'` instead of the current catch-all
       `else failed += 1`, which silently miscounts a `subdivided` record as a failure today.
-- [ ] 7.6 RED extend `engine/coverage.test.ts`: `verifyPartitionInvariant` sources a day's
+      Result: done — three explicit `if`/`else if` branches; `subdivided` matches none of them
+      and is silently excluded from all three tallies, exactly as designed (D10).
+- [x] 7.6 RED extend `engine/coverage.test.ts`: `verifyPartitionInvariant` sources a day's
       unfiltered count from the LATEST-observed `facetValue === null` record for that
       `windowKey`, never the first array match, so a stale earlier observation (e.g. an
       interrupted first attempt later re-observed as `subdivided`) can never shadow the
       current persisted parent; the invariant compares the facet-value sum against that
       `subdivided` parent's exact `resultCount`.
-- [ ] 7.7 GREEN fix `verifyPartitionInvariant` (`engine/coverage.ts:79-82`) to select the
+      Result: covered — see `apply-progress.md` mutation audit #7 (regressing to
+      `Array.find`'s first match is caught by exactly this test, for exactly this reason).
+- [x] 7.7 GREEN fix `verifyPartitionInvariant` (`engine/coverage.ts:79-82`) to select the
       latest `facetValue === null` record by `observedAt` — the same "latest wins" rule
       `summarizeRunCoverage` already applies — instead of `Array.find`'s first match.
-- [ ] 7.8 RED extend `engine/scraper.test.ts`: a saturated unit (`resultCount === declaredCap`)
+      Result: done — `reduce` over the filtered `facetValue === null` records keeps the one with
+      the greatest `observedAt`.
+- [x] 7.8 RED extend `engine/scraper.test.ts`: a saturated unit (`resultCount === declaredCap`)
       calls `TraversalPort.split()`; when it returns children, every child `WorkUnit` is
       enqueued and processed exactly like a seeded unit, and the parent's coverage record is
       written as `subdivided` carrying the saturation result count — never `truncated`, never
       omitted; when `split()` returns `null`, the parent is still recorded `truncated` and
       nothing is enqueued (regression: wiring `split()` must not change the already-covered
       null-split path).
-- [ ] 7.9 GREEN wire `split()` into `processUnit` (`engine/scraper.ts`): on saturation, call
+      Result: covered by two `scraper.test.ts` tests. See the S5c mutation audit in
+      `apply-progress.md` (audits #1, #2, #3) for the genuine-failure evidence standing in for
+      the lost RED transcript.
+- [x] 7.9 GREEN wire `split()` into `processUnit` (`engine/scraper.ts`): on saturation, call
       `this.config.traversal.split(unit, { resultCount, cap })`; on non-null children, enqueue
       them and record `subdivided`; on `null`, keep recording `truncated` as today. Extend
       `buildCoverageRecord` (`scraper.ts:287-310`) to accept `'subdivided'`.
-- [ ] 7.10 RED extend `engine/scraper.test.ts`: a work-unit lineage already subdivided the
+      Result: done — `processUnit` calls `split()` exactly once per saturated unit under the
+      depth bound; `buildCoverageRecord`'s `state` parameter is `'complete' | 'truncated' |
+      'subdivided'`.
+- [x] 7.10 RED extend `engine/scraper.test.ts`: a work-unit lineage already subdivided the
       configured maximum number of times is recorded `truncated` without a further `split()`
       call, even though it is still saturated; depth is engine-owned state keyed by `unitKey`
       and is never read from or written onto the adapter-generated `WorkUnit` (assert the fake
       `TraversalPort.split()` never receives a depth argument and the enqueued child `WorkUnit`
       carries no depth field).
-- [ ] 7.11 GREEN implement engine-owned split-depth tracking in `engine/scraper.ts`: a
+      Result: covered by `scraper.test.ts`'s "bounds a lineage to the configured max split
+      depth..." test. See mutation audits #4 and #5 in `apply-progress.md`.
+- [x] 7.11 GREEN implement engine-owned split-depth tracking in `engine/scraper.ts`: a
       `Map<string, number>` populated with each child's depth when children are enqueued
       (default 0 for seeded units), read on `processUnit` entry, and a new
       `ScraperConfig.maxSplitDepth: number` field; exceeding it behaves exactly like a `null`
       split result, without calling `split()`.
-- [ ] 7.12 RED extend `engine/scraper.test.ts` + `infra/storage/jsonl-checkpoint-store.test.ts`:
+      Result: done — `Scraper.splitDepth: Map<string, number>`, keyed by `unitKey`, never
+      touches `WorkUnit` itself.
+- [x] 7.12 RED extend `engine/scraper.test.ts` + `infra/storage/jsonl-checkpoint-store.test.ts`:
       a persisted `CheckpointRecord` carries `facetValue` and `label` alongside `cursor`,
       round-tripping byte-identical exactly as `cursor` already does — a checkpoint now
       describes a complete `WorkUnit`, not just its cursor.
-- [ ] 7.13 GREEN update the `checkpointStore.put(...)` call site in `engine/scraper.ts` to
+      Result: covered — `jsonl-checkpoint-store.test.ts`'s dedicated round-trip test. See
+      mutation audit #8 in `apply-progress.md`.
+- [x] 7.13 GREEN update the `checkpointStore.put(...)` call site in `engine/scraper.ts` to
       include `facetValue`/`label`; `JsonlCheckpointStore` needs no code change beyond the
       type, since it already round-trips the whole record verbatim.
-- [ ] 7.14 RED extend `engine/scraper.test.ts`: on `run()`, a checkpoint whose latest state is
+      Result: done — confirmed no change was needed in `JsonlCheckpointStore` itself, only in
+      the call site and the type.
+- [x] 7.14 RED extend `engine/scraper.test.ts`: on `run()`, a checkpoint whose latest state is
       `subdivided` is reconstructed into a full `WorkUnit` from its persisted
       `cursor`/`facetValue`/`label` and passed straight to `TraversalPort.split()` — never to
       `discover()` again; the returned children are enqueued, and any child already
       checkpointed `complete` is skipped individually while the rest are processed like seeded
       units.
-- [ ] 7.15 GREEN implement subdivided-checkpoint resume in `run()`: alongside the existing
+      Result: covered by `scraper.test.ts`'s "resumes a subdivided checkpoint by re-splitting it
+      directly..." test. See mutation audit #9 in `apply-progress.md`.
+- [x] 7.15 GREEN implement subdivided-checkpoint resume in `run()`: alongside the existing
       seeded-unit filter, reconstruct every `subdivided` checkpoint into a `WorkUnit`, call
       `split()` immediately, and merge the returned children against the loaded checkpoint map
       before enqueuing.
-- [ ] 7.16 RED extend `engine/scraper.test.ts`: a unit whose `SitePort.resultPageCap === null`
+      Result: done — the resume loop in `Scraper.run()` iterates every `subdivided` checkpoint,
+      reconstructs its `WorkUnit`, calls `split()`, and enqueues only children still pending.
+- [x] 7.16 RED extend `engine/scraper.test.ts`: a unit whose `SitePort.resultPageCap === null`
       is never treated as saturated — `buildCoverageRecord`'s `saturated` field is always
       `false` and `declaredCap` reads back as `null`, never a coerced number, regardless of
       result count.
-- [ ] 7.17 GREEN guard `buildCoverageRecord` (`scraper.ts:287-310`):
+      Result: covered by `scraper.test.ts`'s "never treats a null-cap site as saturated..."
+      test. See mutation audit #10 in `apply-progress.md`, which also surfaced a defense-in-depth
+      finding: `scraper.ts`'s own `cap !== null` guard independently blocks `split()` from ever
+      being called even if `coverage.ts`'s null-cap guard were removed.
+- [x] 7.17 GREEN guard `buildCoverageRecord` (`scraper.ts:287-310`):
       `saturated: cap !== null && result.count >= cap`, `declaredCap` passed through unchanged.
-- [ ] 7.18 RED extend `engine/scraper.test.ts` (failure-ledger `reason` assertions):
+      Result: done — exact guard present, with a comment explaining why a bare `>=` would
+      silently coerce `null` into "every count saturates".
+- [x] 7.18 RED extend `engine/scraper.test.ts` (failure-ledger `reason` assertions):
       `describeOutcome` for a `permanentError` outcome reports `${reason}` when `detail` is
       `null`, and `${reason}:${detail}` when present — the same convention `transient:${status}`
       already uses — so an operator reading `failures.jsonl` still sees the concrete adapter
       detail even though the type itself stays site-agnostic (D12).
-- [ ] 7.19 GREEN update the `permanentError` case in `describeOutcome` (`engine/scraper.ts:48-61`).
-- [ ] 7.20 RED extend `adapters/trf5/detail.test.ts`: the `invalidTokenShell` validity-chain
+      Result: covered by two dedicated `scraper.test.ts` tests (detail `null` vs. detail
+      present).
+- [x] 7.19 GREEN update the `permanentError` case in `describeOutcome` (`engine/scraper.ts:48-61`).
+      Result: done — `outcome.detail === null ? outcome.reason : \`${outcome.reason}:${outcome.detail}\``.
+- [x] 7.20 RED extend `adapters/trf5/detail.test.ts`: the `invalidTokenShell` validity-chain
       branch now produces `{ kind: 'permanentError', reason: 'invalidReference', detail:
       'invalidTokenShell' }` (D12), never a site-specific `reason` literal; the
       `schemaMismatch` construction site carries `detail: null`.
-- [ ] 7.21 GREEN update the two `FetchOutcome` construction sites in `adapters/trf5/detail.ts`
+      Result: covered by two `detail.test.ts` tests. See mutation audits #11a (detail dropped,
+      caught at runtime) and #11b (site literal moved into `reason`, caught by `tsc` itself)
+      in `apply-progress.md`.
+- [x] 7.21 GREEN update the two `FetchOutcome` construction sites in `adapters/trf5/detail.ts`
       (currently lines 32-33, 39) per D12.
-- [ ] 7.22 RED extend `adapters/trf5/documents.test.ts`: the `notFound`/`schemaMismatch`
+      Result: done — `invalidTokenShell` -> `{ reason: 'invalidReference', detail:
+      'invalidTokenShell' }`; schema-mismatch -> `{ reason: 'schemaMismatch', detail: null }`.
+- [x] 7.22 RED extend `adapters/trf5/documents.test.ts`: the `notFound`/`schemaMismatch`
       `FetchOutcome` construction sites (currently `documents.ts:88,117`) carry an explicit
       `detail: null`, matching the new `permanentError` shape.
-- [ ] 7.23 GREEN update those two construction sites in `adapters/trf5/documents.ts` per D12.
-- [ ] 7.24 RED `engine/__fixtures__/portability-non-date.test.ts`: the full saturation/split
+      Result: covered by two dedicated `documents.test.ts` tests naming D12 explicitly.
+- [x] 7.23 GREEN update those two construction sites in `adapters/trf5/documents.ts` per D12.
+      Result: done — the 404 branch and the unsafe-path-component branch both carry
+      `detail: null`.
+- [x] 7.24 RED `engine/__fixtures__/portability-non-date.test.ts`: the full saturation/split
       path (seed -> discover -> saturate -> split -> children enqueued/`subdivided`) runs green
       against a fake adapter that (a) partitions along a dimension other than dates, and (b)
       declares `resultPageCap: null`; assert `adapters/trf5` is never imported (module-graph
       check, same as 1.14).
-- [ ] 7.25 GREEN implement `engine/__fixtures__/fake-non-date-site.ts` +
+      Result: done — two scenarios (saturating region-bisection tree; null-cap never-saturates)
+      plus the module-graph check, all green.
+- [x] 7.25 GREEN implement `engine/__fixtures__/fake-non-date-site.ts` +
       `fake-non-date-traversal.ts`.
-- [ ] 7.26 Record the portability audit in `apply-progress.md`: which `RunBounds` fields
+      Result: done — `FakeNonDateSite`/`FakeNonDateTraversal` partition a numeric "region" range
+      by bisection, structurally identical to `TRF5Traversal`'s date bisection but along a
+      wholly different dimension.
+- [x] 7.26 Record the portability audit in `apply-progress.md`: which `RunBounds` fields
       (`dateFrom`/`dateTo`/`maxFacetValues`) the non-date fake had to abuse, repurpose, or
       leave meaningless; whether `TraversalPort.facetName`'s singular contract blocked or
       merely inconvenienced a non-date or multi-dimension split. Report what actually broke —
       or that nothing did — rather than a conclusion decided in advance.
-- [ ] 7.27 Write `docs/sweep-flow.md`: a plain-language explanation of the saturation/
+      Result: done — see "Partition-contract fake: findings" in `apply-progress.md`.
+      `dateFrom`/`dateTo` are repurposed as opaque numeric-string bounds (works, but is a type
+      lie); `maxFacetValues` is entirely unused/meaningless for this fake; `facetName`'s
+      singular contract did not block a single non-date dimension, but was never tested against
+      a genuinely multi-dimensional split.
+- [x] 7.27 Write `docs/sweep-flow.md`: a plain-language explanation of the saturation/
       subdivision mechanism for a reader who has never seen the project, with two Mermaid
       diagrams — a work-unit flow (search -> saturated? -> split or record -> queue) and a
       bisection tree showing a real date range subdividing until each leaf returns under the
       cap — with prose alongside both diagrams, not instead of them. This file does not count
       against the authored `src/` line budget; it is documentation, tracked separately.
-- [ ] 7.28 RED `engine/__fixtures__/ports-coverage-audit.test.ts`: build a hand-maintained map
+      Result: done — 185 lines, two Mermaid diagrams plus surrounding prose, excluded from the
+      `src/` budget.
+- [x] 7.28 RED `engine/__fixtures__/ports-coverage-audit.test.ts`: build a hand-maintained map
       of every symbol exported from `engine/ports.ts` to the requirement(s) (from
       `openspec/changes/scraper-core/specs/`) that name or require it; assert every exported
       symbol has at least one mapped requirement. Prove the check is non-vacuous by first
       deliberately removing one real symbol's mapping and observing a named failure (mutation-
       testing style, same discipline S4d used for defect detection), then restoring it.
-- [ ] 7.29 GREEN implement the audit so it passes for the current `engine/ports.ts`. If it
+      Result: genuine RED observed — removing `Logger`'s mapping (temporarily, then reverted)
+      made the audit assertion fail naming exactly `['Logger']`; see the transcript in
+      `apply-progress.md`.
+- [x] 7.29 GREEN implement the audit so it passes for the current `engine/ports.ts`. If it
       surfaces a genuinely untraced symbol, record it in `apply-progress.md` as a new finding —
       do not silently invent a requirement to close it; that decision belongs to a future spec
       revision, not to this test.
+      Result: done — all 25 symbols exported from `engine/ports.ts` trace to at least one named
+      requirement; no untraced symbol was found. See "Reverse-coverage audit: findings" in
+      `apply-progress.md`.
 
 ## S5b: CLI, bounds, and run control (~520 lines)
 

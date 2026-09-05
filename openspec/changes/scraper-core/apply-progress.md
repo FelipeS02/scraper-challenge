@@ -10,7 +10,8 @@
 - S4b (4.15–4.18): complete — 266 authored `src/` lines.
 - S4c (4c.1–4c.7): complete — 409 authored `src/` lines, within the 800 budget.
 - S4d (4d.1–4d.6): complete — 83 authored `src/` lines, within the 800 budget.
-- **S5a (5.12–5.18): complete — 575 authored `src/` lines (this batch) + 15 in `eslint.config.js`, within the 800 budget.**
+- S5a (5.12–5.18): complete — 575 authored `src/` lines + 15 in `eslint.config.js`, within the 800 budget.
+- **S5c (7.1–7.29): complete — 1084 authored `src/` lines actual, accepted `size:exception` (forecast ~950–1300).**
 - S5b, S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -1011,3 +1012,301 @@ one non-vacuous-by-mutation cycle (`ThrowingLogger` safety test).
 `pnpm lint`: clean (engine-seam and console-seam both build-enforced by ESLint).
 `pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again for S5b (S5b
 requires this slice's `Logger` port and implementations, which now exist).
+
+## S5c — Saturation-driven subdivision wired end to end
+
+**Mode**: Strict TDD (see the lost-RED disclosure below — this slice's compliance story is
+not a normal RED→GREEN→REFACTOR table for tasks 7.1–7.27).
+**Branch**: `feat/scraper-core-s5c-saturation-subdivision` (forked off
+`feat/scraper-core-s5a-structured-logging`, at the `9283548` S5c-planning commit).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #10 in the chain, targeting the S5a
+branch. **Owner-accepted `size:exception`**: this slice's own forecast (~950–1300 authored
+`src/` lines) already exceeded the 800-line budget before implementation started; it shipped
+whole, per the owner's 2026-09-04 decision recorded in `tasks.md`.
+**This entry completes a slice a previous actor was interrupted mid-way through.** Tasks
+7.1–7.27 (`engine/{types,ports,coverage,scraper}.ts`, the two D12 adapter construction sites,
+the non-date portability fake, `docs/sweep-flow.md`) were already implemented and passing
+when this run started. Tasks 7.28–7.29 (the reverse-coverage audit) were not yet written. This
+entry: (a) verifies every already-implemented behavior actually satisfies its task via a
+mutation-detection audit, since the original RED evidence for 7.1–7.27 no longer exists; (b)
+writes the missing reverse-coverage audit (7.28–7.29) as genuine, observed strict TDD; (c)
+records the two findings tasks (7.26 partition-fake audit, 7.29 reverse-coverage audit) that
+this slice's own instructions require to be reported honestly rather than engineered to pass.
+
+### The lost-RED disclosure
+
+**The original RED evidence for tasks 7.1–7.27 was lost when the implementing session was
+interrupted and restarted.** A previous actor drove real RED failures for these tasks —
+`pnpm test` moved from 126/126 (S5a) to 146/146 across this work — but the transcript
+containing that RED output was never captured into this file before the session ended, and it
+cannot be reconstructed honestly. This project already has one precedent (S4c → S4d) for what
+happens when RED evidence is reconstructed after the fact against code that already exists:
+S4c's `git stash`-based retroactive RED was disclosed as a process deviation, and an entire
+following slice (S4d) existed solely to prove, by mutation, that the S4c suite could actually
+detect a defect rather than merely confirm a file's existence. Repeating that reconstruction
+here — restaging a fake RED narrative for code and tests that already exist and already pass —
+would be strictly worse than the original problem, because it would misrepresent an audit as a
+genuine TDD cycle. **No claim is made anywhere in this entry that a RED failure for tasks
+7.1–7.27 was directly observed in this session.** What follows instead is the S4d pattern
+applied fresh: one targeted mutation per behavior, the covering test run in isolation, the
+real failure observed and quoted, then the mutation reverted. Task 7.28's audit test *is* new
+in this session, and its RED evidence (the "Reverse-coverage audit" section below) *was*
+genuinely observed here and is quotable as such — that distinction is kept explicit throughout.
+
+### Mutation-detection audit (tasks 7.1–7.27 defect-detection guarantee)
+
+Method: for each of the eleven behaviors this slice's launch prompt named, one targeted
+mutation was introduced directly in the implementation, the exact covering test command was
+run in isolation, the failure was read and confirmed to name the right defect, the mutation
+was reverted, and the suite was confirmed green again before the next mutation. All eleven
+mutations were caught. `grep -rn "MUTATION (audit" src/` returns nothing — the working tree
+carries none of them.
+
+| # | Behavior | Mutation | Covering command | Result | Observed failure (quoted) |
+|---|---|---|---|---|---|
+| 1 | A saturated unit calls `split()` and enqueues the returned children | `processUnit`: removed `queue.push(child)` from the child-enqueue loop (kept `splitDepth.set`) | `vitest run src/engine/scraper.test.ts` | **Caught** — 2 tests failed | `expected [ 'item-1', 'item-2', 'item-3', …(2) ] to deeply equal [ 'item-1', 'item-2', 'item-3', …(4) ]` (children's items never appear) + a second failure in the max-split-depth test whose child never got enqueued to reach `discover()` |
+| 2 | `split()` returning `null` records the unit `truncated` | `processUnit`: added an unconditional `state = 'subdivided'` before the `children !== null` check | `vitest run src/engine/scraper.test.ts` | **Caught** — exactly the null-split regression test | `expected { …(13) } to match object { state: 'truncated' }` — `- "state": "truncated"` / `+ "state": "subdivided"` |
+| 3 | A successfully split parent is recorded `subdivided`, carrying the observed result count | `buildCoverageRecord`: `resultCount: state === 'subdivided' ? 0 : result.count` | `vitest run src/engine/scraper.test.ts` | **Caught** — exactly the subdivided-parent test | `expected { …(13) } to match object { state: 'subdivided', resultCount: 5 }` — `- "resultCount": 5` / `+ "resultCount": 0` |
+| 4 | Exceeding max split depth behaves exactly like a `null` split, without calling `split()` again | `processUnit`: replaced `if (depth < this.config.maxSplitDepth)` with `if (true)` | `vitest run src/engine/scraper.test.ts` | **Caught** — exactly the max-split-depth test | `expected [ { …(2) }, { …(2) } ] to have a length of 1 but got 2` (`splitCalls` — the depth-exhausted child was split anyway) |
+| 5 | Max split depth is engine-owned state keyed by `unitKey`, never stored on the adapter's `WorkUnit` | `processUnit`: enqueued children as `{ ...child, depth: depth + 1 }` instead of the bare `WorkUnit` | `vitest run src/engine/scraper.test.ts` | **Caught** — exactly the max-split-depth test's WorkUnit-shape assertion | `expected [ 'cursor', 'depth', …(4) ] to deeply equal [ 'cursor', 'facetValue', …(3) ]` — the leaked `depth` key is visible in the diff |
+| 6 | `summarizeRunCoverage` excludes `subdivided` from all three tallies and never double-counts a parent against its children | `coverage.ts`: reverted the explicit three-branch `if`/`else if`/`else if` to the old catch-all `else failed += 1` | `vitest run src/engine/coverage.test.ts` | **Caught** — exactly the subdivided-exclusion test | `expected { … } to deeply equal { complete: 1, truncated: 1, …(1) }` — `- "failed": 0` / `+ "failed": 1` |
+| 7 | `verifyPartitionInvariant` sources the unfiltered count from the persisted parent cell (latest-by-`observedAt`, never first match) | `coverage.ts`: replaced the latest-by-`observedAt` `reduce` with a bare `Array.find` first match | `vitest run src/engine/coverage.test.ts` | **Caught** — exactly the "sources ... from the LATEST ... never the first array match" test | `expected [ { …(3) } ] to deeply equal [ { …(3) } ]` — `- "unfilteredCount": 30` / `+ "unfilteredCount": 12` (the stale earlier observation shadowed the real parent) |
+| 8 | `CheckpointRecord` round-trips `facetValue` and `label` | `JsonlCheckpointStore.put`: persisted `{ ...record, facetValue: null, label: '' }` instead of `record` | `vitest run src/infra/storage/jsonl-checkpoint-store.test.ts` | **Caught** — exactly the facetValue/label round-trip test | `expected null to be 'APELAÇÃO CÍVEL'` |
+| 9 | Resume re-splits a `subdivided` parent without re-issuing its discover request | `Scraper.run()`'s resume loop: added `await this.config.site.discover(reconstructed)` before `split()` | `vitest run src/engine/scraper.test.ts` | **Caught** — exactly the resume test, which throws by design if `discover` is called on the un-scripted parent | `Error: no scripted discover outcome for A` |
+| 10 | A site declaring `resultPageCap: null` never saturates and is never passed to `split()` | `classifyCellState`: removed the `declaredCap === null` guard | `vitest run src/engine/scraper.test.ts` | **Caught** — exactly the null-cap test, on the `state` field. **Defense-in-depth finding**: `traversal.splitCalls` stayed at `0` even under this mutation, because `scraper.ts`'s own `cap !== null` guard independently prevents `split()` from ever being invoked for a null-cap unit — a second, redundant layer of protection beyond `classifyCellState` itself | `expected { …(11) } to match object { state: 'complete', … }` — `- "state": "complete"` / `+ "state": "truncated"` |
+| 11a | `permanentError`'s adapter-owned detail rides in `detail`, not folded into `reason` | `detail.ts`: the `invalidTokenShell` branch returned `detail: null` instead of `detail: 'invalidTokenShell'` | `vitest run src/adapters/trf5/detail.test.ts` | **Caught** — exactly the D12 vocabulary test | `expected { …(2) } to deeply equal { …(2) }` — `- "detail": "invalidTokenShell"` / `+ "detail": null` |
+| 11b | `permanentError.reason` carries no site-specific literal | `detail.ts`: moved the site-specific string `'invalidTokenShell'` into the `reason` field itself | `pnpm typecheck` | **Caught — by the type system, not a unit test** | `src/adapters/trf5/detail.ts(34,40): error TS2322: Type '"invalidTokenShell"' is not assignable to type '"notFound" \| "invalidReference" \| "schemaMismatch"'.` |
+
+**11/11 mutations caught, for the right reason in every case.** No gap was found — unlike
+S4d, this audit did not need to write a new test to close a discovered hole. Two findings are
+worth recording plainly rather than treated as failures: audit #10 shows the null-cap
+protection is enforced *twice* (once in `coverage.ts`'s `classifyCellState`, once in
+`scraper.ts`'s own `cap !== null` guard before calling `split()`), and audit #11b shows that
+half of the "site-agnostic failure vocabulary" requirement (no site-specific literal in
+`reason`) is enforced by TypeScript's literal-union type itself, not by a runtime assertion —
+a stronger guarantee than a test can provide, and the reason no runtime test could have caught
+that particular mutation even if one had been written for it.
+
+### Partition-contract fake: findings (tasks 7.24–7.26)
+
+`engine/__fixtures__/portability-non-date.test.ts` runs the full saturation/split path against
+`FakeNonDateSite`/`FakeNonDateTraversal`, which partition a numeric "region" range instead of a
+date range, and (in a second scenario) declare `resultPageCap: null`. Both scenarios pass.
+What this fake actually had to do to `RunBounds` and `TraversalPort`, reported plainly:
+
+- **`RunBounds.dateFrom`/`dateTo` were repurposed as opaque numeric-string bounds.**
+  `FakeNonDateTraversal.seed()` does `Number(bounds.dateFrom)` / `Number(bounds.dateTo)` to
+  recover the region range's numeric endpoints. This works — the engine never parses these
+  fields as dates, so nothing in `engine/` cares what an adapter puts in them — but it is a
+  **type-level fiction**: the field names themselves (`dateFrom`, `dateTo`) assert a date
+  shape that this fake's own values are not. A non-date adapter is not blocked by this, but it
+  is quietly encouraged to lie about what its own bounds mean. This is a genuine finding, not
+  a blocker: `RunBounds` is engine-declared and every field on it is opaque to the engine by
+  design (same opacity pattern as `cursor`/`payload`), so nothing breaks at runtime — but the
+  *names* leak a date-shaped assumption into what is supposed to be a payload-generic engine
+  contract. A future portability slice could rename these to bounds-agnostic terms (e.g.
+  `rangeFrom`/`rangeTo`) without any behavior change; this slice does not do that rename, since
+  it is out of scope for a fixture-only proof and would touch every TRF5 call site for no
+  behavior change.
+- **`RunBounds.maxFacetValues` was entirely unused and left meaningless.** `FakeNonDateSite`/
+  `FakeNonDateTraversal` never read it. Nothing broke by ignoring it — the field is simply
+  irrelevant to a fake that has no facet-expansion dimension of its own (its splits are pure
+  date-style bisection, not TRF5's facet-catalogue branch) — but this means the field's
+  presence on the shared `RunBounds` type is itself somewhat TRF5-specific in spirit (it exists
+  to bound `--max-facet-values`, a concept `TraversalPort.split()`'s design deliberately keeps
+  adapter-internal). No test in this fixture exercises what happens if an adapter's `split()`
+  *does* want a bound on facet-style expansion along a non-date, non-class dimension.
+- **`TraversalPort.facetName`'s singular contract did not block this fake, because this fake
+  only ever splits along one dimension (the region number itself) — it never needed a second,
+  facet-like axis the way TRF5's date→class fallback does.** `FakeNonDateTraversal.facetName`
+  is simply `'region'`, declared but never consulted by the engine outside of what TRF5 does
+  with it (nothing — `facetName` is read by nothing in `engine/`, only recorded as a
+  declaration). So the honest finding is: **this fake did not actually test whether a genuinely
+  multi-dimensional split (needing more than one facet-like axis, the way TRF5 falls back from
+  date-bisection to class-facet-expansion) would be blocked or merely inconvenienced by the
+  singular `facetName` field — because this fake never needed a second dimension to reach
+  every leaf under the cap.** That question remains open for a future slice that builds a fake
+  needing two independent partitioning axes; nothing here proves or disproves it either way.
+
+**Nothing broke** in the sense of a compile error, a runtime throw, or a failing assertion —
+both scenarios in `portability-non-date.test.ts` pass green. The findings above are about
+what the fake had to *quietly accept* (opaque-but-misleadingly-named fields, an unused field)
+rather than what it could not do at all.
+
+### Reverse-coverage audit: findings (tasks 7.28–7.29)
+
+`engine/__fixtures__/ports-coverage-audit.test.ts` extracts every `export interface`/`export
+type` declaration from `engine/ports.ts` by reading its source text (interfaces and type
+aliases are compile-time-only, so there is nothing to introspect at runtime — the same
+source-text-reading technique `portability.test.ts`'s module-graph check already uses),
+and checks each extracted symbol against a hand-maintained map to at least one requirement
+heading under `openspec/changes/scraper-core/specs/`.
+
+**Genuine RED observed for task 7.28** (quotable, unlike the mutation-audit section above,
+because this test and its map are new in this session): the map was authored with `Logger`'s
+entry temporarily removed, and the audit assertion failed exactly as expected —
+
+```
+AssertionError: expected [ 'Logger' ] to deeply equal []
+```
+
+— before the entry was restored and the suite went green (`3 tests passed`). This is the one
+genuine, test-first RED this slice can honestly claim, and it is disclosed as such precisely
+because the rest of this entry disclaims that same claim for tasks 7.1–7.27.
+
+**Finding: all 25 symbols exported from `engine/ports.ts` trace to at least one named
+requirement. No untraced symbol was found.** Per this task's own instruction, no requirement
+was invented or reworded to make this outcome true — the map below is what it is:
+
+| Symbol | Requirement(s) |
+|---|---|
+| `HttpRequest` | core-resilience-policy: Stubbed-Transport Test Isolation; trf5-adapter: Complete Search Form Field Set |
+| `HttpResponse` | core-resilience-policy: Stubbed-Transport Test Isolation; trf5-adapter: Document Byte-Level ISO-8859-1 Decoding |
+| `HttpTransport` | core-resilience-policy: Stubbed-Transport Test Isolation |
+| `DiscoverResult` | core-scraping-engine: Two-Stage Discover-Then-Fetch Execution |
+| `StoredDocument` | trf5-adapter: Document Persistence to Disk |
+| `DocumentSink` | trf5-adapter: Document Persistence to Disk |
+| `SitePort` | core-scraping-engine: Payload-Generic Port Contracts |
+| `RunBounds` | core-run-control-and-output: CLI Bound Enforcement; core-frontier-crawl: Mandatory Date Range on Seed Searches |
+| `SaturationInfo` | core-scraping-engine: Saturation-Driven Subdivision |
+| `TraversalPort` | core-scraping-engine: Payload-Generic Port Contracts; core-scraping-engine: Saturation-Driven Subdivision |
+| `Seed` | core-frontier-crawl: Seed Harvesting and Prioritization |
+| `FrontierCapable` | core-frontier-crawl: Deferred Phase-2 Invocation; core-frontier-crawl: Seed Harvesting and Prioritization |
+| `CheckpointRecord` | core-scraping-engine: Opaque Checkpoint Persistence; core-scraping-engine: Saturation-Driven Subdivision |
+| `CheckpointStore` | core-scraping-engine: Opaque Checkpoint Persistence |
+| `LedgerEntry` | core-coverage-accounting: Separate Checkpoint and Failure Ledger Concerns |
+| `FailureLedger` | core-coverage-accounting: Separate Checkpoint and Failure Ledger Concerns |
+| `OutputRecord` | core-run-control-and-output: Mandatory Envelope Fields |
+| `ItemSink` | core-run-control-and-output: JSONL Append-Only Output; core-coverage-accounting: Deduplication by Adapter-Declared Identity Key |
+| `CoverageRecord` | core-coverage-accounting: Cell State Ledger |
+| `CoverageSink` | core-run-control-and-output: Separate Coverage Ledger File |
+| `AdapterStateStore` | core-frontier-crawl: Deferred Phase-2 Invocation |
+| `Clock` | core-resilience-policy: Stubbed-Transport Test Isolation |
+| `LogLevel` | core-run-control-and-output: Structured Run Observability |
+| `LogEvent` | core-run-control-and-output: Structured Run Observability; core-run-control-and-output: Personal Data Handling Rules |
+| `Logger` | core-run-control-and-output: Structured Run Observability |
+
+This is a genuinely different result from S4c/S5a's own history: both of those slices found a
+real gap this exact shape of check would have caught (`DocumentSink`, `Logger` themselves, in
+fact — both now present and correctly traced above). That earlier history is exactly why this
+audit exists; that it currently finds nothing is a report on the current state of
+`engine/ports.ts`, not evidence the audit is toothless — its own non-vacuousness is proven by
+the genuine RED quoted above, which is unaffected by whether the *current* file happens to be
+fully covered.
+
+### Strict-TDD compliance for S5c
+
+| Task range | Genuine RED observed by this session? | Compliance status |
+|---|---|---|
+| 7.1–7.27 | **No — lost, not reconstructed.** | Disclosed above. Each behavior instead carries a mutation-audit row (11/11 caught) proving the covering test detects a wrong implementation, which is the guarantee RED exists to provide, obtained by a different honest method. |
+| 7.28 (RED) | **Yes** — `expected [ 'Logger' ] to deeply equal []`, observed before the map was restored | Genuine strict TDD: real RED, quoted, before GREEN. |
+| 7.29 (GREEN) | N/A — implementation already satisfied the audit once the map was complete; no further code change was needed | The audit passing against the real `engine/ports.ts` *is* task 7.29's GREEN. |
+
+No task in this slice is marked FAILED: 7.1–7.27's status is an honest "unknown/lost,
+substituted by an equivalent-strength mutation audit," never a silent claim of clean RED — and
+7.28–7.29's status is genuine, observed strict TDD.
+
+### Design decisions and deviations
+
+- **No implementation deviation from `design.md` D10–D12 was found or introduced by this
+  session.** Every mutation in the audit above targeted the *existing* implementation exactly
+  as this slice's predecessor left it; none required a design correction to make the covering
+  test pass again after reverting.
+- **The reverse-coverage audit (`ports-coverage-audit.test.ts`) reads `ports.ts`'s source text
+  with a regex rather than importing the module and inspecting runtime exports.** TypeScript
+  `interface`/`type` declarations are erased at compile time and have no runtime
+  representation, so there is nothing to `Object.keys()` — the same constraint
+  `portability.test.ts`'s own module-graph check already works around by reading source text
+  directly. This is a structural necessity, not a design choice with an alternative.
+- **The non-vacuousness proof for the reverse-coverage audit mutates a local copy of the map
+  inside the test itself (`{ ...REQUIREMENT_MAP }`, `delete mutatedMap.CoverageSink`), in
+  addition to the separately-disclosed manual mutation of the real module-level map (removing
+  `Logger`'s entry) used to produce the genuine RED transcript above.** Both exist for
+  different reasons: the in-test mutation is a permanent regression guard that runs on every
+  `vitest run` forever; the manual module-level mutation was a one-time act to produce
+  quotable, observed RED evidence for this apply-progress entry, then reverted.
+
+### Test Summary
+
+- **Total tests added this session**: 3 (`ports-coverage-audit.test.ts`) — everything else
+  under tasks 7.1–7.27 (coverage.test.ts, scraper.test.ts, jsonl-checkpoint-store.test.ts,
+  detail.test.ts, documents.test.ts, retry-policy.test.ts, persisted-identifier-stability.test.ts,
+  portability-non-date.test.ts and its two fakes) was already present and passing when this
+  session started.
+- **Full-suite tests passing**: 149/149 (`vitest run`), up from 146/146 at session start (the
+  3 new audit tests) and up from 126/126 at S5a.
+- **Mutations introduced during the audit**: 11 (one per behavior) + 2 (the genuine-RED
+  manual mutation on `ports-coverage-audit.test.ts`'s map, applied and reverted twice — once to
+  observe RED, once implicitly confirmed already-fixed by restoring) = effectively 12 distinct
+  edit/revert cycles across the session, all reverted; `grep -rn "MUTATION (audit" src/`
+  returns nothing and `git diff` on every mutated file shows no residual change beyond this
+  slice's own already-intended additions.
+- **Mutations caught**: 11/11 (no gap found — unlike S4d, no new test needed to be added to
+  close a hole).
+- **Layers used**: Unit pure (coverage.ts, encoding-adjacent D12 sites), Unit + in-memory
+  engine stores (scraper.ts saturation/subdivision/resume paths), Unit + real temp-dir I/O
+  (jsonl-checkpoint-store.ts), Unit + StubTransport (detail.ts/documents.ts D12 sites),
+  source-text audits (portability module-graph check, reverse-coverage audit) — no
+  Integration/E2E layer, by design, as in every prior slice.
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/engine/coverage.test.ts src/engine/scraper.test.ts src/engine/__fixtures__ src/infra/storage/jsonl-checkpoint-store.test.ts src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts` → all green (subset of the full 30-file, 149-test suite) |
+| Runtime harness command/scenario and exact result | N/A — CLI not wired until S5b (per `tasks.md`'s S5c row); every scenario is proven through in-memory engine stores, `StubTransport`, and the two fake-adapter fixtures, this slice's actual runtime boundary |
+| Rollback boundary | Delete the `subdivided` state, split-depth tracking, and checkpoint `facetValue`/`label` fields from `engine/{ports,coverage,scraper}.ts`; revert `SitePort.resultPageCap`/`CoverageRecord.declaredCap` to non-null `number`; revert `permanentError.reason`/`detail` in `engine/types.ts` and the two TRF5 construction sites; delete the non-date fake, `docs/sweep-flow.md`, and `ports-coverage-audit.test.ts`. S5a and every earlier slice remain unaffected — confirmed by the full 149-test suite passing with zero further changes. |
+
+### Files Changed (this session)
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/__fixtures__/ports-coverage-audit.test.ts` | Created | Reverse-coverage audit — maps every `engine/ports.ts` export to a named requirement; proven non-vacuous by a genuine, observed mutation-and-restore RED/GREEN cycle |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 7.1–7.29 `[x]` with per-task result notes; recorded 1084 actual authored `src/` lines; updated the running estimate table |
+| `openspec/changes/scraper-core/apply-progress.md` | Modified | This section — merged in without altering any prior slice's recorded evidence |
+
+All other `src/` files touched under tasks 7.1–7.27 (`engine/{types,ports,coverage,scraper}.ts`
+and their tests, `infra/storage/jsonl-checkpoint-store.test.ts`,
+`adapters/trf5/{detail,documents}.ts` and their tests, `adapters/trf5/retry-policy.test.ts`,
+`adapters/trf5/persisted-identifier-stability.test.ts`, the two non-date fakes and their test,
+`docs/sweep-flow.md`) were already present in the working tree when this session started; this
+session read, verified, and mutation-audited them rather than rewriting them. No line in any of
+those files was changed by this session except through a mutation that was immediately
+reverted.
+
+## Issues Found (S5c)
+
+None blocking. Two findings are recorded above rather than silently engineered away: the
+partition-contract fake's `RunBounds.dateFrom`/`dateTo` type-level fiction and unused
+`maxFacetValues` (tasks 7.24–7.26), and the reverse-coverage audit's honest "nothing untraced"
+result (tasks 7.28–7.29) alongside the defense-in-depth null-cap guard and the
+type-system-enforced half of the site-agnostic-vocabulary requirement (mutation audit #10/#11b).
+
+## Workload / PR Boundary (S5c)
+
+- Mode: chained PR slice (`feature-branch-chain`), owner-accepted `size:exception`
+- Current work unit: S5c — saturation-driven subdivision wired end to end
+- Boundary: starts from S5a's merged state (`Logger` port and implementations exist, but
+  `TraversalPort.split()` was never called from `engine/scraper.ts`); ends with `split()`
+  genuinely wired into both the live-saturation path and the resume-from-checkpoint path,
+  `subdivided` correctly ledgered and excluded from summary arithmetic, split depth bounded
+  and engine-owned, the D12 site-agnostic failure vocabulary landed at both TRF5 construction
+  sites, a second (non-date, null-cap) portability fixture proving the mechanism is not
+  date-shaped, `docs/sweep-flow.md` for onboarding, and a reverse-coverage audit proving every
+  `engine/ports.ts` export still traces to a requirement. S5b remains unstarted.
+- Estimated review budget impact: **1084 authored `src/` lines** — 587 from 13 modified files
+  (545 insertions + 42 deletions, `git diff --numstat`), plus 358 lines across 4 new files
+  already present at session start (`detail-page-schema-mismatch.html` 17,
+  `fake-non-date-site.ts` 82, `fake-non-date-traversal.ts` 47, `portability-non-date.test.ts`
+  212), plus 139 lines for this session's new `ports-coverage-audit.test.ts` — against the
+  800-line budget and the slice's own ~950–1300 forecast: **above the budget, within the
+  forecast's own range**, consistent with the owner's explicit `size:exception`.
+  `docs/sweep-flow.md` (185 lines) is documentation, excluded from this count per `tasks.md`
+  7.27's own instruction.
+
+### Status (S5c)
+
+29/29 S5c tasks complete (7.1–7.29). `vitest run`: 149/149 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean. `pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again
+for S5b (S5b requires this slice's amended `summarizeRunCoverage`/`verifyPartitionInvariant`
+arithmetic, which now exists and is mutation-audited).
