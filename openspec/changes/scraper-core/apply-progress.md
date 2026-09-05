@@ -1893,3 +1893,189 @@ precedent, and the disclosed `toBrDate` coverage gap.
 9/9 S5d tasks complete (8.1–8.9). `vitest run`: 189/189 passing. `pnpm typecheck`: clean.
 `pnpm lint`: clean. `pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again
 for S5e.
+
+## S5e — Real transport and composition root: the run actually runs
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5e-transport-composition-root` (forked off
+`feat/scraper-core-s5d-trf5-site-composition`).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #13 in the chain, targeting the S5d
+branch. Not pushed and no PR opened by this apply run, per the launch instructions.
+**No `size:exception`**: estimated ~390 authored `src/` lines against the 800-line budget;
+landed at 557 (70% of budget, 43% over its own estimate — in line with this change's standing
+pattern of underestimating single-deliverable slices, but still comfortably inside budget).
+**Closes**: the `infra/http/axios-transport.ts` gap S5b's apply discovered and disclosed, and
+the composition root (`main.ts`) that S5b's own apply explicitly deferred (tasks 5.9–5.11,
+renumbered 9.2/9.4/9.5 here).
+
+### Completed Tasks
+
+- [x] 9.1 RED then GREEN `infra/http/axios-transport.test.ts` + `axios-transport.ts` — the real
+      `HttpTransport` implementation over axios, proven against a local `node:http` stub server.
+- [x] 9.2 GREEN `src/main.ts` composition root + `src/infra/clock.ts` (`SystemClock`).
+- [x] 9.3 RED then GREEN `src/main.test.ts` — the wiring proof, driven with a stubbed transport.
+- [x] 9.4 GREEN README rewrite (`cognitive-doc-design` shape).
+- [x] 9.5 Confirmed `openspec/config.yaml` — no edit needed.
+- [x] 9.6 Manual smoke: `pnpm scrape --dry-run` executed here; the live-host half is left for
+      the owner (hard constraint: never hit the live TRF5 host from this apply run).
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 9.1 | `infra/http/axios-transport.test.ts` | Integration (local `node:http` server, never the live host) | N/A (new) | ✅ `Cannot find module './axios-transport.js'` | ✅ 7/7 passed | ✅ 7 cases: byte-identical binary body, POST body/header forwarding, 302 surfaced (not auto-followed), `Retry-After` surfaced, non-2xx never throws, per-instance cookie-jar isolation, cross-request cookie persistence | ➖ None needed |
+| 9.2/9.3 | `main.test.ts` | Integration (full composition, `StubTransport` + `FakeClock`) | N/A (new) | ✅ `Cannot find module './main.js'` | ✅ 2/2 passed | ✅ 2 cases: `scrape` reaching every sink with dedup, `retry-failed` composing without a discovery bound | ➖ None needed |
+| 9.2 (Clock) | `infra/clock.test.ts` | Unit (`vi.useFakeTimers()`) | N/A (new) | ✅ `Cannot find module './clock.js'` | ✅ 2/2 passed | ✅ 2 cases: `now()` returns the faked wall-clock time, `sleep(ms)` resolves only once the delay elapses | ➖ None needed |
+
+Every RED transcript above is a genuine "module not found" failure, observed before its
+matching implementation file existed — the same discipline S3–S5d established, never a
+reconstructed RED.
+
+### The ports-implementation audit, closed as designed
+
+`engine/ports-implementation-audit.test.ts` (added in S5d, task 8.9) failed the moment
+`AxiosTransport`/`SystemClock` existed, exactly as the launch instructions predicted: the
+allowlist `KNOWN_DEFERRED_GAPS` was now too large. The fix was to shrink it, never to loosen
+the assertion:
+
+- **`HttpTransport`** — closed by `infra/http/axios-transport.ts`'s `AxiosTransport implements
+  HttpTransport`.
+- **`Clock`** — closed by a new `infra/clock.ts`'s `SystemClock implements Clock`, a genuine
+  class rather than the inline `{ now, sleep }` object literal `main.ts` first held. The
+  audit's `IMPLEMENTS_PATTERN` regex only finds an `implements` clause on a class declaration —
+  an object literal satisfies the `Clock` interface structurally but leaves no `implements`
+  clause anywhere in `src/` for the scan to see. `infra/clock.ts` is also design.md's own
+  declared module (`infra/ ... clock.ts`), so this is not a workaround invented for the audit;
+  it is the module the design already named, built one slice later than everything beside it.
+- `KNOWN_DEFERRED_GAPS` now reads `['FrontierCapable']` — S6, entirely unstarted, phase-2 only
+  (design.md D3).
+
+### Design decisions and deviations
+
+- **`axios-cookiejar-support`@5's compiled type declarations do not resolve against this axios
+  version's `NodeNext`-conditional exports.** Reproduced in isolation before writing any
+  workaround: the library's own README-documented `wrapper(axios.create({ jar }))` snippet
+  fails `tsc -p tsconfig.json --noEmit` with "`AxiosInstance`/`AxiosStatic`... two different
+  types with this name exist, but they are unrelated," and `jar` is reported as not existing on
+  `CreateAxiosDefaults` despite `axios-cookiejar-support`'s own `declare module 'axios'`
+  augmentation targeting `AxiosRequestConfig` (which `CreateAxiosDefaults` extends via `Omit`).
+  Both packages resolve to the identical physical file at runtime
+  (`node -e "console.log(require.resolve('axios'))"` from both the root project and from
+  inside `axios-cookiejar-support`'s own resolution context returns the same path), so this is
+  a genuine type-surface mismatch between library versions, not a duplicate-install artifact.
+  Fixed with a narrow, fully-commented cast at the exact wrapping boundary
+  (`src/infra/http/axios-transport.ts`): call `axios.create()` without `jar` in the literal
+  (which typechecks), cast `wrapper` to a minimal structural function type to sidestep its
+  broken generic, and set `.jar` on `.defaults` afterward through one more cast — verified
+  against `axios-cookiejar-support`'s own plain-JS implementation (`dist/index.js`) that this
+  is runtime-equivalent: `wrapper()` is a plain interceptor registration that reads
+  `config.jar` off the per-request merged config, and `instance.defaults` is exactly what gets
+  merged into every request. No project-wide type setting (`strict`, `exactOptionalPropertyTypes`,
+  `skipLibCheck`) was loosened to make this pass.
+- **`TRF5Traversal` needs its own primed `SessionState`, separate from `TRF5Site`'s internally,
+  lazily primed session.** `TraversalConfig.session: SessionState` is a synchronous constructor
+  requirement (S3), while `TRF5Site.ensureSession()` primes lazily on its own first `discover()`
+  call (S5d). There is no session-sharing mechanism between the two adapter classes — none was
+  ever built, and design.md's D1 ("session lifecycle is... adapter-internal") does not require
+  one. `runScraper` therefore issues one explicit `primeSession()` call for the traversal before
+  constructing either adapter object, meaning a `scrape` run issues **two** priming GETs total
+  (one explicit for `TRF5Traversal`, one lazy inside `TRF5Site.discover()`), and a `retry-failed`
+  run issues **one** priming GET it never actually needs, purely to satisfy
+  `ScraperConfig.traversal`'s unconditional requirement. Both are disclosed here as a real, if
+  minor, inefficiency rather than silently absorbed — fixing it would mean either giving
+  `ScraperConfig` two shapes (a bigger change than this task asks for) or teaching `TRF5Site`
+  and `TRF5Traversal` to share session state (a design change outside S5e's assigned scope).
+- **`--frontier` is left as an already-harmless unrecognized flag, not a new typed field.**
+  `cli/args.ts`'s hand-rolled parser (`parseFlags`) already stores any `--flag` it does not
+  recognize into its internal map without rejecting it; nothing in `parseArgs` ever reads a
+  `frontier` key, so `pnpm scrape --frontier --dry-run` already runs without error today. Adding
+  a dedicated `frontier: boolean` field to `ScrapeArgs` that `main.ts` then deliberately ignores
+  would be a field with no consumer — S6 is the slice that should add both the field and its
+  behavior together, not this one. This satisfies "wire the command surface only, no frontier
+  behavior" literally: there is no behavior for a surface to gate yet.
+- **A disclosed, out-of-scope gap found while wiring, not fixed here: 429/5xx/timeout are never
+  classified into `FetchOutcome.transient` anywhere in the TRF5 adapter.** design.md states
+  "404 (case 4) and 429/5xx/timeout (case 6) are classified at the transport boundary before
+  the chain runs" (the "Validity chain" section), but `HttpTransport.send()`'s contract is
+  `Promise<HttpResponse>` only — it has no `FetchOutcome` variant to return, so this
+  classification can only happen one layer up, inside `session.ts`/`search.ts`/`detail.ts`/
+  `documents.ts` (all S3/S4, already "complete"). None of them do it: `detail.ts`'s only
+  fallback for an unrecognized response is `{ kind: 'hostDefect', reason: 'unrecognized detail
+  response' }` (bounded to 2 retries, no `Retry-After` honored, never trips the global 429
+  cooldown), and `documents.ts` maps any non-302/404 status — including a real 429 or 503 — to
+  `hostDefect` the same way. `core-resilience-policy`'s fully-built and fully-tested `transient`
+  path (5-attempt cap, `Retry-After` precedence, the global cooldown gate) is therefore
+  currently unreachable from any real TRF5 traffic; `retry-policy.test.ts`/`scraper.test.ts`
+  exercise it only with hand-constructed `FetchOutcome` values, never through the adapter.
+  This is the same shape of gap S4c, S5a, and S5d each disclosed before landing — a behavior
+  `design.md` names, no task ever assigned, a green suite because nothing exercises the real
+  path — caught here while wiring the transport that would finally make it reachable. **Not
+  fixed in this slice**: closing it means adding status-code-based classification to four
+  already-"complete" S3/S4 modules, which is design work outside S5e's assigned task list
+  (9.1–9.6) and would have pushed well past this slice's line budget. Flagged as a candidate for
+  a follow-up task before any live 429 traffic is expected to behave per `core-resilience-policy`.
+- **`AxiosTransport` never auto-follows redirects (`maxRedirects: 0`).** `documents.ts`'s
+  `fetchDocument` already follows the one intended 302 itself, by inspecting `initial.status`
+  and issuing a second `send()` to `initial.headers.location` — auto-following at the transport
+  layer would collapse that into a single response and silently break that contract. Confirmed
+  by reading `documents.ts` before writing the transport, not discovered by a failing test.
+
+### Test Summary
+
+- **Total tests added (S5e)**: 13 (7 `axios-transport.test.ts` + 2 `main.test.ts` + 2
+  `clock.test.ts` + 2 pre-existing `ports-implementation-audit.test.ts` assertions flipping from
+  red to green as a consequence, not newly authored)
+- **Total tests passing (S5e)**: 11/11 newly authored, plus the full suite green
+- **Full-suite tests passing**: 204/204 (`vitest run`), up from 189/189 at S5d
+- **Layers used**: Integration against a real local HTTP server (7: `axios-transport.test.ts`),
+  Integration against the full composition with `StubTransport`/`FakeClock` (2: `main.test.ts`),
+  Unit with `vi.useFakeTimers()` (2: `clock.test.ts`)
+- **Classes created**: `AxiosTransport`, `SystemClock`; functions `runScraper`, `main`,
+  `resolveLogger` (private)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/infra/http src/infra/clock.test.ts src/main.test.ts src/engine/ports-implementation-audit.test.ts` → 4 files, 18 tests, all passed |
+| Runtime harness command/scenario and exact result | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` → `Dry run: an estimated 41 requests, ~21s (heuristic — not a certified prediction; a saturated day issues more requests than forecast).` Created no `output/`/`logs/` directory (zero requests, by construction). The narrow live-host half of task 9.6 is explicitly deferred to the owner per this apply run's hard constraint. |
+| Rollback boundary | Delete `src/infra/http/axios-transport.ts` (+ test), `src/infra/clock.ts` (+ test), `src/main.ts` (+ test); revert `README.md` and `src/engine/ports-implementation-audit.test.ts`'s `KNOWN_DEFERRED_GAPS` back to S5d's three-entry list. S1–S5d and every other file are untouched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/infra/http/axios-transport.ts` | Created | `AxiosTransport implements HttpTransport` over axios + `axios-cookiejar-support`/`tough-cookie` |
+| `src/infra/http/axios-transport.test.ts` | Created | 7 tests against a local `node:http` stub server |
+| `src/infra/clock.ts` | Created | `SystemClock implements Clock` |
+| `src/infra/clock.test.ts` | Created | 2 tests with `vi.useFakeTimers()` |
+| `src/main.ts` | Created | `runScraper`/`main` composition root; `SystemClock`/`AxiosTransport` wired for the real CLI entry point |
+| `src/main.test.ts` | Created | 2 tests proving the wiring against `StubTransport`/`FakeClock` |
+| `src/engine/ports-implementation-audit.test.ts` | Modified | `KNOWN_DEFERRED_GAPS` shrunk from 3 entries to `['FrontierCapable']`; comment updated |
+| `README.md` | Rewritten | Lead-with-outcome restructure (`cognitive-doc-design`): Quick path, CLI bounds table, pnpm/tsx rationale, personal-data rules, event-key table, "measured, never certified," manual-smoke-only note; existing Layout/Testing sections kept |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 9.1–9.6 `[x]` with result notes; updated the S5e header, the running-estimate line, and the budget-risk row |
+
+## Issues Found (S5e)
+
+None blocking the assigned scope. See "Design decisions and deviations" above for the two
+disclosed, out-of-scope findings: the 429/5xx/timeout `transient`-classification gap in the S3/S4
+adapter modules (real, functionally significant, explicitly not fixed here), and the
+`axios-cookiejar-support` type-declaration incompatibility (fixed with a documented, narrow cast).
+
+## Workload / PR Boundary (S5e)
+
+- Mode: chained PR slice (`feature-branch-chain`), no `size:exception` needed
+- Current work unit: S5e — real transport and composition root (tasks 9.1–9.6)
+- Boundary: starts from S5d's merged state (`TRF5Site`/`TRF5Traversal` proven against fixtures
+  only); ends with `pnpm scrape`/`pnpm retry-failed` actually running end to end behind
+  `AxiosTransport` and `main.ts`. S6 (`--frontier` behavior, `FrontierCapable`) intentionally
+  not started.
+- Estimated review budget impact: 557 authored `src/` lines (`git diff --numstat`, new files
+  under `src/`, excluding `tasks.md`/`apply-progress.md`/`README.md`) against the 800-line
+  budget and the ~390 estimate — 70%/143% respectively. No exception needed.
+
+### Status (S5e)
+
+6/6 S5e tasks complete (9.1–9.6; 9.6's live-host half is owner-pending by design). `vitest run`:
+204/204 passing. `pnpm typecheck`: clean. `pnpm lint`: clean. `pnpm format:check`: clean.
+`pnpm scrape --dry-run` smoke-tested successfully. Ready for `sdd-verify`.
