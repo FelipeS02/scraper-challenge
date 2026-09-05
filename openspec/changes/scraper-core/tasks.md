@@ -11,8 +11,8 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d ~770, S5e ~390, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below |
-| 800-line budget risk | High for S5d specifically: its ~770 bottom-up estimate is 96% of the budget, and on this change every estimate has behaved as a floor. **`size:exception` granted for S5d on 2026-09-05**, joining S1, S3 and S5c. S5b stopped itself at 775 rather than overrun |
+| Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d 601 actual, S5e ~390, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below |
+| 800-line budget risk | **Resolved for S5d: landed at 601, 75% of the budget, under its own ~770 estimate** — the first slice on this change to do so. The pre-granted `size:exception` (2026-09-05) went unused; recorded for the historical record alongside S1, S3 and S5c's exceptions. S5b stopped itself at 775 rather than overrun |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S5d -> S5e -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; S5b hard-gates S5d; S5d hard-gates S5e; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
@@ -720,26 +720,35 @@ already a complete, independently testable, in-budget deliverable on its own).
 - ~~5.10~~ moved to **9.4** (S5e) — the README documents a run that must exist first.
 - ~~5.11~~ moved to **9.5** (S5e) — the layout confirmation is done once, against the final layout.
 
-## S5d: TRF5 site composition — the adapter can produce items (~770 lines)
+## S5d: TRF5 site composition — the adapter can produce items (601 authored `src/` lines actual — within budget, complete)
 
 Demonstrates: a real `SitePort` implementation, proven against redacted fixtures and the stub
 transport, closing the three-module gap S5b's apply discovered. No network, no CLI.
 
-**`size:exception` granted by the owner on 2026-09-05: S5d ships whole.** The ~770 estimate is
-96% of the 800-line budget and every estimate on this change has behaved as a floor, so expect
-this slice to land above budget. It does not carry S5b's mid-slice stop rule — run it to
-completion. See the "S5d/S5e forecast (decide before launch)" section for the reasoning and
-the declined alternative.
+**`size:exception` granted by the owner on 2026-09-05: S5d ships whole.** The ~770 estimate was
+96% of the 800-line budget; the slice landed at 601 authored lines (78% of the estimate, 75% of
+the budget) — the first slice on this change to land under its own pre-launch estimate rather
+than over it. It did not carry S5b's mid-slice stop rule — it ran to completion in one batch.
+See the "S5d/S5e forecast (decide before launch)" section for the original reasoning.
 
-- [ ] 8.1 RED `adapters/trf5/parsing/result-fragment.test.ts`: a redacted multi-row search fragment yields one row per result with its process number and opaque `ca` token, in document order; a zero-row fragment yields an empty list rather than throwing; the observed row count is reported so the engine can compare it against `resultPageCap`.
-- [ ] 8.2 GREEN add the redacted multi-row fixture (real structure, no personal data — follow the S3/S4a fixture redaction convention) and replace the zero-row `search-ok.xml` stub whose comment deferred row extraction to S4.
-- [ ] 8.3 GREEN implement `parsing/result-fragment.ts` with cheerio, mirroring `parsing/detail-page.ts`'s shape.
-- [ ] 8.4 RED `adapters/trf5/site.test.ts`: `TRF5Site.discover()` over the stub transport returns one item per parsed row with `resultCount` set from the observed row count; a saturated fragment (rows equal to `resultPageCap`) is reported as such so the engine can split rather than silently truncate.
-- [ ] 8.5 RED same file: `discover()` maps each validity-chain outcome to the D12 site-agnostic failure vocabulary — expired session, invalid reference, host fault — never to a bare status code, and never invents a `permanentError` the chain did not classify.
-- [ ] 8.6 RED same file: `fetchDocument()` composes the existing `documents.ts` fetch/decode path and returns the adapter's `DocumentRow` as `TDoc`; `reprimeSession()` re-primes and returns fresh session state without replaying the caller's request.
-- [ ] 8.7 GREEN implement the `TRF5Site` class in `adapters/trf5/site.ts` implementing `SitePort<TrfPayload, DocumentRow>`, composing `session.ts`, `search.ts`, `parsing/result-fragment.ts`, `detail.ts`, `schemas/payload.ts` and `documents.ts`. Keep the existing exported constants and id functions; delete the stale comment deferring this work to "S4b/S5".
-- [ ] 8.8 REFACTOR: confirm the ESLint seam rule still passes and that `TRF5Site` is reachable from `adapters/` only — the engine must keep importing the port, never the class.
-- [ ] 8.9 RED then GREEN `engine/ports-implementation-audit.test.ts`: every port interface exported from `engine/ports.ts` has at least one implementation outside `__fixtures__/`. Prove it detects the defect by asserting it fails for a port with fixture-only implementations before `TRF5Site` lands. This is the sibling of the reverse-coverage audit in commit `43c4bdf`: that one catches declared-but-never-wired, this one catches declared-but-never-implemented. Neither catches the other, which is why this gap survived to S5b.
+- [x] 8.1 RED `adapters/trf5/parsing/result-fragment.test.ts`: a redacted multi-row search fragment yields one row per result with its process number and opaque `ca` token, in document order; a zero-row fragment yields an empty list rather than throwing; the observed row count is reported so the engine can compare it against `resultPageCap`.
+      Result: genuine RED — `Cannot find module './result-fragment.js'` — before the module existed. See `apply-progress.md`.
+- [x] 8.2 GREEN add the redacted multi-row fixture (real structure, no personal data — follow the S3/S4a fixture redaction convention) and replace the zero-row `search-ok.xml` stub whose comment deferred row extraction to S4.
+      Result: `search-ok.xml` now carries 3 synthetic rows in real markup shape (RESEARCH.md §2 Step 3's `onclick`/`ca=` pattern); the original zero-row stub content moved to a new `search-ok-empty.xml` fixture rather than being deleted, so the "no results" case stays independently fixture-backed.
+- [x] 8.3 GREEN implement `parsing/result-fragment.ts` with cheerio, mirroring `parsing/detail-page.ts`'s shape.
+      Result: `parseResultFragment` — one cheerio pass, `SearchResultRow`/`SearchResultFragment` exported interfaces, `count` field for the engine's saturation comparison. 3/3 tests passing.
+- [x] 8.4 RED `adapters/trf5/site.test.ts`: `TRF5Site.discover()` over the stub transport returns one item per parsed row with `resultCount` set from the observed row count; a saturated fragment (rows equal to `resultPageCap`) is reported as such so the engine can split rather than silently truncate.
+      Result: genuine RED — `TRF5Site is not a constructor` — before the class existed. See `apply-progress.md`.
+- [x] 8.5 RED same file: `discover()` maps each validity-chain outcome to the D12 site-agnostic failure vocabulary — expired session, invalid reference, host fault — never to a bare status code, and never invents a `permanentError` the chain did not classify.
+      Result: covered by 3 dedicated tests (persistent session expiry, host defect, propagated per-row `invalidTokenShell`). Same RED transcript as 8.4 (all 7 new `site.test.ts` cases failed together on the missing constructor).
+- [x] 8.6 RED same file: `fetchDocument()` composes the existing `documents.ts` fetch/decode path and returns the adapter's `DocumentRow` as `TDoc`; `reprimeSession()` re-primes and returns fresh session state without replaying the caller's request.
+      Result: covered by 2 dedicated tests (302-follow fetch, and a one-priming-GET-then-no-replay reprime test). Same RED transcript as 8.4.
+- [x] 8.7 GREEN implement the `TRF5Site` class in `adapters/trf5/site.ts` implementing `SitePort<TrfPayload, DocumentRow>`, composing `session.ts`, `search.ts`, `parsing/result-fragment.ts`, `detail.ts`, `schemas/payload.ts` and `documents.ts`. Keep the existing exported constants and id functions; delete the stale comment deferring this work to "S4b/S5".
+      Result: done — 9/9 `site.test.ts` tests passing (2 pre-existing constant tests + 7 new). The stale deferral comment is gone; `resultPageCap`/`identityKeyName`/`itemId`/`documentId`/`sourceUrl` module-level exports are unchanged and now also backed by the class.
+- [x] 8.8 REFACTOR: confirm the ESLint seam rule still passes and that `TRF5Site` is reachable from `adapters/` only — the engine must keep importing the port, never the class.
+      Result: confirmed — `pnpm lint` clean; `grep -rl "TRF5Site" src` returns only `adapters/trf5/site.ts` and its own test.
+- [x] 8.9 RED then GREEN `engine/ports-implementation-audit.test.ts`: every port interface exported from `engine/ports.ts` has at least one implementation outside `__fixtures__/`. Prove it detects the defect by asserting it fails for a port with fixture-only implementations before `TRF5Site` lands. This is the sibling of the reverse-coverage audit in commit `43c4bdf`: that one catches declared-but-never-wired, this one catches declared-but-never-implemented. Neither catches the other, which is why this gap survived to S5b.
+      Result: genuine RED observed twice — first an authoring bug (`ENOENT` from an off-by-one path slice in the file walker, fixed before the audit logic was ever exercised), then the real proof: temporarily stripping `implements SitePort<...>` from `site.ts` made the audit fail naming exactly `['SitePort']` (alongside the two already-disclosed gaps), restoring it passed again. The audit's final assertion excludes three disclosed, tracked gaps — `HttpTransport`/`Clock` (S5e tasks 9.1/9.2) and `FrontierCapable` (S6, unstarted) — rather than silently ignoring them; see the "Ports-implementation audit: findings" note in `apply-progress.md`.
 
 ## S5e: Real transport and composition root — the run actually runs (~390 authored `src/` lines)
 

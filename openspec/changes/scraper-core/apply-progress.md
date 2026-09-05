@@ -15,6 +15,10 @@
 - **S5b (5.1–5.8): complete — 775 authored `src/` lines actual. (5.9–5.11): not started —
   apply stopped mid-slice on a discovered gap (`TRF5Site.discover()` needs a
   search-result-row parser no prior slice built). See "S5b" below.**
+- **S5d (8.1–8.9): complete — 601 authored `src/` lines actual, within the 800 budget (the
+  pre-granted `size:exception` went unused). Closes the `parsing/result-fragment.ts` +
+  `TRF5Site` gap S5b's apply discovered. See "S5d" below.**
+- S5e: not started (`infra/http/axios-transport.ts`, `main.ts`, README, config confirmation).
 - S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -1690,3 +1694,202 @@ is the reason this apply stopped before 5.9–5.11 rather than a defect in 5.1�
 `pnpm lint`: clean. `pnpm format:check`: clean. **Not** ready for `sdd-verify` on the whole
 S5b slice — 5.9–5.11 remain. Ready for `sdd-apply` again once the orchestrator decides how to
 scope the 5.9–5.11 follow-up (new slice vs. `size:exception` continuation of this same PR).
+
+## S5d — TRF5 site composition: the adapter can produce items
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5d-trf5-site-composition` (forked off
+`feat/scraper-core-s5b-cli-run-control`).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #12 in the chain, targeting the S5b
+branch.
+**`size:exception` granted by the owner on 2026-09-05: S5d ships whole**, no mid-slice stop
+rule. It did not need it — landed at 601/800 authored `src/` lines (75% of the budget, 78% of
+the ~770 estimate), the first slice on this change to land under its own pre-launch estimate.
+**Closes**: the `parsing/result-fragment.ts` + `TRF5Site` gap S5b's apply discovered and
+disclosed at length in the "S5b" section above (`infra/http/axios-transport.ts`, the third
+module named there, is explicitly S5e's scope, not this one's).
+
+### Completed Tasks
+
+- [x] 8.1 RED `adapters/trf5/parsing/result-fragment.test.ts` — a redacted multi-row fragment
+      yields one row per result (process number + opaque `ca` token) in document order; the
+      observed row count is reported; a zero-row fragment yields an empty list, never a throw.
+- [x] 8.2 GREEN add the redacted multi-row fixture; move the original zero-row stub content to
+      a new `search-ok-empty.xml` rather than deleting it, so "no results" stays independently
+      fixture-backed.
+- [x] 8.3 GREEN implement `parsing/result-fragment.ts` (`parseResultFragment`), mirroring
+      `parsing/detail-page.ts`'s one-cheerio-pass shape.
+- [x] 8.4 RED `adapters/trf5/site.test.ts` — `TRF5Site.discover()` returns one item per parsed
+      row with `resultCount` set from the observed row count; a saturated fragment (rows ===
+      `resultPageCap`) is reported truthfully, never silently clamped.
+- [x] 8.5 RED same file — `discover()` maps the search response's own validity-chain outcome to
+      the D12 vocabulary (`sessionExpired`/`hostDefect`), and propagates a per-row
+      `fetchDetail` failure (already D12-classified) unchanged rather than re-inventing one.
+- [x] 8.6 RED same file — `fetchDocument()` composes `documents.ts`'s fetch/decode path;
+      `reprimeSession()` issues exactly one priming GET and never replays the caller's request.
+- [x] 8.7 GREEN implement `TRF5Site` in `adapters/trf5/site.ts`, composing `session.ts`,
+      `search.ts`, `parsing/result-fragment.ts`, `detail.ts`, `schemas/payload.ts`, and
+      `documents.ts`. Deleted the stale "S4b/S5" deferral comment.
+- [x] 8.8 REFACTOR confirm the ESLint seam rule still passes and `TRF5Site` is reachable from
+      `adapters/` only.
+- [x] 8.9 RED then GREEN `engine/ports-implementation-audit.test.ts` — every behavioral port
+      has a non-fixture, non-test implementation, except three disclosed, tracked gaps.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 8.1/8.3 | `parsing/result-fragment.test.ts` | Unit (pure) | N/A (new) | ✅ `Cannot find module './result-fragment.js'` | ✅ 3/3 passed | ✅ 3 cases: multi-row order-preserving extraction, count-equals-length, zero-row list | ➖ None needed |
+| 8.4–8.6/8.7 | `site.test.ts` (7 new cases) | Unit + StubTransport | ✅ 2/2 (pre-existing constant tests) | ✅ 7/7 failed together: `TypeError: TRF5Site is not a constructor` | ✅ 9/9 passed (2 pre-existing + 7 new) | ✅ 7 cases: multi-row discover, saturated (30-row) discover, persistent session expiry, host defect, propagated per-row failure, `fetchDocument` composition, `reprimeSession` no-replay | ✅ Clean |
+| 8.9 | `engine/ports-implementation-audit.test.ts` | Unit (filesystem scan, real `src/` tree) | N/A (new) | ✅ Two genuine failures — see below | ✅ 3/3 passed | ✅ 3 cases: non-empty sanity, synthetic-mutation RED proof (`CoverageSink`-style, adapted to `SitePort`), full behavioral-port sweep | ➖ None needed |
+
+**8.9's RED transcript, in full** (this task asked for it explicitly): the first RED was an
+authoring bug, not the intended proof — `walkTsFiles`'s relative-path slicing used
+`fullPath.slice(root.length + 1)` assuming `srcRoot` had no trailing separator, but
+`fileURLToPath(new URL('..', import.meta.url))` on a file URL always resolves `'..'` to a
+directory URL (trailing slash included), so the slice cut one character too many and produced
+`ENOENT: ... 'src\dapters\trf5\classes.ts'` (the leading `a` of `adapters` silently eaten).
+Fixed by stripping the trailing separator from `srcRoot` before walking. The **second**, real
+RED is the one 8.9 asks for: with `implements SitePort<TrfPayload, DocumentRow>` temporarily
+removed from `site.ts` (`class TRF5Site {` with no `implements` clause), the third test failed
+—
+
+```
+AssertionError: expected [ 'Clock', 'FrontierCapable', …(2) ] to deeply equal [ 'Clock', 'FrontierCapable', …(1) ]
+- Expected
++ Received
+  [ "Clock", "FrontierCapable", "HttpTransport", + "SitePort" ]
+```
+
+— naming exactly `SitePort` as newly untraced, alongside the two already-disclosed gaps.
+Restoring the `implements` clause made the same test pass again. This is the literal state
+S5b's apply left the repository in (`SitePort` implemented only by `FakeSite`/`ScriptedSite`/
+`FakeNonDateSite`, all fixture- or test-file-scoped), reproduced and observed directly rather
+than only simulated via the in-memory mutation in the second test.
+
+### Ports-implementation audit: findings
+
+The audit's `BEHAVIORAL_PORTS` list (12 entries: every `engine/ports.ts` interface actually
+targeted by an `implements` clause anywhere in `src/`, verified against a full grep before
+writing the list) resolves to exactly three ports with no implementation outside
+`__fixtures__/`/`.test.ts` files, after `TRF5Site` closes the `SitePort` gap this slice targets:
+
+- **`HttpTransport`** — only `StubTransport` (`__fixtures__/stub-transport.ts`) exists. The
+  real implementation is `infra/http/axios-transport.ts`, S5e task 9.1. Explicitly out of this
+  slice's scope per the launch prompt.
+- **`Clock`** — only `FakeClock` (inside `scraper.test.ts` and `portability-non-date.test.ts`)
+  exists. The real implementation is wired inline in `main.ts`'s composition root, S5e task 9.2.
+- **`FrontierCapable`** — zero implementations anywhere, fixture or production. Phase-2 only
+  (design.md D3); S6 is entirely unstarted.
+
+All three are disclosed in the test file itself (`KNOWN_DEFERRED_GAPS`, with the exact
+follow-up task cited for each) rather than silently excluded from the scan — the audit still
+scans every behavioral port; it only tolerates these three, by name, with a reason. No new
+finding beyond the three already-named modules from the S5b discovery surfaced.
+
+### Design decisions and deviations
+
+- **A per-row `fetchDetail` failure inside `discover()`'s loop fails the WHOLE `discover()`
+  call**, returning that row's already-classified `FetchOutcome` unchanged, rather than
+  skipping the row or inventing a partial-success shape. `DiscoverResult<TItem, TDoc>` has no
+  room for "N items ok, 1 row failed" — it is one `FetchOutcome` wrapping one whole result — so
+  a partial-failure design would need a new type this slice's task list never asked for. This
+  also keeps 8.5's "never invents a `permanentError` the chain did not classify" constraint
+  trivially true: the propagated outcome is `fetchDetail`'s own return value, verbatim, never
+  reconstructed. Documented as a real design decision, not an oversight: a future slice could
+  reconsider this if a saturated day with one bad row turns out to be common enough in
+  practice to want partial results instead of a whole-cell retry.
+- **The search response's own validity classification (`classifyValidity` over
+  `buildResponseView(response)`) never reaches `invalidTokenShell`/`validData` for a search
+  fragment**, because both schemas require `isHtmlPage: true` and a `text/xml` AJAX response
+  never sets it. A genuinely successful search response (with rows, or legitimately zero rows)
+  therefore always classifies as `'unclassified'` at this point, and `discover()` treats that
+  outcome as "proceed to row parsing" rather than mapping it to `hostDefect` the way `detail.ts`
+  maps its own `'unclassified'` case. This is a **deliberate departure from `detail.ts`'s
+  precedent**, not an inconsistency: `detail.ts`'s `unclassified -> hostDefect` mapping exists
+  because a detail page has no other success schema to fall through to (`validData` already
+  covers success). A search response has no success schema in `validity-chain.ts` at all — it
+  was never meant to (design.md's validity-chain table is written for the detail page) — so
+  `'unclassified'` is the ONLY value success ever takes for a search response, and mapping it
+  to a failure would make every successful search discoverable as a false `hostDefect`.
+- **`toBrDate` (ISO `2026-09-01` -> the search form's `01/09/2026`) is new, adapter-owned logic
+  with no dedicated unit test of its own** — it is exercised indirectly through every
+  `discover()` test in `site.test.ts` (each scripts a `TraversalCursor` and asserts the whole
+  `discover()` call succeeds against fixtures that don't independently assert the wire-format
+  date string). Flagging this as a real, if minor, coverage gap: a defect in `toBrDate` alone
+  (e.g. swapped day/month) would not be caught by any test in this slice, since no test
+  inspects the actual POST body `search()` builds from `criteria.dataAutuacaoInicio`/`Fim`. A
+  follow-up could add a direct `toBrDate` unit test or extend one `site.test.ts` case to
+  inspect `transport.requests[1]?.body`.
+- **The saturated-fragment test (8.4) scripts 30 full detail-page fetches** (one per row),
+  because `TRF5Site.discover()`'s design — matching `design.md`'s Data Flow diagram exactly —
+  fetches every row's detail page before returning, so `DiscoverResult.items` is fully
+  populated by the time the engine can compare `count` against `resultPageCap`. This mirrors
+  the real site's actual behavior (a search response gives only `ca` tokens; the payload is
+  only known after a detail fetch) rather than being a test-authoring shortcut. The resulting
+  test issues 32 in-memory fixture reads (1 prime + 1 search + 30 details) — no real network
+  cost, but noted for anyone tuning this suite's runtime later.
+- **`site.test.ts`'s `searchFragment(rows)` helper builds an XML string in-test rather than
+  loading a static fixture file**, for the saturated-30-row and the single-row propagation
+  cases — a 30-row static fixture file would be pure repetition with no independent
+  informational value over the 3-row `search-ok.xml` fixture already added in 8.2. All text in
+  the generated fragment is ASCII-only, matching the project's established convention (see
+  `search-ok.xml`'s own "Consulta publica", not "pública") to avoid the ISO-8859-1/UTF-8 byte
+  mismatch trap `decodeLatin1` exists to guard against.
+
+### Test Summary
+
+- **Total tests added (S5d)**: 13 (3 `result-fragment.test.ts` + 7 new `site.test.ts` + 3
+  `ports-implementation-audit.test.ts`)
+- **Total tests passing (S5d)**: 13/13
+- **Full-suite tests passing**: 189/189 (`vitest run`), up from 176/176 at S5b's 5.1–5.8
+- **Layers used**: Unit pure (3: result-fragment), Unit + StubTransport (7: site.ts), Unit +
+  real filesystem scan of the actual `src/` tree (3: the ports-implementation audit — a
+  genuinely different layer from every prior audit in this change, which read one file
+  (`ports.ts`) rather than walking the whole tree)
+- **Pure functions/classes created**: `parseResultFragment`, `TRF5Site`, `toBrDate` (private)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/parsing src/adapters/trf5/site.test.ts src/engine/ports-implementation-audit.test.ts` → 3 files, 15 tests (3 result-fragment + 9 site.test.ts [2 pre-existing + 7 new] + 3 audit), all passed |
+| Runtime harness command/scenario and exact result | N/A — proven against redacted fixtures and `StubTransport` only, no network and no CLI (per the S5d row in `tasks.md`); `main.ts`/`pnpm scrape` composition is S5e's runtime boundary, not this slice's |
+| Rollback boundary | Delete `src/adapters/trf5/parsing/result-fragment.ts` + its test, `src/adapters/trf5/__fixtures__/search-ok-empty.xml`, `src/engine/ports-implementation-audit.test.ts`; revert `src/adapters/trf5/__fixtures__/search-ok.xml` to its S3 zero-row stub content, and revert `src/adapters/trf5/site.ts`/`site.test.ts` to S4a's declared-constants-only shape. S1–S5b and every other file are untouched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/adapters/trf5/parsing/result-fragment.ts` | Created | `parseResultFragment` — cheerio row extraction, `SearchResultRow`/`SearchResultFragment` |
+| `src/adapters/trf5/parsing/result-fragment.test.ts` | Created | 3 tests: multi-row order, observed count, zero-row list |
+| `src/adapters/trf5/__fixtures__/search-ok.xml` | Modified | Replaced the zero-row stub with a redacted 3-row search fragment |
+| `src/adapters/trf5/__fixtures__/search-ok-empty.xml` | Created | The original zero-row stub content, preserved under its own name |
+| `src/adapters/trf5/site.ts` | Modified | Added `TRF5Site implements SitePort<TrfPayload, DocumentRow>` (`discover`/`fetchDocument`/`reprimeSession`) and `TRF5SiteConfig`; deleted the stale "S4b/S5" deferral comment; existing module-level exports unchanged |
+| `src/adapters/trf5/site.test.ts` | Modified | 7 new tests covering `discover`/`fetchDocument`/`reprimeSession`; 2 pre-existing constant tests untouched |
+| `src/engine/ports-implementation-audit.test.ts` | Created | Whole-`src/`-tree `implements` scan; `BEHAVIORAL_PORTS`/`KNOWN_DEFERRED_GAPS`; sanity + RED-proof + full-sweep tests |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 8.1–8.9 `[x]` with result notes; updated the running-estimate line and the S5d budget-risk row |
+
+## Issues Found (S5d)
+
+None blocking. See "Design decisions and deviations" above for the whole-`discover()`-fails-on
+-one-bad-row design choice, the deliberate `unclassified` departure from `detail.ts`'s
+precedent, and the disclosed `toBrDate` coverage gap.
+
+## Workload / PR Boundary (S5d)
+
+- Mode: chained PR slice (`feature-branch-chain`), `size:exception` pre-granted but unused
+- Current work unit: S5d — TRF5 site composition (tasks 8.1–8.9)
+- Boundary: starts from S5b's merged state (`cli/*`, `engine/budget.ts` untouched); ends with a
+  real, fixture-proven `SitePort` implementation and the audit that guards against this exact
+  gap recurring. `infra/http/axios-transport.ts` and `main.ts` (S5e) intentionally not started.
+- Estimated review budget impact: 601 authored `src/` lines (`git diff --numstat`, new +
+  modified files under `src/`, excluding `tasks.md`/`apply-progress.md`) against the 800-line
+  budget and the ~770 estimate — 75%/78% respectively, the first under-estimate slice on this
+  change. The pre-granted `size:exception` was not needed.
+
+### Status (S5d)
+
+9/9 S5d tasks complete (8.1–8.9). `vitest run`: 189/189 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean. `pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again
+for S5e.
