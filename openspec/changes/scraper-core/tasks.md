@@ -11,10 +11,10 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~7500 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S6 ~450) — corrected running total; S5c landed above even its own ~950–1300 high-end forecast |
-| 800-line budget risk | Medium overall since the S4a/S4b split broke a four-slice overrun streak — **S5c landed at 1084, an accepted `size:exception`**, see "S5c forecast (decide before launch)" below |
+| Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d ~770, S5e ~390, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below |
+| 800-line budget risk | High for S5d specifically: its ~770 bottom-up estimate is 96% of the budget, and on this change every estimate has behaved as a floor. S5c landed at 1084 as an accepted `size:exception`; S5b stopped itself at 775 rather than repeat that |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S5d -> S5e -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; S5b hard-gates S5d; S5d hard-gates S5e; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
@@ -101,6 +101,72 @@ coverage arithmetic, checkpoint/resume, the sweep-flow document) and a contract-
 audit) — and declined in favour of a single slice. Reviewers should expect a PR well above
 800 lines and treat the two groups as separable review passes even though they land together.
 
+### S5d/S5e forecast (decide before launch)
+
+S5b's apply stopped at task 5.9 because three production modules named in `design.md` were
+never assigned a task in any slice, S1 through S6:
+
+1. `src/adapters/trf5/parsing/result-fragment.ts` (`design.md:24`) — nothing parses the AJAX
+   search response fragment into rows. `search.ts` returns the raw `HttpResponse` and stops,
+   so the process number and the opaque `ca` token are never extracted. S3's `search-ok.xml`
+   fixture is a zero-row stub whose own comment defers row extraction to S4; S4 never took it.
+2. `TRF5Site` — a class implementing `SitePort` (`discover`/`fetchDocument`/`reprimeSession`).
+   `site.ts` holds only `resultPageCap`, `identityKeyName`, `itemId`, `documentId` and
+   `sourceUrl`, plus a comment deferring the real implementation to "S4b/S5". `rg "implements
+   SitePort" src` matches the two test fixtures and nothing else.
+3. `src/infra/http/axios-transport.ts` (`design.md:25`) — the only `HttpTransport`
+   implementation in the repo is `adapters/trf5/__fixtures__/stub-transport.ts`.
+
+`TRF5Traversal` does implement `TraversalPort`; the gap is the site side only.
+
+This is the third instance of one failure class on this change, after S4c (document
+persistence) and S5a (structured logging): `design.md` names a module, no spec requirement
+demands it by name, and `tasks.md` never assigns it. The Requirement Coverage Map read 100%
+throughout because it maps requirement to slice and never port method to concrete
+implementation — and the whole suite stayed green because the fakes satisfy `SitePort`
+perfectly. A green suite over port fakes proves the engine; it never proves the composition.
+Those are two distinct audits, and this change only ever had the first. Task 8.9 adds the
+second.
+
+Bottom-up estimate for the whole remainder, summed group by group:
+
+| Group | Estimate |
+|---|---|
+| `parsing/result-fragment.ts` + tests + a redacted multi-row fixture (the current one has zero rows) | ~350 |
+| `TRF5Site` implementing all three `SitePort` methods + stub-transport-driven tests | ~350 |
+| Ports-implementation guard test (every declared port has a non-fixture implementation) | ~70 |
+| `infra/http/axios-transport.ts` (cookie jar, 302 handling, `Retry-After`) + tests | ~210 |
+| `src/main.ts` composition root + wiring tests | ~180 |
+| **Total authored `src/`** | **~1160** |
+
+README (5.10) and `openspec/config.yaml` (5.11) are excluded from that count as non-`src/`.
+
+~1160 is 45% over the 800 budget before any overrun, and on this change the measured
+overruns are S1 +97%, S2 +168%, S3 +39%, S5a +74%, with S5c landing at 1084 against its own
+~950 low end. Treating ~1160 as a floor puts the realistic band at **1160–1700**. Per the
+standing rule — split by coherent deliverable rather than raise the budget — and per the
+cached `auto-chain` delivery strategy, the remainder is split here into two slices along the
+one seam that leaves both halves independently provable:
+
+- **S5d — the adapter can produce items** (`result-fragment.ts` + `TRF5Site` + the ports
+  guard, ~770). Provable end to end against redacted fixtures and the stub transport, with
+  no network and no CLI. Closes the gap that actually blocks everything else.
+- **S5e — the run actually runs** (`axios-transport.ts` + `main.ts` + README + config
+  confirmation, ~390 authored `src/`). Thin wiring over an adapter S5d already proved.
+
+Unlike the split declined for S5b's own 5.1–5.8 block, this seam is real: S5d is fully
+testable without S5e existing, and S5e is wiring rather than logic.
+
+**Residual risk, stated rather than shaved:** S5d's ~770 is 96% of budget. If the redacted
+result fixture or the `discover()` validity-chain paths cost more than estimated, S5d will
+cross 800 the way S5b did. Two exits, and this is an owner decision before launch:
+(a) accept a `size:exception` for S5d up front, as S1, S3 and S5c each received, or (b) cut
+S5d further into `result-fragment.ts` + fixture (~350, self-contained parser work) and
+`TRF5Site` + ports guard (~420). Option (b) keeps both halves in budget but produces a first
+PR that adds a parser nothing calls yet — the exact shape the S5c review found unhelpful.
+Absent an explicit decision, S5d launches whole with the same mid-slice stop rule S5b used:
+stop and report at the budget line rather than push through.
+
 ### Suggested Work Units
 
 | Unit | Goal | Likely PR | Focused test command | Runtime harness | Rollback boundary |
@@ -115,10 +181,12 @@ audit) — and declined in favour of a single slice. Reviewers should expect a P
 | S4d | Every document-persistence test proven to detect a defect; the two behaviors S4c left uncovered done under real strict TDD | PR 8 | `vitest run src/adapters/trf5/documents.test.ts src/infra/storage/fs-document-sink.test.ts src/engine/scraper.test.ts` | N/A — CLI not wired until S5 | Revert `documents.ts` slug folding and drop the tests added here; S4c behavior is unchanged |
 | S5a | Every engine lifecycle transition observable through a port, redacted, unable to fail the run | PR 9 | `vitest run src/infra/logging src/engine/scraper.test.ts` | N/A — no CLI yet; proof is `RecordingLogger` assertions over the existing loop | Delete `src/infra/logging/*`, the `Logger` port, and the `logger` field on `ScraperConfig`; restore the `console.warn` in `infra/storage/jsonl.ts` |
 | S5c | Saturation-driven subdivision wired end to end — `split()` enqueues children, `subdivided` cells are ledgered not lost, coverage arithmetic and the partition invariant read the amended ledger correctly, resume re-splits without re-searching, the failure vocabulary and result-cap type stay site-agnostic | PR 10 | `vitest run src/engine/coverage.test.ts src/engine/scraper.test.ts src/engine/__fixtures__ src/infra/storage/jsonl-checkpoint-store.test.ts src/adapters/trf5/detail.test.ts src/adapters/trf5/documents.test.ts` | N/A — CLI not wired until S5b; proof is the engine/adapter suite plus the two fake-adapter fixtures | Delete the `subdivided` state, split-depth tracking, and checkpoint `facetValue`/`label` fields from `engine/{ports,coverage,scraper}.ts`; revert `SitePort.resultPageCap`/`CoverageRecord.declaredCap` to non-null `number`; revert `permanentError.reason`/`detail` in `engine/types.ts` and the two TRF5 construction sites; delete the non-date fake and the ports-coverage-audit test; S5a and S4d remain unaffected |
-| S5b | Bounded, forecastable, resumable CLI run end to end | PR 11 | `vitest run src/cli src/engine/budget.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/cli/*`, `src/main.ts`, `src/engine/budget.ts`; engine/adapter/logging remain independently testable |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 12 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S5b | Run bounds enforced in the engine, plus CLI argument parsing, dry-run forecast and ledger-faithful run summary as independently testable units — **not** an end-to-end runnable CLI, which needs S5d and S5e | PR 11 | `vitest run src/cli src/engine/budget.test.ts` | N/A — no composition root yet; `forecastRun` and `formatRunSummary` are driven directly in tests | Delete `src/cli/*`, `src/engine/budget.ts`; engine/adapter/logging remain independently testable |
+| S5d | A real `SitePort` implementation exists and is proven: search-result rows parsed into items, `discover`/`fetchDocument`/`reprimeSession` composed over the existing session, detail, payload and document modules, and a guard test that fails if any declared port has only fixture implementations | PR 12 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/site.test.ts src/engine/ports-implementation-audit.test.ts` | N/A — proven against redacted fixtures and the stub transport; no network | Delete `src/adapters/trf5/parsing/result-fragment.ts`, the `TRF5Site` class body and its test, and the ports-implementation audit; `site.ts`'s existing constants and id functions stay |
+| S5e | The bounded run actually runs: a real HTTP transport and the composition root that wires adapter, engine, stores and logger together behind `scrape` / `retry-failed` | PR 13 | `vitest run src/infra/http src/main.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/infra/http/axios-transport.ts` and `src/main.ts`; every unit below remains independently testable |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 14 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
-**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5c: `engine/scraper.ts`'s event emission must already exist before S5c adds new lifecycle branches (split, resume-resplit) to the same loop. S5c needs S1–S5a (it modifies `engine/{coverage,scraper,ports}.ts`, which S5a's logging already instruments and emits events through) and hard-gates S5b: `cli/summary.ts` (5.7) prints `summarizeRunCoverage`'s exact counts, so the `subdivided`-aware arithmetic and partition-invariant fixes must land before the CLI can report them honestly. S5b needs S5a and S5c. S6 is additive and may land last independently of S5b's exact merge state, but still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
+**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5c: `engine/scraper.ts`'s event emission must already exist before S5c adds new lifecycle branches (split, resume-resplit) to the same loop. S5c needs S1–S5a (it modifies `engine/{coverage,scraper,ports}.ts`, which S5a's logging already instruments and emits events through) and hard-gates S5b: `cli/summary.ts` (5.7) prints `summarizeRunCoverage`'s exact counts, so the `subdivided`-aware arithmetic and partition-invariant fixes must land before the CLI can report them honestly. S5b needs S5a and S5c. S5d follows S5b and hard-gates S5e: `main.ts` cannot compose a `SitePort` that does not exist, which is exactly where S5b's apply stopped. S5e needs S5d and closes the S5b remainder (tasks 5.9–5.11, renumbered into groups 8 and 9 below). S6 is additive but now needs S5e rather than S5b, because `scrape --frontier` runs through the same composition root; it also still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
 
 ## Requirement Coverage Map
 
@@ -133,15 +201,23 @@ by the split, so each row still resolves to the same numbered task.
 assembly land in S4a; document byte-level decoding and stable filename derivation land in S4b.
 Task numbers are again unchanged.
 
-`S5` resolves to the S5a/S5b pair: the logging port, its implementations, and the engine's
-event emission land in S5a (tasks 5.12–5.18); the CLI, its bounds, the dry-run forecast, the
-summary, and the composition root land in S5b (tasks 5.1–5.11). Task numbers are unchanged by
-this split too — 5.12–5.18 are numbered after 5.11 but execute before it.
+`S5` resolves to the S5a/S5b/S5d/S5e group: the logging port, its implementations, and the
+engine's event emission land in S5a (tasks 5.12–5.18); the CLI bounds, argument parsing,
+dry-run forecast and run summary land in S5b (tasks 5.1–5.8); the real `SitePort`
+implementation lands in S5d (tasks 8.1–8.9); the HTTP transport, composition root, README and
+config confirmation land in S5e (tasks 9.1–9.6, absorbing what were tasks 5.9–5.11). Tasks
+5.12–5.18 are numbered after 5.11 but execute before it.
+
+**Known blind spot of this map.** It maps requirement to slice, never port method to concrete
+implementation. That is how `TRF5Site`, `parsing/result-fragment.ts` and
+`infra/http/axios-transport.ts` — three modules `design.md` names — reached S5b's apply with
+no task assigned to any of them while this map still read 100%. Task 8.9 adds the missing
+audit as an executable guard rather than a convention.
 
 | Spec | Requirement | Slice |
 |---|---|---|
 | core-scraping-engine | Two-Stage Discover-Then-Fetch Execution | S2 |
-| core-scraping-engine | Payload-Generic Port Contracts | S1 |
+| core-scraping-engine | Payload-Generic Port Contracts | S1 (declared + proven against fakes) / S5d (amended: proven against the first real `SitePort` implementation, guarded by task 8.9) |
 | core-scraping-engine | Opaque Checkpoint Persistence | S2 |
 | core-scraping-engine | Enforced Adapter Seam | S1 |
 | core-scraping-engine | Bounded In-Process Worker Pool | S1 |
@@ -176,7 +252,7 @@ this split too — 5.12–5.18 are numbered after 5.11 but execute before it.
 | core-frontier-crawl | Mandatory Date Range on Seed Searches | S6 |
 | core-frontier-crawl | Documented Unmeasurable Bias | S6 |
 | trf5-adapter | Session Priming and Field Harvesting | S3 |
-| trf5-adapter | Session Expiry Detection and Re-Priming | S3 |
+| trf5-adapter | Session Expiry Detection and Re-Priming | S3 (detection + replay inside `search`) / S5d (amended: exposed through `SitePort.reprimeSession`) |
 | trf5-adapter | Complete Search Form Field Set | S3 |
 | trf5-adapter | Detail Fetch Session Requirement | S4 |
 | trf5-adapter | Document Byte-Level ISO-8859-1 Decoding | S4 |
@@ -184,8 +260,8 @@ this split too — 5.12–5.18 are numbered after 5.11 but execute before it.
 | trf5-adapter | Document Persistence to Disk | S4c |
 | core-run-control-and-output | Persisted Identifier Stability | S4c |
 | trf5-adapter | Full Field Inventory Extraction | S4 |
-| trf5-adapter | Content-Based Validity Chain | S3 (cases 2/3/5) + S4 (case 1 + valid-data) |
-| trf5-adapter | Declared Result-Page Cap and Item Identity Key | S3 (cap) / S4 (`itemId`/`sourceUrl`) |
+| trf5-adapter | Content-Based Validity Chain | S3 (cases 2/3/5) + S4 (case 1 + valid-data) / S5d (amended: classified inside `discover`/`fetchDocument` and mapped to the D12 failure vocabulary) |
+| trf5-adapter | Declared Result-Page Cap and Item Identity Key | S3 (cap) / S4 (`itemId`/`sourceUrl`) / S5d (amended: `discover` reports the observed row count against the declared cap, which is what drives saturation and split) |
 | trf5-adapter | Declared Partition Facet | S3 |
 | trf5-adapter | Judicial Record Payload Contract | S4 |
 | trf5-adapter | Declared Seed Kinds and Ranking | S6 |
@@ -602,9 +678,16 @@ result-cap type stay honest about a site that declares neither.
       Work Unit Evidence in `apply-progress.md` under "S5c follow-up: `resultCount` fabrication
       (task 7.30)".
 
-## S5b: CLI, bounds, and run control (~520 lines estimate; 775 authored `src/` lines for 5.1–5.8 alone — see the mid-slice stop below)
+## S5b: CLI bounds, argument parsing, forecast and summary (775 authored `src/` lines actual for 5.1–5.8 — within budget, complete as re-scoped)
 
-Demonstrates: a bounded, forecastable, resumable run invocable end to end from the command line.
+Demonstrates: run bounds enforced inside the engine, and the three CLI-facing units — argument
+parsing, dry-run forecast, ledger-faithful summary — each independently testable. It does
+**not** demonstrate an end-to-end runnable CLI: that needs a real `SitePort` (S5d) and a
+composition root (S5e). The original "end to end" claim here was the overclaim that hid the
+gap below.
+
+Tasks 5.9–5.11 were moved out of this slice into S5d/S5e and renumbered 8.x/9.x; they are
+listed here as pointers only, not as pending work in this slice.
 
 **Mid-slice stop (2026-09-05): tasks 5.1–5.8 complete, 775/800 authored `src/` lines
 consumed; 5.9–5.11 deliberately not started.** Task 5.9 requires building
@@ -630,9 +713,41 @@ already a complete, independently testable, in-budget deliverable on its own).
 - [x] 5.6 GREEN implement `cli/dry-run.ts`. Result: `forecastRun` — a disclosed heuristic (one search request per day, optimistic non-saturated case), never a certified prediction. 6/6 passing.
 - [x] 5.7 RED `cli/summary.test.ts`: printed summary equals the S2 ledger-derived counts exactly, no independent completeness claim. Result: genuine RED — `Cannot find module './summary.js'`.
 - [x] 5.8 GREEN implement `cli/summary.ts` (consumes `engine/coverage.ts` arithmetic). Result: `formatRunSummary` calls `summarizeRunCoverage` directly and prints its three counts verbatim; a `subdivided` record is asserted absent from the printed output (S5c's D10 exclusion, consumed not re-derived). 3/3 passing.
-- [ ] 5.9 GREEN implement `src/main.ts` composition root: wires `TRF5Site`/`TRF5Traversal` + `AxiosTransport` + JSONL stores + the redaction-wrapped `Logger` into `scrape` / `scrape --frontier` / `retry-failed`. **Blocked on the undiscovered `parsing/result-fragment.ts` gap above — not started this slice.**
-- [ ] 5.10 GREEN write README: pnpm/tsx deviation, every CLI bound, personal-data rules (including that `logs/` is git-ignored and log fields are redacted by name), the emitted event keys and how to filter them, "coverage is measured, never certified," manual-smoke-only note for 429/session-recovery against the live host. **Not started — depends on 5.9's composition root existing to document.**
-- [ ] 5.11 Confirm `openspec/config.yaml` reflects the final S1–S5b layout — including `src/infra/logging/` — and testing state (no stale `pje/`, `partition/`, `domain/` references). **Not started.**
+- ~~5.9~~ moved to **9.2** (S5e) — the composition root cannot be written before a real `SitePort` exists.
+- ~~5.10~~ moved to **9.4** (S5e) — the README documents a run that must exist first.
+- ~~5.11~~ moved to **9.5** (S5e) — the layout confirmation is done once, against the final layout.
+
+## S5d: TRF5 site composition — the adapter can produce items (~770 lines)
+
+Demonstrates: a real `SitePort` implementation, proven against redacted fixtures and the stub
+transport, closing the three-module gap S5b's apply discovered. No network, no CLI.
+
+Read the "S5d/S5e forecast (decide before launch)" section before starting: this estimate is
+96% of the 800-line budget and every estimate on this change has behaved as a floor. Apply the
+same mid-slice stop rule S5b used — stop and report at the budget line rather than push
+through — unless the owner has granted a `size:exception` up front.
+
+- [ ] 8.1 RED `adapters/trf5/parsing/result-fragment.test.ts`: a redacted multi-row search fragment yields one row per result with its process number and opaque `ca` token, in document order; a zero-row fragment yields an empty list rather than throwing; the observed row count is reported so the engine can compare it against `resultPageCap`.
+- [ ] 8.2 GREEN add the redacted multi-row fixture (real structure, no personal data — follow the S3/S4a fixture redaction convention) and replace the zero-row `search-ok.xml` stub whose comment deferred row extraction to S4.
+- [ ] 8.3 GREEN implement `parsing/result-fragment.ts` with cheerio, mirroring `parsing/detail-page.ts`'s shape.
+- [ ] 8.4 RED `adapters/trf5/site.test.ts`: `TRF5Site.discover()` over the stub transport returns one item per parsed row with `resultCount` set from the observed row count; a saturated fragment (rows equal to `resultPageCap`) is reported as such so the engine can split rather than silently truncate.
+- [ ] 8.5 RED same file: `discover()` maps each validity-chain outcome to the D12 site-agnostic failure vocabulary — expired session, invalid reference, host fault — never to a bare status code, and never invents a `permanentError` the chain did not classify.
+- [ ] 8.6 RED same file: `fetchDocument()` composes the existing `documents.ts` fetch/decode path and returns the adapter's `DocumentRow` as `TDoc`; `reprimeSession()` re-primes and returns fresh session state without replaying the caller's request.
+- [ ] 8.7 GREEN implement the `TRF5Site` class in `adapters/trf5/site.ts` implementing `SitePort<TrfPayload, DocumentRow>`, composing `session.ts`, `search.ts`, `parsing/result-fragment.ts`, `detail.ts`, `schemas/payload.ts` and `documents.ts`. Keep the existing exported constants and id functions; delete the stale comment deferring this work to "S4b/S5".
+- [ ] 8.8 REFACTOR: confirm the ESLint seam rule still passes and that `TRF5Site` is reachable from `adapters/` only — the engine must keep importing the port, never the class.
+- [ ] 8.9 RED then GREEN `engine/ports-implementation-audit.test.ts`: every port interface exported from `engine/ports.ts` has at least one implementation outside `__fixtures__/`. Prove it detects the defect by asserting it fails for a port with fixture-only implementations before `TRF5Site` lands. This is the sibling of the reverse-coverage audit in commit `43c4bdf`: that one catches declared-but-never-wired, this one catches declared-but-never-implemented. Neither catches the other, which is why this gap survived to S5b.
+
+## S5e: Real transport and composition root — the run actually runs (~390 authored `src/` lines)
+
+Demonstrates: `pnpm scrape` executing a real bounded, resumable run end to end — the claim S5b
+originally made and could not keep.
+
+- [ ] 9.1 RED then GREEN `infra/http/axios-transport.test.ts` + `axios-transport.ts`: implements `HttpTransport` over axios with `axios-cookiejar-support`/`tough-cookie` for the session cookie, follows the document 302 without losing bytes, and surfaces `Retry-After` so the existing retry policy can honor it. Tested against a local stub server or a mocked adapter — never the live TRF5 host.
+- [ ] 9.2 GREEN implement `src/main.ts` composition root (was 5.9): wires `TRF5Site`/`TRF5Traversal` + `AxiosTransport` + the JSONL stores + the redaction-wrapped `Logger` into `scrape` / `retry-failed`. `--frontier` is S6: wire the command surface only, no frontier behavior.
+- [ ] 9.3 RED `src/main.test.ts`: a run driven with a stubbed transport reaches the sinks and writes the expected envelope, proving the wiring rather than re-testing the units.
+- [ ] 9.4 GREEN write README (was 5.10): pnpm/tsx deviation, every CLI bound, personal-data rules (including that `logs/` is git-ignored and log fields are redacted by name), the emitted event keys and how to filter them, "coverage is measured, never certified," manual-smoke-only note for 429/session-recovery against the live host.
+- [ ] 9.5 Confirm `openspec/config.yaml` reflects the final layout (was 5.11) — including `src/infra/logging/` and `src/infra/http/` — and testing state (no stale `pje/`, `partition/`, `domain/` references).
+- [ ] 9.6 Manual smoke only, never automated: one `pnpm scrape --dry-run` and one narrow live run against a single day, to confirm the composition holds outside the fixtures. Record the outcome in `apply-progress.md`; do not add it to the suite.
 
 ## S6: Frontier crawl — additive, off by default (~420 lines)
 
