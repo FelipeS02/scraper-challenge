@@ -1,3 +1,4 @@
+import { classifyHttpStatus } from '../../engine/http-status.js';
 import type { HttpTransport } from '../../engine/ports.js';
 import type { FetchOutcome } from '../../engine/types.js';
 import { parseDetailPage } from './parsing/detail-page.js';
@@ -21,6 +22,13 @@ export async function fetchDetail(
   const primed = session ?? (await primeSession(transport, primingUrl));
   const detailUrl = buildDetailUrl(primed, ca);
   const response = await transport.send({ method: 'GET', url: detailUrl });
+
+  // Transport-boundary precedence (design.md "Validity chain", case 6): a
+  // 429/5xx status is protocol truth, checked before any site-content
+  // classification — never a replacement for it (S5g).
+  const statusOutcome = classifyHttpStatus(response.status, response.headers);
+  if (statusOutcome) return statusOutcome;
+
   const outcome = classifyValidity(buildResponseView(response));
 
   switch (outcome.kind) {

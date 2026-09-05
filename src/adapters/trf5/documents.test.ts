@@ -90,6 +90,21 @@ describe('buildDocumentPath — Stable Document Filename Derivation (trf5-adapte
   });
 });
 
+describe('fetchDocument — 429 precedence over the 404/302 status checks (S5g, core-resilience-policy)', () => {
+  it('classifies a stubbed 429 on the document link as transient, never as a hostDefect', async () => {
+    const transport = new StubTransport([
+      { status: 429, headers: { 'retry-after': '7' }, body: new Uint8Array() },
+    ]);
+
+    const outcome = await fetchDocument(transport, PROCESS_NUMBER, documentRow());
+
+    // Without the transport-boundary check, a status that is neither 404 nor
+    // 302 falls into the existing catch-all `hostDefect` branch — a bounded
+    // per-worker retry, never the global cooldown a real rate limit needs.
+    expect(outcome).toEqual({ kind: 'transient', status: 429, retryAfterMs: 7000 });
+  });
+});
+
 describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding)', () => {
   it('follows the 302 redirect and returns the fetched document under a stable, id-derived path', async () => {
     const transport = new StubTransport([

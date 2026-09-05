@@ -1,3 +1,4 @@
+import { classifyHttpStatus } from '../../engine/http-status.js';
 import type {
   DiscoverResult,
   HttpTransport,
@@ -99,6 +100,14 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
       criteria,
     );
     this.session = nextSession;
+
+    // Transport-boundary precedence (design.md "Validity chain", case 6): a
+    // 429/5xx status is protocol truth, checked before any site-content
+    // classification — never a replacement for it (S5g). Without this check
+    // a 429's empty body parses as a genuine zero-row result, never as the
+    // rate-limit signal it actually is.
+    const statusOutcome = classifyHttpStatus(response.status, response.headers);
+    if (statusOutcome) return statusOutcome;
 
     // The search response's own content-based classification (design.md D7):
     // a session-expiry or host-fault landing page never reaches row parsing.

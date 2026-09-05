@@ -35,6 +35,22 @@ describe('fetchDetail — Detail Fetch Session Requirement (trf5-adapter spec)',
   });
 });
 
+describe('fetchDetail — 429 precedence over content classification (S5g, core-resilience-policy)', () => {
+  it('classifies a stubbed 429 detail response as transient before the validity chain runs', async () => {
+    const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
+    const transport = new StubTransport([
+      { status: 429, headers: { 'retry-after': '2' }, body: new Uint8Array() },
+    ]);
+
+    const outcome = await fetchDetail(transport, PRIMING_URL, session, 'stub-ca-token-0001');
+
+    // Without the transport-boundary check, a 429's empty body has no detail
+    // header/parties block and lands on `invalidTokenShell` — a permanent
+    // failure masking what is actually a retryable rate-limit signal.
+    expect(outcome).toEqual({ kind: 'transient', status: 429, retryAfterMs: 2000 });
+  });
+});
+
 describe('fetchDetail — site-agnostic failure vocabulary (design.md D12)', () => {
   it('reports an invalid-token shell as permanentError:invalidReference with the site detail preserved, never a site-specific reason literal', async () => {
     const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));

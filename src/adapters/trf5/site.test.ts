@@ -186,6 +186,23 @@ describe('TRF5Site.discover — D12 site-agnostic failure vocabulary (trf5-adapt
   });
 });
 
+describe('TRF5Site.discover — 429 precedence over content classification (S5g, core-resilience-policy)', () => {
+  it('classifies a stubbed 429 search response as transient before the validity chain runs, never as an empty result set', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      { status: 429, headers: { 'retry-after': '5' }, body: new Uint8Array() },
+    ]);
+    const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+    const outcome = await site.discover(unit());
+
+    // Without the transport-boundary check, this 429's empty body parses as a
+    // genuine zero-row result (`parseResultFragment` never throws on an empty
+    // fragment) — a silent false "ok" is exactly the defect this task closes.
+    expect(outcome).toEqual({ kind: 'transient', status: 429, retryAfterMs: 5000 });
+  });
+});
+
 describe('TRF5Site.fetchDocument — composes the existing documents.ts fetch/decode path', () => {
   it('follows the 302 redirect and returns the fetched bytes', async () => {
     const transport = new StubTransport([

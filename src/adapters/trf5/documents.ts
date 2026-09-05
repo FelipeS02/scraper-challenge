@@ -1,3 +1,4 @@
+import { classifyHttpStatus } from '../../engine/http-status.js';
 import type { HttpTransport, StoredDocument } from '../../engine/ports.js';
 import type { FetchOutcome } from '../../engine/types.js';
 import { decodePercentEncodedLatin1 } from './encoding.js';
@@ -81,6 +82,12 @@ export async function fetchDocument(
 ): Promise<FetchOutcome<StoredDocument>> {
   const label = decodedLabel(doc);
   const initial = await transport.send({ method: 'GET', url: doc.downloadUrl });
+
+  // Transport-boundary precedence (design.md "Validity chain", case 6): a
+  // 429/5xx status is protocol truth, checked before the 404/302 status
+  // checks below — never a replacement for them (S5g).
+  const statusOutcome = classifyHttpStatus(initial.status, initial.headers);
+  if (statusOutcome) return statusOutcome;
 
   if (initial.status === 404) {
     // The one honest status code (docs/RESEARCH.md §5 case 4): a nonexistent
