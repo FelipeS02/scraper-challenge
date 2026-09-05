@@ -22,6 +22,21 @@ export interface ResponseView {
   readonly hasPartiesBlock: boolean;
 }
 
+/**
+ * Matches an id ending in `:<name>` (the real, server-generated-prefix shape,
+ * e.g. `id="j_id146:processoTrfViewView"`) or a bare `id="<name>"`, never a
+ * hardcoded prefix — measured live 2026-09-05 (docs/RESEARCH.md §1, §2 Step 5;
+ * see `__fixtures__/detail-page-valid.html`'s header comment). Built as a
+ * regex over the decoded body TEXT rather than a cheerio element lookup: the
+ * real container is a `<form>` nested inside an already-open RichFaces tab
+ * `<form>`, and the HTML parsing algorithm silently drops a nested `<form>`
+ * start tag, so no DOM element ever carries this id after parsing — only the
+ * raw markup does.
+ */
+function idBlockPresent(bodyText: string, name: string): boolean {
+  return new RegExp(`id="(?:[^"]*:)?${name}"`).test(bodyText);
+}
+
 export function buildResponseView(response: HttpResponse): ResponseView {
   const bodyText = decodeLatin1(response.body);
   const contentType = response.headers['content-type'] ?? null;
@@ -36,10 +51,10 @@ export function buildResponseView(response: HttpResponse): ResponseView {
     isErrorUnexpectedPage: bodyText.includes('errorUnexpected.seam'),
     hasPersistenceException: bodyText.includes('PersistenceException'),
     isHtmlPage: contentType?.includes('text/html') ?? false,
-    hasDetailHeaderBlock: bodyText.includes('id="processoTrfViewView"'),
+    hasDetailHeaderBlock: idBlockPresent(bodyText, 'processoTrfViewView'),
     hasPartiesBlock:
-      bodyText.includes('id="processoPartesPoloAtivoResumidoList"') ||
-      bodyText.includes('id="processoPartesPoloPassivoResumidoList"') ||
-      bodyText.includes('id="processoParteOutrosInteressadosResumidoList"'),
+      idBlockPresent(bodyText, 'processoPartesPoloAtivoResumidoList') ||
+      idBlockPresent(bodyText, 'processoPartesPoloPassivoResumidoList') ||
+      idBlockPresent(bodyText, 'processoParteOutrosInteressadosResumidoList'),
   };
 }
