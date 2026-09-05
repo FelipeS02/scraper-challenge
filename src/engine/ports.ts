@@ -50,7 +50,7 @@ export interface DocumentSink {
 }
 
 export interface SitePort<TItem, TDoc> {
-  readonly resultPageCap: number; // TRF5 declares 30
+  readonly resultPageCap: number | null; // TRF5 declares 30; null = no cap declared (D11)
   readonly identityKeyName: string; // TRF5 declares 'processNumber'
   itemId(item: TItem): string;
   documentId(doc: TDoc): string;
@@ -68,13 +68,14 @@ export interface RunBounds {
 
 export interface SaturationInfo {
   readonly resultCount: number;
-  readonly cap: number;
+  readonly cap: number | null;
 }
 
 export interface TraversalPort<TCursor> {
   readonly facetName: string; // TRF5 declares 'classeJudicial'
   seed(bounds: RunBounds): Promise<readonly WorkUnit<TCursor>[]>;
-  /** null = cannot subdivide further -> the engine records a `truncated` gap */
+  /** children -> the engine enqueues them and records the parent `subdivided` (D10);
+   *  null = cannot subdivide further -> the engine records a `truncated` gap */
   split(
     unit: WorkUnit<TCursor>,
     saturated: SaturationInfo,
@@ -96,8 +97,13 @@ export interface FrontierCapable<TItem, TCursor> {
 export interface CheckpointRecord {
   readonly unitKey: string;
   readonly windowKey: string;
+  // `facetValue`/`label` round-trip the rest of the opaque WorkUnit alongside
+  // `cursor`, so a `subdivided` parent can be reconstructed and re-split on
+  // resume without re-issuing its search (design.md D10, "Re-split inputs").
+  readonly facetValue: string | null;
+  readonly label: string;
   readonly cursor: unknown; // adapter-opaque, round-tripped byte-identical
-  readonly state: 'complete' | 'truncated' | 'failed';
+  readonly state: 'complete' | 'truncated' | 'failed' | 'subdivided';
   readonly observedAt: string;
 }
 
@@ -145,9 +151,9 @@ export interface CoverageRecord {
   readonly unitKey: string;
   readonly windowKey: string;
   readonly facetValue: string | null;
-  readonly state: 'complete' | 'truncated' | 'failed';
+  readonly state: 'complete' | 'truncated' | 'failed' | 'subdivided';
   readonly resultCount: number;
-  readonly declaredCap: number;
+  readonly declaredCap: number | null;
   readonly saturated: boolean;
   readonly itemSetHash: string;
   readonly observedAt: string;

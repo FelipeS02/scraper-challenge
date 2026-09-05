@@ -15,7 +15,11 @@ export type FetchOutcome<T> =
   | { readonly kind: 'hostDefect'; readonly reason: string }
   | {
       readonly kind: 'permanentError';
-      readonly reason: 'notFound' | 'invalidTokenShell' | 'schemaMismatch';
+      // Site-agnostic (design.md D12): no member here may name a concrete
+      // site's page structure, field, or observed behavior. Adapter-specific
+      // classification detail rides beside it, opaque to the engine, in `detail`.
+      readonly reason: 'notFound' | 'invalidReference' | 'schemaMismatch';
+      readonly detail: string | null;
     };
 
 /** What the retry policy decides to do with a classified `FetchOutcome`. */
