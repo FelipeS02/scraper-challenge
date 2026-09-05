@@ -41,9 +41,11 @@ function scrapeArgs(overrides: Partial<ScrapeArgs> = {}): ScrapeArgs {
 }
 
 let outputDir: string;
+let pdfsDir: string;
 
 afterEach(() => {
   rmSync(outputDir, { recursive: true, force: true });
+  if (pdfsDir) rmSync(pdfsDir, { recursive: true, force: true });
 });
 
 describe('runScraper — the composition root wiring (S5e)', () => {
@@ -58,11 +60,13 @@ describe('runScraper — the composition root wiring (S5e)', () => {
       fixtureResponse(200, 'text/html', 'detail-page-valid-no-documents.html'), // row 3 detail
     ]);
 
+    pdfsDir = mkdtempSync(join(tmpdir(), 'pje-main-test-pdfs-'));
     await runScraper(scrapeArgs(), {
       transport,
       clock: FAKE_CLOCK,
       outputDir,
       logsDir: join(outputDir, 'logs'),
+      pdfsDir,
       runId: 'test-run-1',
     });
 
@@ -90,6 +94,7 @@ describe('runScraper — the composition root wiring (S5e)', () => {
 
   it('retry-failed drives the same composition without discovery bounds', async () => {
     outputDir = mkdtempSync(join(tmpdir(), 'pje-main-retry-test-'));
+    pdfsDir = mkdtempSync(join(tmpdir(), 'pje-main-retry-test-pdfs-'));
     const transport = new StubTransport([fixtureResponse(200, 'text/html', 'priming-page-1.html')]);
 
     await runScraper(
@@ -99,6 +104,7 @@ describe('runScraper — the composition root wiring (S5e)', () => {
         clock: FAKE_CLOCK,
         outputDir,
         logsDir: join(outputDir, 'logs'),
+        pdfsDir,
         runId: randomUUID(),
       },
     );
@@ -107,5 +113,42 @@ describe('runScraper — the composition root wiring (S5e)', () => {
     // loads an empty ledger and returns without writing any item, proving the
     // retry-failed command path is wired end to end without erroring.
     expect(() => readFileSync(join(outputDir, 'items.jsonl'), 'utf-8')).toThrow();
+  });
+
+  it('persists a fetched document under pdfsDir, separate from outputDir (the real `pdfs/` layout .gitignore/README have documented since S1)', async () => {
+    outputDir = mkdtempSync(join(tmpdir(), 'pje-main-test-doc-out-'));
+    pdfsDir = mkdtempSync(join(tmpdir(), 'pje-main-test-doc-pdfs-'));
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'), // TRF5Traversal's own explicit prime
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'), // TRF5Site.discover()'s lazy internal prime
+      fixtureResponse(200, 'text/xml', 'search-ok.xml'), // 3 rows, deduped to 1 item
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'), // row 1 detail — 8 real documents
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'), // row 2 detail (same item, skipped)
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'), // row 3 detail (same item, skipped)
+      {
+        status: 302,
+        headers: { location: 'stub://pjeconsulta/bin/6799913' },
+        body: new Uint8Array(),
+      },
+      fixtureResponse(200, 'application/pdf', 'document-sample.pdf'),
+    ]);
+
+    await runScraper(scrapeArgs({ documentsPerItem: 1 }), {
+      transport,
+      clock: FAKE_CLOCK,
+      outputDir,
+      logsDir: join(outputDir, 'logs'),
+      pdfsDir,
+      runId: 'test-run-doc',
+    });
+
+    const expectedPath = join(
+      pdfsDir,
+      '0123456-78.2026.4.05.8100',
+      '6884863-despacho-inspecao---2188---inspecao-geral-ordinaria---2025.pdf',
+    );
+    expect(readFileSync(expectedPath)).toHaveLength(135);
+    // Never written under outputDir — the two roots stay separate.
+    expect(() => readFileSync(join(outputDir, '0123456-78.2026.4.05.8100'))).toThrow();
   });
 });

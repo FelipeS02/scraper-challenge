@@ -56,6 +56,15 @@ export interface RunDeps {
   readonly clock: Clock;
   readonly outputDir: string;
   readonly logsDir: string;
+  /**
+   * Root a fetched document is persisted under — its own top-level directory,
+   * never nested inside `outputDir` (`.gitignore`/README have documented a
+   * separate `pdfs/` since S1; `FsDocumentSink` was wired against
+   * `outputDir/documents` instead until this slice, a drift no test caught
+   * because no test exercised a real document fetch end to end through
+   * `main.ts`).
+   */
+  readonly pdfsDir: string;
   readonly runId: string;
 }
 
@@ -104,7 +113,7 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
     retryPolicy: RETRY_POLICY,
     clock: deps.clock,
     itemSink: new JsonlItemSink(join(deps.outputDir, 'items.jsonl')),
-    documentSink: new FsDocumentSink(join(deps.outputDir, 'documents')),
+    documentSink: new FsDocumentSink(deps.pdfsDir),
     coverageSink: new JsonlCoverageSink(join(deps.outputDir, 'coverage.jsonl')),
     checkpointStore: new JsonlCheckpointStore(join(deps.outputDir, 'state', 'checkpoints.jsonl')),
     failureLedger: new JsonlFailureLedger(join(deps.outputDir, 'state', 'failures.jsonl')),
@@ -157,6 +166,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     clock: new SystemClock(),
     outputDir: 'output',
     logsDir: 'logs',
+    pdfsDir: 'pdfs',
     runId: randomUUID(),
   });
 }
