@@ -11,7 +11,7 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~7500 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b ~520, S6 ~450) — corrected running total; S5c landed above even its own ~950–1300 high-end forecast |
+| Estimated changed lines | ~7500 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S6 ~450) — corrected running total; S5c landed above even its own ~950–1300 high-end forecast |
 | 800-line budget risk | Medium overall since the S4a/S4b split broke a four-slice overrun streak — **S5c landed at 1084, an accepted `size:exception`**, see "S5c forecast (decide before launch)" below |
 | Chained PRs recommended | Yes |
 | Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; sequential, no parallel writers) |
@@ -602,21 +602,37 @@ result-cap type stay honest about a site that declares neither.
       Work Unit Evidence in `apply-progress.md` under "S5c follow-up: `resultCount` fabrication
       (task 7.30)".
 
-## S5b: CLI, bounds, and run control (~520 lines)
+## S5b: CLI, bounds, and run control (~520 lines estimate; 775 authored `src/` lines for 5.1–5.8 alone — see the mid-slice stop below)
 
 Demonstrates: a bounded, forecastable, resumable run invocable end to end from the command line.
 
-- [ ] 5.1 RED `engine/budget.test.ts`: `--max-documents` stops further fetches once reached; `--max-items` stops discovery once reached; an omitted `--max-requests` still stops at a default ceiling; unbounded requires an explicit override flag.
-- [ ] 5.2 GREEN implement `engine/budget.ts`; wire into `engine/scraper.ts`.
-- [ ] 5.3 RED `cli/args.test.ts`: parses `--from --to --max-days --max-facet-values --max-items --max-documents(default 10) --documents-per-item --max-requests --log-level(default info) --log-format(console|jsonl, default console)`.
-- [ ] 5.4 GREEN implement `cli/args.ts`.
-- [ ] 5.5 RED `cli/dry-run.test.ts`: prints forecasted request count and duration; zero discovery requests reach the stub transport.
-- [ ] 5.6 GREEN implement `cli/dry-run.ts`.
-- [ ] 5.7 RED `cli/summary.test.ts`: printed summary equals the S2 ledger-derived counts exactly, no independent completeness claim.
-- [ ] 5.8 GREEN implement `cli/summary.ts` (consumes `engine/coverage.ts` arithmetic).
-- [ ] 5.9 GREEN implement `src/main.ts` composition root: wires `TRF5Site`/`TRF5Traversal` + `AxiosTransport` + JSONL stores + the redaction-wrapped `Logger` into `scrape` / `scrape --frontier` / `retry-failed`.
-- [ ] 5.10 GREEN write README: pnpm/tsx deviation, every CLI bound, personal-data rules (including that `logs/` is git-ignored and log fields are redacted by name), the emitted event keys and how to filter them, "coverage is measured, never certified," manual-smoke-only note for 429/session-recovery against the live host.
-- [ ] 5.11 Confirm `openspec/config.yaml` reflects the final S1–S5b layout — including `src/infra/logging/` — and testing state (no stale `pje/`, `partition/`, `domain/` references).
+**Mid-slice stop (2026-09-05): tasks 5.1–5.8 complete, 775/800 authored `src/` lines
+consumed; 5.9–5.11 deliberately not started.** Task 5.9 requires building
+`TRF5Site.discover()` — the full `SitePort<TrfPayload, DocumentRow>` implementation —
+which in turn requires a search-result-row parser (extracting `ca` tokens + result
+count from the AJAX search fragment) that **no prior slice ever built**: S3's
+`search-ok.xml` fixture is a literal zero-row stub with the comment "row extraction
+lands in S4", and every S4a/S4b/S4c apply-progress entry explicitly deferred "the full
+`SitePort` implementation" to "S5's composition-root job" without any slice ever
+returning to close this gap. This is the same shape of planning gap S4c (document
+persistence) and S5a (structured logging) each disclosed before landing — caught here,
+before apply pushed through it silently. See `apply-progress.md` for the full
+discovery, the rejected alternatives, and the recommended split (a new task range for
+`parsing/result-fragment.ts` + `TRF5Site` + `infra/http/axios-transport.ts` +
+`main.ts`, sized and reviewed independently of 5.1–5.8's CLI/bounds work, which is
+already a complete, independently testable, in-budget deliverable on its own).
+
+- [x] 5.1 RED `engine/budget.test.ts`: `--max-documents` stops further fetches once reached; `--max-items` stops discovery once reached; an omitted `--max-requests` still stops at a default ceiling; unbounded requires an explicit override flag. Result: genuine RED — `Cannot find module './budget.js'` — before `budget.ts` existed. See `apply-progress.md`.
+- [x] 5.2 GREEN implement `engine/budget.ts`; wire into `engine/scraper.ts`. Result: `Budget` (request/item/document ceilings) + `clampDateRange`; wired into the worker loop, the items loop, and the documents loop. 2 new RED-first `scraper.test.ts` tests confirm the wiring (not just the standalone unit). 8/8 `budget.test.ts` + 76/76 `engine/` passing.
+- [x] 5.3 RED `cli/args.test.ts`: parses `--from --to --max-days --max-facet-values --max-items --max-documents(default 10) --documents-per-item --max-requests --log-level(default info) --log-format(console|jsonl, default console)`. Result: genuine RED — `Cannot find module './args.js'` — before `args.ts` existed.
+- [x] 5.4 GREEN implement `cli/args.ts`. Result: zero-dependency hand-rolled `--flag value`/`--flag=value` parser; discriminated `ScrapeArgs | RetryFailedArgs`; `--max-requests unbounded` is the only override for the ceiling. 8/8 passing.
+- [x] 5.5 RED `cli/dry-run.test.ts`: prints forecasted request count and duration; zero discovery requests reach the stub transport. Result: genuine RED — `Cannot find module './dry-run.js'`. "Zero discovery requests" is proven by construction (`forecastRun`'s signature accepts no `HttpTransport`/`SitePort` at all), disclosed in `apply-progress.md` rather than asserted against a stub transport that could never have been called anyway.
+- [x] 5.6 GREEN implement `cli/dry-run.ts`. Result: `forecastRun` — a disclosed heuristic (one search request per day, optimistic non-saturated case), never a certified prediction. 6/6 passing.
+- [x] 5.7 RED `cli/summary.test.ts`: printed summary equals the S2 ledger-derived counts exactly, no independent completeness claim. Result: genuine RED — `Cannot find module './summary.js'`.
+- [x] 5.8 GREEN implement `cli/summary.ts` (consumes `engine/coverage.ts` arithmetic). Result: `formatRunSummary` calls `summarizeRunCoverage` directly and prints its three counts verbatim; a `subdivided` record is asserted absent from the printed output (S5c's D10 exclusion, consumed not re-derived). 3/3 passing.
+- [ ] 5.9 GREEN implement `src/main.ts` composition root: wires `TRF5Site`/`TRF5Traversal` + `AxiosTransport` + JSONL stores + the redaction-wrapped `Logger` into `scrape` / `scrape --frontier` / `retry-failed`. **Blocked on the undiscovered `parsing/result-fragment.ts` gap above — not started this slice.**
+- [ ] 5.10 GREEN write README: pnpm/tsx deviation, every CLI bound, personal-data rules (including that `logs/` is git-ignored and log fields are redacted by name), the emitted event keys and how to filter them, "coverage is measured, never certified," manual-smoke-only note for 429/session-recovery against the live host. **Not started — depends on 5.9's composition root existing to document.**
+- [ ] 5.11 Confirm `openspec/config.yaml` reflects the final S1–S5b layout — including `src/infra/logging/` — and testing state (no stale `pje/`, `partition/`, `domain/` references). **Not started.**
 
 ## S6: Frontier crawl — additive, off by default (~420 lines)
 

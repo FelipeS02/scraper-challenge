@@ -12,7 +12,10 @@
 - S4d (4d.1–4d.6): complete — 83 authored `src/` lines, within the 800 budget.
 - S5a (5.12–5.18): complete — 575 authored `src/` lines + 15 in `eslint.config.js`, within the 800 budget.
 - **S5c (7.1–7.29): complete — 1084 authored `src/` lines actual, accepted `size:exception` (forecast ~950–1300).**
-- S5b, S6: not started.
+- **S5b (5.1–5.8): complete — 775 authored `src/` lines actual. (5.9–5.11): not started —
+  apply stopped mid-slice on a discovered gap (`TRF5Site.discover()` needs a
+  search-result-row parser no prior slice built). See "S5b" below.**
+- S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
 
@@ -1417,3 +1420,273 @@ new ones), `pnpm typecheck`, `pnpm lint`, and `pnpm format:check` are all clean 
 
 1/1 follow-up task complete. Full suite: 149/149 passing (2 existing tests extended, no new
 `it()` blocks added). `pnpm typecheck`/`lint`/`format:check`: clean. Ready for `sdd-verify`.
+
+## S5b — CLI, bounds, and run control (partial: tasks 5.1–5.8 complete, 5.9–5.11 stopped)
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5b-cli-run-control` (forked off
+`feat/scraper-core-s5c-saturation-subdivision`, at commit `8189bf9`).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #11 in the chain, targeting the S5c
+branch.
+**Budget**: 800 authored `src/` lines for this slice. **Stopped at 775/800** after 5.1–5.8,
+before starting 5.9, per the launch prompt's explicit hard stop rule ("if mid-slice you can
+see the slice will land materially above 800 authored src lines, STOP").
+
+### Why this apply stopped mid-slice
+
+Task 5.9 reads: "GREEN implement `src/main.ts` composition root: wires `TRF5Site`/
+`TRF5Traversal` + `AxiosTransport` + JSONL stores + the redaction-wrapped `Logger` into
+`scrape` / `scrape --frontier` / `retry-failed`." Wiring `TRF5Site` requires a full
+`SitePort<TrfPayload, DocumentRow>` implementation — concretely, a `discover(unit)` method
+that: (1) builds `SearchCriteria` from a `WorkUnit`, (2) calls `search()` (already built,
+S3), (3) **parses the AJAX search-response fragment into a list of `ca` tokens plus a result
+count** — the input `classifyCellState`/`isSaturated` need to judge saturation — and (4) calls
+`fetchDetail(...)` (already built, S4a) per row to assemble the final `TrfPayload` list.
+
+Step (3) does not exist anywhere in this codebase, and was never built by any prior slice:
+
+- `src/adapters/trf5/__fixtures__/search-ok.xml` (created in S3, task 3.1) is a literal
+  zero-row stub whose only content is the comment `<!-- synthetic fixture: zero rows;
+  result-row extraction lands in S4 -->`.
+- S4a's apply-progress (task 3.10/3.11 note, reproduced there) explicitly scoped `site.ts` to
+  "the declared constants... a full `TRF5Site` class needs `TItem`/`TDoc` types that only
+  exist once S4's payload assembly lands," deferring the full implementation onward.
+- S4b's apply-progress restates: "`site.ts`'s `SitePort.fetchDocument` wiring is not touched
+  in this slice... connecting `documents.ts`'s `fetchDocument` (and `TRF5Site.discover`) to
+  the full `SitePort<TItem, TDoc>` shape is S5's composition-root job."
+- S4c's apply-progress repeats the same deferral a third time, unchanged.
+- No task in S3, S4a, S4b, S4c, S5a, or S5c ever creates `parsing/result-fragment.ts` (named
+  in `design.md`'s own module layout, line 24: `parsing/ (detail-page.ts
+  result-fragment.ts)`) or any equivalent. Grepped the whole `src/` tree for
+  `openPopUp|ca=|resultado|dataTable|parseSearch|result-fragment|ResultFragment` before
+  concluding this — the only matches are the already-known `ca=` query-parameter usages in
+  `detail.ts`/`documents.ts`/tests, none of which parse a *list* of rows out of a search
+  response.
+
+This is the same shape of planning gap S4c (document persistence never wired to disk) and
+S5a (the logging port `design.md` promised but no task ever built) each disclosed before
+landing — a component or behavior implied by `design.md`'s module layout and required by the
+literal task wording, invisible to the change's own Requirement Coverage Map because that map
+checks "requirement -> slice", not "port method -> concrete implementation." Building it
+honestly requires:
+
+1. `adapters/trf5/parsing/result-fragment.ts` — extract `ca` tokens (regex/cheerio over the
+   `openPopUp(...)` `onclick` handlers, per `docs/RESEARCH.md` Step 3) and a result count from
+   the AJAX fragment; a new redacted fixture with synthetic rows (the current `search-ok.xml`
+   has zero rows by design and cannot exercise this).
+2. `TRF5Site` (or an extension of `site.ts`) implementing `discover`/`fetchDocument`/
+   `reprimeSession` — composing `search.ts` + the new row parser + `detail.ts` per row,
+   deciding what happens when a per-row detail fetch fails mid-loop (a genuinely new adapter
+   design question, not a wiring exercise).
+3. `infra/http/axios-transport.ts` — the first real (non-stub) `HttpTransport`
+   implementation, using `axios` + `axios-cookiejar-support` + `tough-cookie` per
+   `design.md`'s module layout.
+4. `src/main.ts` itself, wiring all of the above plus the JSONL stores and the
+   redaction-wrapped `Logger`.
+
+Given 5.1–5.8 already measured 775 of the 800-line budget, and items 1–4 above are, by their
+own nature, at least as large as any single already-measured slice in this change (S3 alone,
+which built comparable session/search-composition logic, measured 835 lines), continuing
+would put this single PR at an estimated 1400–1700+ authored lines — well past even S5c's
+1084-line `size:exception`, and for a *different* deliverable than 5.1–5.8's CLI/bounds work,
+which is itself complete, independently testable, and coherent on its own (this is exactly
+the "split by coherent deliverable" standing rule the tasks.md forecast has repeated since
+S2). Stopping here rather than pushing through is what the launch prompt's hard stop rule
+asks for.
+
+**Recommendation for the orchestrator**: split S5b's remaining scope (5.9–5.11) into its own
+follow-up slice — analogous to how S4c/S4d/S5a were each spawned as their own slice when a
+planning gap was found mid-change — sized and reviewed independently of this already-complete
+CLI/bounds deliverable. `cli/args.ts`, `cli/dry-run.ts`, and `cli/summary.ts` need no further
+change to support that follow-up slice; `main.ts` will import them as-is.
+
+### Completed Tasks
+
+- [x] 5.1 RED `engine/budget.test.ts` — `--max-documents` (global ceiling) stops further
+      fetches once reached; `--max-items` stops discovery once reached; an omitted
+      `--max-requests` still stops at the default ceiling; only the literal `"unbounded"`
+      opts out; `--documents-per-item` bounds independently of the global document ceiling;
+      `clampDateRange` truncates `dateTo` rather than rejecting an oversized range.
+- [x] 5.2 GREEN implement `engine/budget.ts` (`Budget`, `unboundedBudget`, `clampDateRange`,
+      `DEFAULT_MAX_REQUESTS`, `DEFAULT_MAX_DOCUMENTS`); wired into `engine/scraper.ts` at
+      three points: the worker loop (stops pulling further units once the item or request
+      ceiling is exhausted — the whole run stops, never just one unit), the items loop (stops
+      collecting once `--max-items` is hit, the cell still proceeds to its
+      coverage/checkpoint record, never erroring the run), and the documents loop (stops
+      fetching once `--max-documents`/`--documents-per-item` is hit, a global bound checked
+      before every fetch attempt). `Budget` added as a required `ScraperConfig` field, with
+      `unboundedBudget()` as the default in `scraper.test.ts`'s `buildScraper` helper and the
+      second `new Scraper(...)` construction site in `portability-non-date.test.ts` (both
+      needed the update once `budget` became required — neither TDD-covered independently,
+      since they are test-fixture plumbing, not production behavior).
+- [x] 5.3 RED `cli/args.test.ts` — parses the complete documented flag set for `scrape`;
+      applies every documented default when a flag is omitted; requires `--from`/`--to`
+      (never implicitly unbounded); only the literal `"unbounded"` disables `--max-requests`;
+      `--dry-run` sets `dryRun: true`; an unrecognized `--log-level` is rejected;
+      `retry-failed` parses with no further flags required; an unknown command is rejected.
+- [x] 5.4 GREEN implement `cli/args.ts` — zero-dependency hand-rolled `--flag value` /
+      `--flag=value` reader (no CLI-parsing library added for a ~10-flag surface, matching
+      `design.md`'s "Declined Abstractions" ethos); `ParsedArgs = ScrapeArgs |
+      RetryFailedArgs` discriminated union on `command`.
+- [x] 5.5 RED `cli/dry-run.test.ts` — forecasts one search request per day in the optimistic
+      non-saturated case; adds forecasted detail/document requests bounded by the declared
+      `resultPageCap`; never exceeds an explicit `--max-requests`; clamps the forecasted day
+      count to `--max-days`; estimates duration from the forecasted request count and
+      politeness spacing; `printDryRunForecast` writes exactly one line carrying both numbers.
+- [x] 5.6 GREEN implement `cli/dry-run.ts` (`forecastRun`, `printDryRunForecast`) — a
+      disclosed heuristic, explicitly not a certified prediction (the same honesty the
+      project already applies to coverage arithmetic). "Zero discovery requests" holds **by
+      construction**: `forecastRun`'s signature accepts no `HttpTransport`/`SitePort`
+      argument at all, so it is structurally incapable of issuing one — this is disclosed
+      here rather than asserted against a stub transport that could never have been called
+      regardless of the implementation (see "Deviations" below).
+- [x] 5.7 RED `cli/summary.test.ts` — printed summary equals `summarizeRunCoverage`'s exact
+      counts; a `subdivided` record contributes to none of the three printed tallies (S5c's
+      D10 exclusion); only the latest observation per `unitKey` is reflected, exactly as
+      `summarizeRunCoverage` already does.
+- [x] 5.8 GREEN implement `cli/summary.ts` (`formatRunSummary`, `printRunSummary`) — calls
+      `summarizeRunCoverage` directly and prints its three counts verbatim; makes no
+      independent completeness claim.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 5.1/5.2 | `budget.test.ts` | Unit (pure) | N/A (new) | ✅ `Cannot find module './budget.js'` | ✅ 8/8 passed | ✅ 8 cases: document ceiling (global, cross-item), item ceiling, per-item document cap, default request ceiling, explicit-unbounded opt-out, `unboundedBudget()` never stops, two `clampDateRange` cases | ➖ None needed |
+| 5.2 (scraper.ts wiring) | `scraper.test.ts` (2 new tests) | Unit + in-memory engine stores | ✅ 25/25 (full pre-batch suite) | ✅ 2/2 new tests failed for the right reason (see transcript below) | ✅ 25/25 (23 pre-existing + 2 new) passed | ✅ 2 cases: max-items truncates the items loop but still proceeds to checkpoint; max-documents stops the doc loop globally, mid-item, without discarding the item | ➖ None needed |
+| 5.3/5.4 | `args.test.ts` | Unit (pure) | N/A (new) | ✅ `Cannot find module './args.js'` | ✅ 8/8 passed | ✅ 8 cases: full flag set, defaults, missing-`--from`/`--to` rejection, `unbounded` literal vs. omission, `--dry-run` presence, unrecognized `--log-level`, `retry-failed`, unknown command | ➖ None needed |
+| 5.5/5.6 | `dry-run.test.ts` | Unit (pure) | N/A (new) | ✅ `Cannot find module './dry-run.js'` | ✅ 6/6 passed | ✅ 6 cases: no-cap/no-doc baseline, cap+documents combined, `--max-requests` ceiling, `--max-days` clamp (unclamped vs. clamped), duration-from-count, single-line print output | ➖ None needed |
+| 5.7/5.8 | `summary.test.ts` | Unit (pure) | N/A (new) | ✅ `Cannot find module './summary.js'` | ✅ 3/3 passed | ✅ 3 cases: all three states plus a `subdivided` exclusion, latest-observation-per-unitKey, sink-writing variant | ➖ None needed |
+
+**5.2's wiring RED transcript** (`pnpm exec vitest run src/engine/scraper.test.ts`, before
+`budget` was read anywhere in `scraper.ts`): the "stops collecting further items" test failed
+with `AssertionError: expected [...] to have a length of 1 but got 2` (both items were
+written — the unbounded default meant nothing constrained collection yet); the "stops
+fetching further documents" test failed with `Error: no scripted fetch outcome for
+item-A:doc-2` (the loop fetched a second document the budget should have blocked, and the
+test's script only stubbed one outcome — the fetch attempt itself is the observable proof the
+ceiling was not yet enforced). Both are genuine failures for the right reason: the assertion
+each protects is exactly the behavior 5.2's GREEN step adds.
+
+### Deviations and design decisions
+
+- **`--max-requests` counts logical fetch operations (one `discover()` attempt, one
+  `fetchDocument()` attempt), not raw HTTP requests.** `TRF5Site.discover()` (not yet built —
+  see the stop discussion above) will itself compose multiple physical HTTP calls internally
+  (one search POST plus N detail GETs), which the engine's `runWithRetry` never observes
+  individually — it only sees the coarse-grained `FetchOutcome` `discover()`/`fetchDocument()`
+  return. Enforcing a true per-HTTP-request ceiling would require plumbing budget awareness
+  into the transport layer itself, which no task in this slice's scope asks for and which
+  would blur the seam between "engine-level fetch attempt" (what `Budget` tracks today) and
+  "adapter-internal request composition" (an adapter concern). This is a disclosed
+  simplification, not a silently narrower reading — `budget.test.ts`'s and `args.test.ts`'s
+  own tests describe the axis as "requests" in the CLI-facing sense the spec uses, and the
+  wiring in `scraper.ts` calls `recordRequest()` at exactly the two points where the engine
+  itself initiates a fetch.
+- **`cli/dry-run.test.ts`'s task wording ("zero discovery requests reach the stub transport")
+  is satisfied by construction, not by a stub-transport spy assertion.** `forecastRun`'s
+  signature takes only `(dateFrom, dateTo, config: DryRunConfig)` — no transport, no
+  `SitePort`, nothing capable of issuing a request exists in its call graph. A test asserting
+  "a spy transport was never called" would only prove the test harness never called it, not
+  that the *implementation* could not — the stronger, honest proof is that the function's own
+  type signature makes a discovery request structurally unreachable. This is disclosed here
+  rather than papered over with a spy-transport test that would pass trivially regardless of
+  implementation.
+- **`forecastRun`'s heuristic is deliberately optimistic and explicitly labeled as such** in
+  `printDryRunForecast`'s own output string ("heuristic — not a certified prediction").
+  Neither the spec scenario nor the task wording pins an exact formula; the chosen one (one
+  search request per day, plus `min(maxItems, days × resultPageCap)` detail requests, plus
+  `min(maxDocuments, detailRequests)` document requests, all capped by `maxRequests`) mirrors
+  the same "coverage is measured, never certified" honesty the project already applies to
+  `engine/coverage.ts`'s arithmetic — a forecast that claimed precision it cannot deliver
+  (since saturation/subdivision genuinely cannot be predicted without running discovery) would
+  be a worse defect than an honestly-labeled approximation.
+- **`--max-days`/`--max-facet-values` default to `Number.POSITIVE_INFINITY`/`20`
+  respectively when omitted**, not values pinned by any spec scenario (the two documented
+  scenarios in `core-run-control-and-output` only cover `--max-documents`/`--max-items`
+  explicitly). `Number.POSITIVE_INFINITY` for `--max-days` means "no truncation unless the
+  operator opts in," consistent with every other axis in this slice defaulting to "no cap"
+  when the CLI doesn't specify one *except* `--max-requests`, which the spec explicitly
+  requires a non-omittable default for. `20` for `--max-facet-values` is a judgment call
+  against `TRF5Traversal.split()`'s existing consumption of `bounds.maxFacetValues` (already
+  built in S3) — small enough that a saturated single day does not default to fetching and
+  spawning all ~132 classes.
+- **`Budget`'s document ceiling is enforced at the moment a fetch is *attempted*, not at the
+  moment it *succeeds*.** The spec scenario reads "WHEN the 10th document is fetched THEN no
+  further document fetches are issued" — read as counting attempts, matching
+  `scraper.ts`'s existing `document.failed`/`document.persisted` event pair, both of which
+  fire only after an attempt was already committed to.
+- **The two pre-existing `new Scraper(...)` construction sites outside `scraper.test.ts`'s
+  `buildScraper` helper** (`portability-non-date.test.ts`, both scenarios) needed a
+  `budget: unboundedBudget()` addition once `ScraperConfig.budget` became a required field.
+  This is disclosed as fixture plumbing, not independently TDD-covered — the two tests
+  already existing (from S5c) fully protect the behavior; only the construction call needed
+  updating to keep compiling/running, exactly the same category of change S5a's own
+  `buildScraper` `logger` addition needed.
+
+### Test Summary
+
+- **Total tests added (S5b, 5.1–5.8)**: 27 (8 `budget.test.ts`, 2 new `scraper.test.ts`, 8
+  `args.test.ts`, 6 `dry-run.test.ts`, 3 `summary.test.ts`)
+- **Total tests passing (S5b, 5.1–5.8)**: 27/27
+- **Full-suite tests passing**: 176/176 (`vitest run`), up from 149/149 at S5c's task 7.30
+- **Layers used**: Unit pure (25: budget, args, dry-run, summary), Unit + in-memory engine
+  stores (2: the scraper.ts wiring tests)
+- **Pure functions/classes created**: `Budget`, `unboundedBudget`, `clampDateRange`,
+  `parseArgs`, `forecastRun`, `printDryRunForecast`, `formatRunSummary`, `printRunSummary`
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/engine/budget.test.ts src/engine/scraper.test.ts src/cli` → 6 files, 42 tests, all passed |
+| Runtime harness command/scenario and exact result | N/A for 5.1–5.8 — `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (the S5b row's documented runtime harness) requires `main.ts` (task 5.9), which is deliberately not built in this batch; every scenario in 5.1–5.8 is proven at the unit level (`Budget`/`parseArgs`/`forecastRun`/`formatRunSummary` are all pure, and the `scraper.ts` wiring is proven through the existing in-memory-store engine test harness), which is this batch's actual runtime boundary |
+| Rollback boundary | Delete `src/engine/budget.ts` + its test, `src/cli/args.ts` + its test, `src/cli/dry-run.ts` + its test, `src/cli/summary.ts` + its test; revert `src/engine/scraper.ts` (the `budget` field, the three enforcement points), `src/engine/scraper.test.ts` (the `budget` import/parameter/two new tests), `src/engine/__fixtures__/portability-non-date.test.ts` (the `unboundedBudget()` additions), and `eslint.config.js` (the `src/cli/dry-run.ts`/`src/cli/summary.ts` no-console carve-out). S1–S5c are untouched — no file outside `src/engine/{budget.ts,scraper.ts,scraper.test.ts,__fixtures__/portability-non-date.test.ts}`, `src/cli/*`, and `eslint.config.js` was touched. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/budget.ts` | Created | `Budget` (request/item/document ceilings), `unboundedBudget`, `clampDateRange`, `DEFAULT_MAX_REQUESTS`, `DEFAULT_MAX_DOCUMENTS` |
+| `src/engine/budget.test.ts` | Created | 8 tests covering every `Budget` axis + `clampDateRange` |
+| `src/engine/scraper.ts` | Modified | Added `budget: Budget` to `ScraperConfig`; enforced at the worker loop, items loop, and documents loop |
+| `src/engine/scraper.test.ts` | Modified | `budget` import + optional override in `buildScraper` (default `unboundedBudget()`); 2 new tests |
+| `src/engine/__fixtures__/portability-non-date.test.ts` | Modified | Added `budget: unboundedBudget()` to both `new Scraper(...)` construction sites |
+| `src/cli/args.ts` | Created | `parseArgs` — hand-rolled flag parser, `ScrapeArgs \| RetryFailedArgs` |
+| `src/cli/args.test.ts` | Created | 8 tests covering the full flag set, defaults, and rejections |
+| `src/cli/dry-run.ts` | Created | `forecastRun`, `printDryRunForecast` |
+| `src/cli/dry-run.test.ts` | Created | 6 tests covering the forecast heuristic and print output |
+| `src/cli/summary.ts` | Created | `formatRunSummary`, `printRunSummary` |
+| `src/cli/summary.test.ts` | Created | 3 tests covering exact-arithmetic consumption and `subdivided` exclusion |
+| `eslint.config.js` | Modified | Narrow `no-console: 'off'` carve-out for exactly `src/cli/dry-run.ts` and `src/cli/summary.ts` (never a blanket `src/cli/**` allowance) |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 5.1–5.8 `[x]` with result notes; added the mid-slice-stop disclosure to the S5b section header; updated the running-estimate line |
+
+## Issues Found (S5b, 5.1–5.8)
+
+None blocking within the completed scope. The one significant finding is the 5.9 planning gap
+described at length above (a never-built search-result-row parser blocking `TRF5Site`), which
+is the reason this apply stopped before 5.9–5.11 rather than a defect in 5.1–5.8 itself.
+
+## Workload / PR Boundary (S5b, 5.1–5.8)
+
+- Mode: chained PR slice (`feature-branch-chain`)
+- Current work unit: S5b — CLI, bounds, and run control (**partial: 5.1–5.8 only**)
+- Boundary: starts from S5c's merged state (`engine/{coverage,scraper,ports}.ts` untouched
+  beyond the additive `budget` field; no prior `src/cli/` directory existed); ends with a
+  fully tested, in-budget CLI bounds/parsing/forecast/summary layer that has **no dependency
+  on `main.ts` existing** — every file in this batch is independently unit-tested and
+  importable by a future composition root without modification.
+- Estimated review budget impact: 775 authored `src/` lines (`git diff --numstat` against the
+  S5c branch tip, excluding `tasks.md`/`apply-progress.md`/`eslint.config.js`) against the
+  800-line budget for this slice — 97% consumed by 5.1–5.8 alone, before 5.9's composition
+  root (which needs a previously-unbuilt result-row parser) was even started. **Recommend the
+  orchestrator split 5.9–5.11 into its own follow-up slice** rather than raise this slice's
+  budget, consistent with the standing "split by coherent deliverable" rule already applied to
+  S2, S4, and S5 in this change.
+
+### Status (S5b, 5.1–5.8)
+
+8/11 S5b tasks complete (5.1–5.8). `vitest run`: 176/176 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean. `pnpm format:check`: clean. **Not** ready for `sdd-verify` on the whole
+S5b slice — 5.9–5.11 remain. Ready for `sdd-apply` again once the orchestrator decides how to
+scope the 5.9–5.11 follow-up (new slice vs. `size:exception` continuation of this same PR).
