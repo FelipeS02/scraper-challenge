@@ -34,3 +34,31 @@ describe('fetchDetail — Detail Fetch Session Requirement (trf5-adapter spec)',
     expect(outcome.kind).toBe('ok');
   });
 });
+
+describe('fetchDetail — site-agnostic failure vocabulary (design.md D12)', () => {
+  it('reports an invalid-token shell as permanentError:invalidReference with the site detail preserved, never a site-specific reason literal', async () => {
+    const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'detail-page-invalid-token.html'),
+    ]);
+
+    const outcome = await fetchDetail(transport, PRIMING_URL, session, 'stub-ca-token-0001');
+
+    expect(outcome).toEqual({
+      kind: 'permanentError',
+      reason: 'invalidReference',
+      detail: 'invalidTokenShell',
+    });
+  });
+
+  it('reports a schema-mismatched valid-looking page as permanentError:schemaMismatch with detail null', async () => {
+    const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'detail-page-schema-mismatch.html'),
+    ]);
+
+    const outcome = await fetchDetail(transport, PRIMING_URL, session, 'stub-ca-token-0001');
+
+    expect(outcome).toEqual({ kind: 'permanentError', reason: 'schemaMismatch', detail: null });
+  });
+});

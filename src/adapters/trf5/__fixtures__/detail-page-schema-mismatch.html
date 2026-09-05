@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <body>
+    <!--
+      Synthetic: passes the cheap pre-classification (D7) — a detail header
+      block and a parties container are both present — but the header omits
+      #numeroProcesso entirely, so parseDetailPage yields processNumber: ''.
+      payloadSchema's z.string().min(1) then fails, proving the schemaMismatch
+      branch is reachable independently of the invalidTokenShell branch
+      (design.md D12).
+    -->
+    <div id="processoTrfViewView">
+      <span id="classeJudicial">PROCEDIMENTO COMUM CÍVEL (7)</span>
+    </div>
+    <ul id="processoPartesPoloAtivoResumidoList"></ul>
+  </body>
+</html>

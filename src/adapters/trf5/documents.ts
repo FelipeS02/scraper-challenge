@@ -84,8 +84,9 @@ export async function fetchDocument(
 
   if (initial.status === 404) {
     // The one honest status code (docs/RESEARCH.md §5 case 4): a nonexistent
-    // idProcessoDocumento, never retried.
-    return { kind: 'permanentError', reason: 'notFound' };
+    // idProcessoDocumento, never retried. No adapter-owned detail beyond the
+    // site-agnostic reason itself (design.md D12).
+    return { kind: 'permanentError', reason: 'notFound', detail: null };
   }
   if (initial.status !== 302) {
     return {
@@ -114,7 +115,7 @@ export async function fetchDocument(
   try {
     fileName = buildDocumentPath(processNumber, doc.documentId, label);
   } catch {
-    return { kind: 'permanentError', reason: 'schemaMismatch' };
+    return { kind: 'permanentError', reason: 'schemaMismatch', detail: null };
   }
 
   return {

@@ -133,12 +133,23 @@ describe('fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level I
     expect(new Set(fileNames).size).toBe(3);
   });
 
-  it('maps a 404 on the document link to a permanent notFound outcome, never throwing', async () => {
+  it('maps a 404 on the document link to a permanent notFound outcome, never throwing, with detail null (design.md D12)', async () => {
     const transport = new StubTransport([{ status: 404, headers: {}, body: new Uint8Array() }]);
 
     const outcome = await fetchDocument(transport, PROCESS_NUMBER, documentRow());
 
-    expect(outcome).toEqual({ kind: 'permanentError', reason: 'notFound' });
+    expect(outcome).toEqual({ kind: 'permanentError', reason: 'notFound', detail: null });
+  });
+
+  it('maps an unsafe processNumber component to permanentError:schemaMismatch with detail null (design.md D12)', async () => {
+    const transport = new StubTransport([
+      redirectResponse('stub://pjeconsulta/documentos/bin/12196568'),
+      pdfResponse(),
+    ]);
+
+    const outcome = await fetchDocument(transport, '../../etc/passwd', documentRow());
+
+    expect(outcome).toEqual({ kind: 'permanentError', reason: 'schemaMismatch', detail: null });
   });
 
   it('ledgers an unexpected status as a hostDefect FetchOutcome instead of throwing, so the already-extracted item is not discarded', async () => {

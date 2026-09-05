@@ -30,13 +30,16 @@ export async function fetchDetail(
     case 'hostDefect':
       return { kind: 'hostDefect', reason: 'errorUnexpected.seam with PersistenceException' };
     case 'invalidTokenShell':
-      return { kind: 'permanentError', reason: 'invalidTokenShell' };
+      // Site-agnostic reason; the concrete TRF5 observation rides beside it
+      // as opaque adapter detail, never as its own engine-level literal
+      // (design.md D12).
+      return { kind: 'permanentError', reason: 'invalidReference', detail: 'invalidTokenShell' };
     case 'unclassified':
       return { kind: 'hostDefect', reason: 'unrecognized detail response' };
     case 'validData': {
       const detail = parseDetailPage(response.body);
       const payload = assembleTrfPayload(detail, detailUrl);
-      if (!payload) return { kind: 'permanentError', reason: 'schemaMismatch' };
+      if (!payload) return { kind: 'permanentError', reason: 'schemaMismatch', detail: null };
       return { kind: 'ok', value: payload };
     }
   }
