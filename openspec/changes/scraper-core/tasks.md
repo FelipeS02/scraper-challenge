@@ -11,10 +11,10 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d 601 actual, S5e 557 actual, S5f 515 actual, S5g 594 actual, S5h ~330, S5i ~300, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below, S5f is the remediation the first live run made unavoidable, and S5g closes a producer-side gap the full-change verify report found: the entire 429 mechanism is written and tested but unreachable, because no task ever assigned the adapter-side status classification that feeds it |
+| Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d 601 actual, S5e 557 actual, S5f 515 actual, S5g 594 actual, S5h ~330, S5j ~340, S5i ~300, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below, S5f is the remediation the first live run made unavoidable, and S5g closes a producer-side gap the full-change verify report found: the entire 429 mechanism is written and tested but unreachable, because no task ever assigned the adapter-side status classification that feeds it |
 | 800-line budget risk | **Resolved for S5d and S5e: both landed under budget.** S5d at 601 (75% of budget, under its own pre-granted `size:exception` and its ~770 estimate) — recorded for the historical record alongside S1, S3 and S5c's exceptions. S5e at 557 (70% of budget, 43% over its ~390 estimate but comfortably inside 800) needed no exception at all — none was pre-granted for it. S5b stopped itself at 775 rather than overrun |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S5d -> S5e -> S5f -> S5g -> S5h -> S5i -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; S5b hard-gates S5d; S5d hard-gates S5e; S5e hard-gates S5f, since only a runnable CLI could expose what S5f fixes; S5f hard-gates S5g only in sequence, not in substance — S5g is independent of the detail parser and could have run at any point after S1, which is precisely the problem it fixes; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S5d -> S5e -> S5f -> S5g -> S5h -> S5j -> S5i -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; S5b hard-gates S5d; S5d hard-gates S5e; S5e hard-gates S5f, since only a runnable CLI could expose what S5f fixes; S5f hard-gates S5g only in sequence, not in substance — S5g is independent of the detail parser and could have run at any point after S1, which is precisely the problem it fixes; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
@@ -190,8 +190,9 @@ passes even though they land together.
 | S5f | Detail parsing rebuilt against captured responses, so a live run reaches the sinks with real data — the first end-to-end proof against the actual portal | PR 14 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/schemas src/adapters/trf5/detail.test.ts` | `pnpm scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 2 --max-documents 1 --max-requests 12` — acceptance is real payloads in `output/items.jsonl` and a PDF under `pdfs/`, never a zero exit code | Revert `schemas/response-view.ts` to prefix-exact id matching and `parsing/detail-page.ts` to `#id` selectors; the captured fixtures stay, since they are evidence rather than code |
 | S5g | The 429 mechanism becomes reachable: HTTP status classified into `FetchOutcome`, `Retry-After` parsed, and a variant-construction audit that fails when any declared outcome has no production producer | PR 15 | `vitest run src/engine/http-status.test.ts src/engine/outcome-construction-audit.test.ts src/engine/scraper.test.ts src/adapters/trf5` | N/A — and deliberately so: `core-resilience-policy` REQUIRES every 429 scenario to run against a stubbed transport, never the live host. Do not provoke a real 429 against a judicial portal | Delete `src/engine/http-status.ts` and the two new audits; revert the three adapter classification call sites to content-only classification. The engine's retry/cooldown code is untouched by this slice — it was always correct, just unreachable |
 | S5h | The documents grid is read whole: every page fetched, and the grid's own declared total reconciled against what was extracted so a shortfall is reported rather than silently lost | PR 16 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/detail.test.ts` | Bounded live run against a process whose grid paginates — acceptance is extracted + skipped counts reconciling to the grid's declared total, never a zero exit code | Revert `parsing/detail-page.ts`'s `extractDocuments` to single-page extraction and drop the declared-total field; the captured multi-page fixture stays, since it is evidence rather than code |
-| S5i | The payload tells the truth about what was extracted and fetched: `fetchStatus`/`byteLength`/`fileName` reflect the real outcome, movement timestamps carry data, and document filenames stay descriptive under sanitization instead of collapsing to a bare id | PR 17 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/documents.test.ts src/engine/scraper.test.ts` | Bounded live run — acceptance is a fetched document whose payload entry shows `fetched` with a real `byteLength`, and a slug that survives a label containing `/` | Revert `deriveSlug` to whole-candidate rejection, `occurredAt` to a hardcoded null, and the document-outcome write-back in `engine/scraper.ts` |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 18 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S5j | Born-digital documents are fetched: the viewer page is read, its `Gerar PDF` submit contract harvested, and the resulting PDF verified by content before it is persisted | PR 17 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/documents.test.ts` | Bounded live run against a process carrying born-digital rows — acceptance is real PDF bytes under `pdfs/` for one such document, never a zero exit code | Revert `documents.ts` to the legacy `idBin` path only and delete `parsing/document-viewer.ts`; the captured viewer and PDF fixtures stay, since they are evidence rather than code |
+| S5i | The payload tells the truth about what was extracted and fetched: `fetchStatus`/`byteLength`/`fileName` reflect the real outcome, movement timestamps carry data, and document filenames stay descriptive under sanitization instead of collapsing to a bare id | PR 18 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/documents.test.ts src/engine/scraper.test.ts` | Bounded live run — acceptance is a fetched document whose payload entry shows `fetched` with a real `byteLength`, and a slug that survives a label containing `/` | Revert `deriveSlug` to whole-candidate rejection, `occurredAt` to a hardcoded null, and the document-outcome write-back in `engine/scraper.ts` |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 19 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
 **Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5c: `engine/scraper.ts`'s event emission must already exist before S5c adds new lifecycle branches (split, resume-resplit) to the same loop. S5c needs S1–S5a (it modifies `engine/{coverage,scraper,ports}.ts`, which S5a's logging already instruments and emits events through) and hard-gates S5b: `cli/summary.ts` (5.7) prints `summarizeRunCoverage`'s exact counts, so the `subdivided`-aware arithmetic and partition-invariant fixes must land before the CLI can report them honestly. S5b needs S5a and S5c. S5d follows S5b and hard-gates S5e: `main.ts` cannot compose a `SitePort` that does not exist, which is exactly where S5b's apply stopped. S5e needs S5d and closes the S5b remainder (tasks 5.9–5.11, renumbered into groups 8 and 9 below). S5f follows S5e and could not have preceded it: only a runnable CLI could reach the live host, and only the live host could show that the trigger mechanism, the row selectors and the detail-page selectors were invented. S5g follows S5f in sequence only. Unlike every other ordering constraint above, this one is not substantive: S5g touches neither the detail parser nor the CLI, and could have run at any point after S1 — the engine side it feeds has been complete and green since then. It is ordered last because that is when the gap was found, not because anything gated it. S6 is additive but now needs S5f rather than S5e — a frontier pass harvests seeds from parsed items, so it is pointless until the detail parser reads real pages; it also still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`). S5h follows S5g and is data-loss remediation, not new capability: the documents grid paginates and only page 1 was ever read. It hard-gates S5i only in sequence — S5i's payload-fidelity work touches the same `extractDocuments`/`documents.ts` surface, so running them in parallel would put two writers on one file. S6 SHOULD NOT start before S5g: a frontier crawl is the widest live traffic this scraper can generate, and it must not be the first thing to discover that the global cooldown never trips.
 
@@ -943,6 +944,57 @@ Do not hand-write a second page.
 
 - The parties and movements grids paginate through the same component. This slice fixes only the documents grid; whether those lists ever exceed one page is unmeasured, and pretending otherwise would be another conclusion outrunning its evidence. Record what the captured totals show.
 - Everything already disclosed in S5f, S5g and S5i's scope.
+
+## S5j: Born-digital documents — the PDFs we were leaving behind (~340 lines)
+
+Demonstrates: the documents this scraper has been declaring unfetchable are fetched.
+
+**Why this slice exists, and the correction it rests on.** Four artifacts in this repository
+asserted that a born-digital document has "no PDF at all": `docs/RESEARCH.md`,
+`parsing/detail-page.ts`'s `extractDocuments` comment, the `detail-page-valid.html` fixture
+header, and this change's own design decision D14. **All four were wrong**, and the evidence
+that corrects them came from reading the viewer page in a browser, not from any test.
+
+The viewer renders a `Gerar PDF` JSF command link:
+
+```html
+<a id="j_id42:downloadPDF" href="#" title="Imprimir" onclick="… jsfcljs(
+  document.getElementById('j_id42'),
+  {'j_id42:downloadPDF':'j_id42:downloadPDF',
+   'ca':'0f62c432…',
+   'idProcDocBin':'11492580'},'') …">Gerar PDF</a>
+```
+
+`jsfcljs` is JSF's client-side form-submit helper: it injects those parameters into form
+`j_id42` and POSTs it. The response is a real PDF.
+
+**The trap this slice exists to respect.** The PDF is keyed on `idProcDocBin`, and
+`idProcDocBin` is **not** `idProcessoDoc`. One observed document carries
+`idProcessoDoc=11688717` on its viewer link and `idProcDocBin=11492580` on its PDF button,
+under an identical `ca`. Neither derives from the other, and `idProcDocBin` appears **nowhere**
+on the detail page — verified: the captured `detail-page-valid.html` holds four born-digital
+rows and zero occurrences of the string. So retrieval is necessarily two-step, and any
+attempt to shortcut it by reusing `idProcessoDoc` is the "invent HOW the site works" failure
+S5f exists to prevent. Design decision D14 now records this. **Implement it; do not redesign.**
+
+**Scale.** In the one captured process, 4 of 12 documents are born-digital — a third of that
+process's documents, silently absent from every run so far. `docs/RESEARCH.md` already warns
+that a process whose documents are *entirely* born-digital yields zero fetchable documents;
+`0008256-27.2005.4.05.8100` came back with zero and is an untested candidate for exactly that.
+
+**S5f's standing rule is in force**: every fixture is a redacted cut of a captured live
+response. The viewer page has never been captured.
+
+- [ ] 5j.1 Capture and redact `document-viewer-born-digital.html` — the `documentoSemLoginHTML.seam` viewer response — and the PDF response its `Gerar PDF` POST returns. Redact every `ca` token per the fixtures README checklist; keep document/bin ids verbatim per the S4b precedent already recorded in the fixture header.
+- [ ] 5j.2 RED `parsing/document-viewer.test.ts`: the `Gerar PDF` submit contract is harvested from the captured viewer — form id, the command-link parameter name, `ca`, and `idProcDocBin` — never assembled from a guessed parameter name and never by reusing `idProcessoDoc`.
+- [ ] 5j.3 GREEN implement the harvest. Match by id suffix, per the S5f rule: JSF renders server-generated prefixes, so `j_id42` is not a stable literal to hardcode.
+- [ ] 5j.4 RED then GREEN: a born-digital row's PDF is fetched through the two-step flow in `documents.ts`, returning the same `StoredDocument` shape the legacy `idBin` path returns, so `DocumentSink` and the failure ledger need no new case.
+- [ ] 5j.5 RED then GREEN: the response is verified to actually be a PDF by content, not by status or `Content-Type` alone — this host answers 200 for most failures (`docs/RESEARCH.md` §5), so a viewer page returned in place of a PDF must classify as a failure, never persist as a document. The captured PDF fixture and the captured HTML viewer are both available to prove each branch.
+- [ ] 5j.6 RED then GREEN: a born-digital document that cannot be fetched is ledgered without discarding the already-extracted item — the same rule S4b established for legacy documents, proven again on this path rather than assumed to carry over.
+- [ ] 5j.7 GREEN correct all four artifacts that assert "no PDF at all": `docs/RESEARCH.md`, `parsing/detail-page.ts`'s comment, the `detail-page-valid.html` fixture header, and D14's prose if any residue remains. Record how the correction was found — a claim repeated in four places was never re-tested once.
+- [ ] 5j.8 Live acceptance run recorded in `apply-progress.md`, against a process with born-digital rows: passing means a born-digital document lands under `pdfs/` with real PDF bytes and its payload entry reads `fetched`. **Never a zero exit code.**
+
+**Known follow-up this slice deliberately does NOT take**: whether "born-digital" is the correct *explanation* for the two shapes is still unverified. What is measured is the markup shape and the response; the name is an inherited hypothesis. Do not deepen the inference — record the observable and move on.
 
 ## S5i: Payload fidelity and descriptive filenames (~300 lines)
 
