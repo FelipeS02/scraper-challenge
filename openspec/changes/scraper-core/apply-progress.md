@@ -1208,6 +1208,17 @@ substituted by an equivalent-strength mutation audit," never a silent claim of c
 
 ### Design decisions and deviations
 
+- **Correction, added by a later S5c follow-up session (see "S5c follow-up: `resultCount`
+  fabrication" at the end of this section):** the claim immediately below was inaccurate. A real
+  deviation from `design.md` D10 existed in the code this session reviewed — `run()`'s resume
+  loop fabricated `SaturationInfo.resultCount` from the declared cap instead of the observed
+  count, and `design.md`'s own "Re-split inputs" row described a mechanism
+  (`CoverageSink.load()`) that has never existed. Neither was introduced by this session, but
+  the claim that no deviation existed was wrong: the deviation was there, unnoticed by this
+  session's own mutation audit (which targeted the *behaviors* the existing tests already
+  covered, not the resume loop's un-asserted `saturated` argument), and was found by a
+  subsequent `sdd-verify` review, not by apply. The original sentence is preserved below,
+  unedited, as an honest record of what this session believed at the time:
 - **No implementation deviation from `design.md` D10–D12 was found or introduced by this
   session.** Every mutation in the audit above targeted the *existing* implementation exactly
   as this slice's predecessor left it; none required a design correction to make the covering
@@ -1310,3 +1321,99 @@ type-system-enforced half of the site-agnostic-vocabulary requirement (mutation 
 `pnpm lint`: clean. `pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again
 for S5b (S5b requires this slice's amended `summarizeRunCoverage`/`verifyPartitionInvariant`
 arithmetic, which now exists and is mutation-audited).
+
+### S5c follow-up: `resultCount` fabrication (task 7.30)
+
+**Found by a subsequent `sdd-verify` review of this slice, not by this apply session.** The
+review verified `run()`'s resume loop (`scraper.ts`, then lines ~125–129) and found it fabricated
+`SaturationInfo.resultCount` by passing the site's declared cap (`cap ?? 0`) as if it were the
+observed result count:
+
+```ts
+const cap = this.config.site.resultPageCap;
+const children = await this.config.traversal.split(reconstructed, {
+  resultCount: cap ?? 0,
+  cap,
+});
+```
+
+This substitution is usually harmless for a saturated TRF5 cell, whose result count equals its
+cap by definition, but it is wrong for any site whose search reports more matches than it
+displays — a real coverage number silently replaced by a plausible-looking one, which
+contradicts this project's central claim that it never fabricates coverage numbers.
+
+**Design.md's own "Re-split inputs" row was also wrong, independent of the code.** It stated
+`SaturationInfo` "is read off the parent's own `subdivided` coverage record." `CoverageSink`
+(`engine/ports.ts`) has only ever declared `write(record)`, never `load()`, and `CoverageRecord`
+carries no way back into the resume path — the design named a mechanism that does not exist.
+
+**Fix, strict-TDD (RED observed, quoted, before GREEN):**
+
+1. Extended the existing `scraper.test.ts` test "persists facetValue and label alongside
+   cursor..." with `resultCount: 1` in the `toMatchObject` assertion on the checkpoint written
+   by a normal run. Extended the existing test "resumes a subdivided checkpoint by
+   re-splitting it directly..." with a checkpoint `resultCount: 7` (deliberately greater than
+   the site's declared cap of 5, so a fabricated cap cannot pass by coincidence) and a new
+   assertion `expect(traversal.splitCalls[0]?.saturated).toEqual({ resultCount: 7, cap: 5 })`.
+2. Ran `pnpm exec vitest run src/engine/scraper.test.ts` against the unmodified implementation.
+   Both assertions failed genuinely:
+   ```
+   AssertionError: expected { unitKey: 'A', …(6) } to match object { unitKey: 'A', …(3) }
+   -   "resultCount": 1,
+
+   AssertionError: expected { resultCount: 5, cap: 5 } to deeply equal { resultCount: 7, cap: 5 }
+   -   "resultCount": 7,
+   +   "resultCount": 5,
+   ```
+   The second failure is the exact defect: the resume loop handed the fabricated cap (5) where
+   the persisted observation (7) belonged.
+3. GREEN: added `resultCount: number` to `CheckpointRecord` (`engine/ports.ts`), populated it at
+   the `checkpointStore.put(...)` call site in `processUnit` from the already-in-scope
+   `discoverResult.value.count`, and changed the resume loop to pass `checkpoint.resultCount`
+   instead of `cap ?? 0`. Re-ran the same focused test: both assertions passed. Updated the four
+   other `CheckpointRecord` literal construction sites (`jsonl-checkpoint-store.test.ts` ×3,
+   `persisted-identifier-stability.test.ts` ×1) to supply the now-required field, with no
+   behavioral change to those tests.
+4. Corrected `design.md`'s "Re-split inputs" row and its `CheckpointRecord` comment to describe
+   the mechanism that actually exists: `resultCount` is the third field the checkpoint persists,
+   reconstructed on resume alongside `cursor`/`facetValue`/`label`; `cap` is read live from
+   `SitePort.resultPageCap` (a static site property, not run history) and is never itself
+   persisted. `CoverageSink.load()` was not invented — the checkpoint was already the correct
+   home, since the resume path already reads it for `cursor`/`facetValue`/`label`.
+
+#### TDD Cycle Evidence (task 7.30)
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 7.30 | `src/engine/scraper.test.ts` | Unit (in-memory engine stores) | ✅ 149/149 (full suite, pre-change) | ✅ Written — quoted failure above | ✅ Passed — `vitest run src/engine/scraper.test.ts` 23/23 | ✅ 2 cases (write-site population; resume-loop consumption), each a distinct causal step in the same defect | ➖ None needed — the two fixes are each a one-line change at an already-clear call site |
+
+#### Work Unit Evidence (task 7.30)
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/engine/scraper.test.ts` → 23/23 passing (was 21/23 before the GREEN fix, with the 2 failures quoted above) |
+| Runtime harness command/scenario and exact result | N/A — same as the rest of S5c: CLI not wired until S5b; proof is the in-memory engine-store test above |
+| Rollback boundary | Revert `resultCount: number` from `CheckpointRecord` (`engine/ports.ts`), the `resultCount,` addition to the `checkpointStore.put(...)` call and the `checkpoint.resultCount` read in the resume loop (`engine/scraper.ts`), the two extended assertions in `scraper.test.ts`, and the four now-required-field additions in `jsonl-checkpoint-store.test.ts`/`persisted-identifier-stability.test.ts`; every other S5c file is unaffected |
+
+#### Files Changed (task 7.30)
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/ports.ts` | Modified | Added `resultCount: number` to `CheckpointRecord`, commented in the same style as `facetValue`/`label` |
+| `src/engine/scraper.ts` | Modified | `processUnit`'s `checkpointStore.put(...)` now includes `resultCount` (the already-in-scope observed count); the resume loop in `run()` passes `checkpoint.resultCount` instead of `cap ?? 0` |
+| `src/engine/scraper.test.ts` | Modified | Extended two existing tests with RED-first assertions on the persisted and resumed `resultCount` |
+| `src/infra/storage/jsonl-checkpoint-store.test.ts` | Modified | Added `resultCount` to 4 pre-existing `CheckpointRecord` literals for type-correctness; no behavioral change |
+| `src/adapters/trf5/persisted-identifier-stability.test.ts` | Modified | Added `resultCount` to 1 pre-existing `CheckpointRecord` literal for type-correctness; no behavioral change |
+| `openspec/changes/scraper-core/design.md` | Modified | Corrected the `CheckpointRecord` comment and the "Re-split inputs" row to describe the actual mechanism, not a `CoverageSink.load()` that never existed |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Added task 7.30, marked `[x]`, with a result note |
+
+#### Issues Found (task 7.30)
+
+The defect and the `design.md` inaccuracy are both described above. No further issue found:
+`pnpm test` (149/149 — both new assertions extended existing `it()` blocks rather than adding
+new ones), `pnpm typecheck`, `pnpm lint`, and `pnpm format:check` are all clean after the fix.
+
+#### Status (task 7.30)
+
+1/1 follow-up task complete. Full suite: 149/149 passing (2 existing tests extended, no new
+`it()` blocks added). `pnpm typecheck`/`lint`/`format:check`: clean. Ready for `sdd-verify`.

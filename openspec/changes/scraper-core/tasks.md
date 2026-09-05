@@ -582,6 +582,25 @@ result-cap type stay honest about a site that declares neither.
       Result: done — all 25 symbols exported from `engine/ports.ts` trace to at least one named
       requirement; no untraced symbol was found. See "Reverse-coverage audit: findings" in
       `apply-progress.md`.
+- [x] 7.30 **Follow-up, found by `sdd-verify`, not by this slice's own apply session**: `run()`'s
+      resume loop (`engine/scraper.ts`) fabricated `SaturationInfo.resultCount` by passing the
+      site's declared cap (`cap ?? 0`) instead of the parent's actually observed result count;
+      `design.md`'s "Re-split inputs" row also described an impossible mechanism (reading
+      `SaturationInfo` off the coverage ledger, which `CoverageSink` cannot do — it has no
+      `load()`). RED-first: extended `scraper.test.ts`'s "persists facetValue and label
+      alongside cursor" test with a `resultCount` assertion, and its "resumes a subdivided
+      checkpoint..." test with a checkpoint `resultCount: 7` deliberately greater than the
+      site's cap (5) plus an assertion on the exact `SaturationInfo` passed to `split()`; both
+      failed genuinely against the unmodified implementation. GREEN: added `resultCount: number`
+      to `CheckpointRecord` (`engine/ports.ts`), populated it at the `checkpointStore.put(...)`
+      call site in `processUnit` from `discoverResult.value.count`, and changed the resume loop
+      to read `checkpoint.resultCount`. Corrected `design.md`'s row and `CheckpointRecord`
+      comment to describe checkpoint-based reconstruction, not a `CoverageSink.load()` that was
+      never built.
+      Result: done — 149/149 tests green (2 existing tests extended, no new `it()` blocks),
+      `pnpm typecheck`/`lint`/`format:check` clean. Full RED transcript, TDD Cycle Evidence, and
+      Work Unit Evidence in `apply-progress.md` under "S5c follow-up: `resultCount` fabrication
+      (task 7.30)".
 
 ## S5b: CLI, bounds, and run control (~520 lines)
 
