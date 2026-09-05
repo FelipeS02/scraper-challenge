@@ -11,10 +11,10 @@ re-estimated below. S1 is recorded as an accepted `size:exception`.
 | Field | Value |
 |---|---|
 | Per-slice review budget | 800 changed lines (raised from 400) |
-| Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d 601 actual, S5e 557 actual, S5f 515 actual, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below, and S5f is the remediation the first live run made unavoidable |
+| Estimated changed lines | ~8400 authored (S1 749 actual, S2a 808 actual, S2b 663 actual, S3 835 actual, S4a 729 actual, S4b 266 actual, S4c 409 actual, S4d 83 actual, S5a 575 actual, S5c 1084 actual, S5b 775 actual for tasks 5.1–5.8 only — apply stopped mid-slice on a discovered gap, see the S5b section, S5d 601 actual, S5e 557 actual, S5f 515 actual, S5g ~280, S6 ~450) — corrected running total; the S5d/S5e pair is work no earlier slice ever assigned, see "S5d/S5e forecast (decide before launch)" below, S5f is the remediation the first live run made unavoidable, and S5g closes a producer-side gap the full-change verify report found: the entire 429 mechanism is written and tested but unreachable, because no task ever assigned the adapter-side status classification that feeds it |
 | 800-line budget risk | **Resolved for S5d and S5e: both landed under budget.** S5d at 601 (75% of budget, under its own pre-granted `size:exception` and its ~770 estimate) — recorded for the historical record alongside S1, S3 and S5c's exceptions. S5e at 557 (70% of budget, 43% over its ~390 estimate but comfortably inside 800) needed no exception at all — none was pre-granted for it. S5b stopped itself at 775 rather than overrun |
 | Chained PRs recommended | Yes |
-| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S5d -> S5e -> S5f -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; S5b hard-gates S5d; S5d hard-gates S5e; S5e hard-gates S5f, since only a runnable CLI could expose what S5f fixes; sequential, no parallel writers) |
+| Suggested split | S1 -> S2a -> S2b -> S3 -> S4a -> S4b -> S4c -> S4d -> S5a -> S5c -> S5b -> S5d -> S5e -> S5f -> S5g -> S6 (S1+S2a+S2b hard-gate S3; S5a hard-gates S5c; S5c hard-gates S5b; S5b hard-gates S5d; S5d hard-gates S5e; S5e hard-gates S5f, since only a runnable CLI could expose what S5f fixes; S5f hard-gates S5g only in sequence, not in substance — S5g is independent of the detail parser and could have run at any point after S1, which is precisely the problem it fixes; sequential, no parallel writers) |
 | Delivery strategy | auto-chain |
 | Chain strategy | feature-branch-chain — PR #1 targets `feat/scraper-core`; each child PR targets the previous PR branch; only the tracker merges to `main` |
 
@@ -188,9 +188,10 @@ passes even though they land together.
 | S5d | A real `SitePort` implementation exists and is proven: search-result rows parsed into items, `discover`/`fetchDocument`/`reprimeSession` composed over the existing session, detail, payload and document modules, and a guard test that fails if any declared port has only fixture implementations | PR 12 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/site.test.ts src/engine/ports-implementation-audit.test.ts` | N/A — proven against redacted fixtures and the stub transport; no network | Delete `src/adapters/trf5/parsing/result-fragment.ts`, the `TRF5Site` class body and its test, and the ports-implementation audit; `site.ts`'s existing constants and id functions stay |
 | S5e | The bounded run actually runs: a real HTTP transport and the composition root that wires adapter, engine, stores and logger together behind `scrape` / `retry-failed` | PR 13 | `vitest run src/infra/http src/main.test.ts` | `pnpm scrape --dry-run --from 2026-01-01 --to 2026-01-01` (stubbed in tests; live-host smoke is manual only, never automated) | Delete `src/infra/http/axios-transport.ts` and `src/main.ts`; every unit below remains independently testable |
 | S5f | Detail parsing rebuilt against captured responses, so a live run reaches the sinks with real data — the first end-to-end proof against the actual portal | PR 14 | `vitest run src/adapters/trf5/parsing src/adapters/trf5/schemas src/adapters/trf5/detail.test.ts` | `pnpm scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 2 --max-documents 1 --max-requests 12` — acceptance is real payloads in `output/items.jsonl` and a PDF under `pdfs/`, never a zero exit code | Revert `schemas/response-view.ts` to prefix-exact id matching and `parsing/detail-page.ts` to `#id` selectors; the captured fixtures stay, since they are evidence rather than code |
-| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 15 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
+| S5g | The 429 mechanism becomes reachable: HTTP status classified into `FetchOutcome`, `Retry-After` parsed, and a variant-construction audit that fails when any declared outcome has no production producer | PR 15 | `vitest run src/engine/http-status.test.ts src/engine/outcome-construction-audit.test.ts src/engine/scraper.test.ts src/adapters/trf5` | N/A — and deliberately so: `core-resilience-policy` REQUIRES every 429 scenario to run against a stubbed transport, never the live host. Do not provoke a real 429 against a judicial portal | Delete `src/engine/http-status.ts` and the two new audits; revert the three adapter classification call sites to content-only classification. The engine's retry/cooldown code is untouched by this slice — it was always correct, just unreachable |
+| S6 | Optional, off-by-default second-pass frontier crawl over persisted seeds | PR 16 | `vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts` | `pnpm scrape --frontier --dry-run` (manual smoke only; additive, off by default) | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`; phase-1 scrape unaffected |
 
-**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5c: `engine/scraper.ts`'s event emission must already exist before S5c adds new lifecycle branches (split, resume-resplit) to the same loop. S5c needs S1–S5a (it modifies `engine/{coverage,scraper,ports}.ts`, which S5a's logging already instruments and emits events through) and hard-gates S5b: `cli/summary.ts` (5.7) prints `summarizeRunCoverage`'s exact counts, so the `subdivided`-aware arithmetic and partition-invariant fixes must land before the CLI can report them honestly. S5b needs S5a and S5c. S5d follows S5b and hard-gates S5e: `main.ts` cannot compose a `SitePort` that does not exist, which is exactly where S5b's apply stopped. S5e needs S5d and closes the S5b remainder (tasks 5.9–5.11, renumbered into groups 8 and 9 below). S5f follows S5e and could not have preceded it: only a runnable CLI could reach the live host, and only the live host could show that the trigger mechanism, the row selectors and the detail-page selectors were invented. S6 is additive but now needs S5f rather than S5e — a frontier pass harvests seeds from parsed items, so it is pointless until the detail parser reads real pages; it also still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`).
+**Hard ordering**: S1, S2a and S2b must all land before S3 starts (chain is sequential, not parallelizable across writers). S2b depends on S2a's stores. S3 before S4a (detail parsing needs the validity-chain skeleton). S4b depends on S4a: the document list it fetches from is extracted by S4a's parser, and a ledgered document failure must not discard S4a's already-extracted item. S4c depends on S4b: it replaces that slice's filename builder and persists the bytes S4b's fetch already retrieves. S4d follows S4c and hard-gates S5a: the document-persistence suite must be proven defect-detecting before the CLI wires a real filesystem to it. S5a needs S1–S4d (it emits events from the full loop, including the document sink) and hard-gates S5c: `engine/scraper.ts`'s event emission must already exist before S5c adds new lifecycle branches (split, resume-resplit) to the same loop. S5c needs S1–S5a (it modifies `engine/{coverage,scraper,ports}.ts`, which S5a's logging already instruments and emits events through) and hard-gates S5b: `cli/summary.ts` (5.7) prints `summarizeRunCoverage`'s exact counts, so the `subdivided`-aware arithmetic and partition-invariant fixes must land before the CLI can report them honestly. S5b needs S5a and S5c. S5d follows S5b and hard-gates S5e: `main.ts` cannot compose a `SitePort` that does not exist, which is exactly where S5b's apply stopped. S5e needs S5d and closes the S5b remainder (tasks 5.9–5.11, renumbered into groups 8 and 9 below). S5f follows S5e and could not have preceded it: only a runnable CLI could reach the live host, and only the live host could show that the trigger mechanism, the row selectors and the detail-page selectors were invented. S5g follows S5f in sequence only. Unlike every other ordering constraint above, this one is not substantive: S5g touches neither the detail parser nor the CLI, and could have run at any point after S1 — the engine side it feeds has been complete and green since then. It is ordered last because that is when the gap was found, not because anything gated it. S6 is additive but now needs S5f rather than S5e — a frontier pass harvests seeds from parsed items, so it is pointless until the detail parser reads real pages; it also still needs S1–S3 (`AdapterStateStore`, `traversal.ts` split, `budget.ts`). S6 SHOULD NOT start before S5g: a frontier crawl is the widest live traffic this scraper can generate, and it must not be the first thing to discover that the global cooldown never trips.
 
 ## Requirement Coverage Map
 
@@ -819,6 +820,77 @@ is a restatement of the belief under test.
 - **New in this slice**: the `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...` "born-digital" document shape is not fetched at all (docs/RESEARCH.md §9.7) — a process whose documents are entirely this newer shape yields zero fetchable documents, not an error.
 - **New in this slice**: a CNPJ-identified party does not match the CPF-only party regex (docs/RESEARCH.md §9.5) — recorded with `role: 'UNKNOWN'`, `cpf: null`, never dropped.
 - **New in this slice**: `classes.ts`'s judicial-class catalogue fetch has no content-based validity check and is unreliable against a real, already-aged session (docs/RESEARCH.md §9.9) — this is why saturation-driven subdivision did not fire on the live acceptance run.
+
+## S5g: HTTP status classification — making the 429 mechanism reachable (~280 lines)
+
+Demonstrates: the rate-limit safety mechanism this change has carried since S1 actually
+fires. Today it cannot.
+
+**Why this slice exists.** The full-change verify report found that no production code
+anywhere constructs `FetchOutcome.transient`. The literal appears once, in
+`engine/types.ts:12`, as a type declaration. Trace what that means:
+
+| Link | State |
+|---|---|
+| `infra/http/axios-transport.ts` exposes `status` and every response header | present |
+| Something maps `status === 429` to `transient` | **missing** |
+| Something parses `Retry-After` into `retryAfterMs` | **missing** |
+| `retry-policy.ts:27` routes `transient` + 429 to `requeue` | present, unreachable |
+| `scraper.ts:362-366` handles `requeue` by calling `tripCooldown` | present, unreachable |
+
+`tripCooldown` has exactly one call site, inside that unreachable branch. So the global
+cooldown never closes, and `rateLimiter.acquire()` at `scraper.ts:346` — awaited before
+every single request, correctly — waits on a gate nothing ever shuts. **The global rate
+limiter is decorative in production.** A 429 today reaches `documents.ts:107` as a generic
+`hostDefect`: the one worker that received it backs off locally while every other worker
+keeps issuing requests at full rate. On the search and detail paths it is worse — neither
+reads `status` at all, so a 429 body falls through the content validity chain as an
+unrecognized response.
+
+`retryAfterMs ?? config.backoff(attempt)` is implemented correctly in both places that need
+it (`retry-policy.ts:28`, `scraper.ts:363-364`). The default-value behavior is not the
+defect. The defect is that the value never arrives, so the fallback is the only branch that
+could ever run.
+
+**The failure shape, for the fourth time in this change — and this instance is the sharpest.**
+`design.md` is not silent here. It specifies the work exactly: "404 (case 4) and 429/5xx/timeout
+(case 6) are classified at the transport boundary before the chain runs" (§ validity chain),
+`transient` 429 maps to `requeue` + `tripCooldown(Retry-After ?? backoff)`, and "`Retry-After`
+always wins" (§ Retry mapping). The design was right and complete. **The task breakdown dropped
+it.** The engine got tasks 1.8, 1.10, 1.11 and 2.2 for the consumer side; the producer side —
+classify the HTTP status at the transport boundary — got no task at all. Nothing downstream
+could notice: a spec requirement with no task is invisible to a test suite, and the coverage
+map counted the requirement as covered because the *engine* half of it was. The same hole opened for `TRF5Site`, `parsing/result-fragment.ts` and
+`infra/http/axios-transport.ts` (the S5d/S5e amendment) and for the detail-page selectors
+(S5f). A green suite cannot report a requirement nobody assigned. Task 5g.7 is the first
+attempt in this change to make that class of gap self-reporting rather than
+discovered-by-accident.
+
+**On fixtures, and an explicit exception to the S5f standing rule.** S5f adopted: no fixture
+is written by hand; every one is a redacted cut of a captured live response. That rule
+governs *response bodies* — markup the portal invents, which we may not guess. It does not
+govern a `429` status line or a `Retry-After` header: those are RFC 9110 protocol facts, not
+portal behavior, and `core-resilience-policy` explicitly REQUIRES every 429, backoff and
+session-recovery scenario to be exercised against a stubbed `HttpTransport` and a fake clock,
+never the live host. **Do not attempt to provoke a real 429 from the TRF5 portal.** Stub it.
+
+- [ ] 5g.1 RED `engine/http-status.test.ts`: a status classifier maps 429 to `transient` carrying its status; maps 502/503/504 to `transient`; returns `null` for 200 and 302 so content-based classification still owns every status the site actually uses for failure (`docs/RESEARCH.md` §5: this host answers 200 for most faults). 404 stays `permanentError:notFound` where `documents.ts` already places it — do not relocate that.
+- [ ] 5g.2 GREEN implement `engine/http-status.ts`. Placement is not an open decision: `design.md` already fixed it — "404 (case 4) and 429/5xx/timeout (case 6) are classified **at the transport boundary** before the chain runs." The engine owns that seam, since `HttpResponse` and `FetchOutcome` are both engine types and 429-means-slow-down is protocol truth rather than TRF5 truth, so a second portal must not re-derive it. Implement what the design already says; do not redesign it.
+- [ ] 5g.3 RED then GREEN `Retry-After` parsing: a delta-seconds value (`Retry-After: 5`) becomes `retryAfterMs: 5000`. An HTTP-date value, a negative value, a non-numeric value or an absent header all become `null`, so the existing `?? config.backoff(attempt)` default owns the wait. Supporting only delta-seconds is a deliberate, disclosed narrowing — an HTTP-date needs the injected `Clock` and no observed response has ever carried one. Record it as a follow-up, not as a silent omission.
+- [ ] 5g.4 RED `adapters/trf5` tests: each of the three classification paths — `site.ts` (search), `detail.ts` (detail), `documents.ts` (document fetch) — returns `transient` for a stubbed 429 **before** any content or validity-chain classification runs. All three fail today for three different reasons; the tests must show all three.
+- [ ] 5g.5 GREEN wire `classifyHttpStatus` as the first check in those three paths. Content-based classification remains the rule for every status this host actually returns; the status check is a narrow precedence, not a replacement.
+- [ ] 5g.6 RED then GREEN, and this is the test that would have caught the whole gap: drive `engine/scraper.ts` end to end over a stubbed transport where one unit's request answers 429, and assert the *global* cooldown tripped — a second worker's request is delayed and the failed unit returns to the queue. `rate-limiter.test.ts` already proves the `RateLimiter` class in isolation and passed throughout; this must prove the path from a real adapter response to `tripCooldown`, with `vi.useFakeTimers()`.
+- [ ] 5g.7 RED then GREEN `engine/outcome-construction-audit.test.ts`: fail when any `FetchOutcome` variant declared in `engine/types.ts` has zero construction sites in production code (excluding `*.test.ts` and `__fixtures__/`). This follows the guard precedent S5d established with `ports-implementation-audit.test.ts` and S5c with `ports-coverage-audit.test.ts`. It must genuinely RED against the pre-5g.5 tree; if it cannot be made to fail first, say so rather than asserting it passed.
+- [ ] 5g.8 Verify then correct the tasks.md bookkeeping defect the verify report raised as CRITICAL: 4.17 and 4.18 are unchecked while `adapters/trf5/documents.ts` exists with 14 passing tests in `documents.test.ts`. Read both tasks against the tests and mark them `[x]` **only** if the tests genuinely cover what each task specified; if any part is uncovered, leave the box unchecked and record precisely what is missing.
+- [ ] 5g.9 GREEN reconcile `docs/RESEARCH.md` and the `core-resilience-policy` spec notes: state that 429 has still never been observed from this host, that the mechanism is now reachable and stub-proven end to end, and that "Retry-After Precedence" is satisfied for delta-seconds only.
+
+**Known follow-ups this slice deliberately does NOT take** — each its own decision:
+
+- `Retry-After` in HTTP-date form is unparsed (5g.3).
+- `DiscoverResult` still has no partial-failure shape, so one bad row fails the whole cell.
+- Saturation subdivision did not fire on its first real saturated day (S5f task 5f.9).
+- `toBrDate` still has no dedicated unit test.
+- The `documentoSemLoginHTML` document shape is skipped; a CNPJ-identified party fails the CPF-only regex (both S5f disclosures).
 
 ## S6: Frontier crawl — additive, off by default (~420 lines)
 

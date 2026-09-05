@@ -1,39 +1,51 @@
 ```yaml
 schema: gentle-ai.verify-result/v1
-evidence_revision: sha256:77a146ed45898197e61fee4d3100677433bf06a88f88fc6fdc4617a5bc513814
-verdict: pass_with_warnings
-blockers: 0
-critical_findings: 0
-requirements: 5/5
-scenarios: 17/17
-test_command: pnpm test
+evidence_revision: sha256:ee6bc1732366c64b1631437b8f97c3c780a3ed3e6ba4730f8e192bdfec35860c
+verdict: fail
+blockers: 1
+critical_findings: 8
+requirements: 42/49
+scenarios: 85/95
+test_command: pnpm vitest run
 test_exit_code: 0
-test_output_hash: sha256:a0371ca7304e4ba3d04bf8195d4561185a5b2fa23ed8b37bc9a9ed8b35a1aa2f
+test_output_hash: sha256:1e681d4af5eefc8b897872f92b4cf732b1099897138120bd99d8eeb762618ff8
 build_command: pnpm typecheck
 build_exit_code: 0
 build_output_hash: sha256:38ac890c60e7f38d59ddfb410325cdfb5fca83c9411765c5481754e01c021630
 ```
 
-## Verification Report — S5c
+## Verification Report — Full Change
 
 **Change**: scraper-core
-**Slice**: S5c — Saturation-driven subdivision wired end to end (tasks 7.1-7.29)
+**Scope**: Full-change verification against all six specs (49 requirements, 95 scenarios), replacing the stale `verify-report.md` that covered only 5 requirements (S5c-only).
 **Version**: N/A (no spec version field)
-**Mode**: Strict TDD (with a disclosed lost-RED substitution for tasks 7.1-7.27; see below)
-**Reviewed range**: 7caf3d3..3aa3276 (8 commits) on feat/scraper-core-s5c-saturation-subdivision
-**Working tree**: clean before and after this verification (all introduced mutations reverted; git status --short empty)
+**Mode**: Strict TDD
+**Reviewed range**: `main..4eccb80` (S1 through S5f, 4 additional commits since the historical S5c report: `bef438d`, `3276f8a`, `eb98d83`, `4eccb80` — S5f)
+**Working tree**: clean (`git status` reports no changes on `feat/scraper-core-s5e-transport-composition-root`, confirmed at session start)
 
-### Completeness
+### Ground Truth Established By This Session
+
+- `pnpm vitest run`: **219/219 tests passing, 40 files** — independently reproduced (up from 149/149 at the last recorded verify report, S5c; the growth is S5d/S5e/S5f).
+- `pnpm typecheck`: clean, independently reproduced.
+- `src/engine/frontier.ts` and `src/adapters/trf5/seeds.ts` **do not exist** — confirmed by direct file listing. S6 (tasks 6.1–6.13, 13 tasks) is unchecked in `tasks.md` and genuinely unimplemented, not merely under-tested.
+- No production code anywhere in `src/` constructs `FetchOutcome.kind === 'transient'` — confirmed by exhaustive grep. Every adapter construction site (`documents.ts`, `detail.ts`, `site.ts`) maps an unrecognized/unexpected HTTP status to `hostDefect`, never `transient`. This is independently confirmed, not merely taken from the apply actor's own disclosure.
+- `toBrDate` (`src/adapters/trf5/site.ts:39`) has no test anywhere that asserts on its output value — confirmed by grep across `site.test.ts` for `dataAutuacaoInicio`/`dataAutuacaoFim` (zero matches). The only two `site.test.ts` `discover()` tests use a stub transport and never inspect the outgoing request body, so this ISO→BR date conversion is completely unverified — a silent day-shift here would go undetected by the entire test suite.
+- `documentoSemLoginHTML` document rows are confirmed skipped by `parsing/detail-page.ts` (comment at line 267, test at `detail-page.test.ts:102`); the test proves the *skip* is deliberate, not that the shape is ever fetched.
+- CNPJ-identified parties confirmed to fall through to `{ name: line, cpf: null, role: 'UNKNOWN' }` (`detail-page.ts:186-189`) rather than being structurally parsed — disclosed and by design, but a genuine partial-inventory gap against "Full Field Inventory Extraction"'s literal "MUST extract the complete detail-page field inventory."
+
+### Completeness (all slices, S1–S6)
 
 | Metric | Value |
 |--------|-------|
-| Tasks total (S5c) | 29 (7.1-7.29) |
-| Tasks complete | 29 |
-| Tasks incomplete | 0 |
+| Slices complete | S1, S2a, S2b, S3, S4a, S4b, S4c, S4d, S5a, S5c, S5b (5.1–5.8), S5d, S5e, S5f — 13 of 14 planned slices |
+| Slices not started | S6 (frontier crawl) |
+| Tasks total (S1–S6, counted directly from `tasks.md`) | 158 |
+| Tasks complete | 143 |
+| Tasks incomplete | 15 (S6: 6.1-6.13, 13 tasks, all unchecked; S4b: 4.17-4.18, 2 tasks, unchecked despite the underlying documents.ts/documents.test.ts code being written, tested, and later superseded by S4c -- a tasks.md bookkeeping gap, not missing work) |
 
-All 29 S5c tasks are checked [x] in tasks.md and each maps to real, currently-passing code and tests (see Spec Compliance Matrix, Mutation-Audit Spot-Check, and Findings Verification below). S5b (5.1-5.11) and S6 correctly remain unchecked and untouched.
+Every task S1 through S5f except 4.17/4.18 is checked `[x]` in `tasks.md`. Tasks 4.17/4.18 (S4b: the original ca-keyed buildDocumentFilename plus its test) are unchecked despite the described work existing, being tested, and having since been superseded by S4c's buildDocumentPath -- confirmed by direct inspection of tasks.md and documents.ts/documents.test.ts this session. This checkbox gap does not indicate missing functionality (Stable Document Filename Derivation is COMPLIANT below, backed by real, currently-passing tests), but it is a real tasks.md sync defect the orchestrator should correct. S6 is correctly unchecked and no S6 file exists.
 
-### Build & Tests Execution (independently reproduced)
+### Build & Tests Execution (independently reproduced this session)
 
 **Build (typecheck)**: PASSED
 ```text
@@ -42,415 +54,259 @@ $ pnpm typecheck
 (no output, exit 0)
 ```
 
-**Lint**: PASSED
+**Tests**: 219 passed / 0 failed / 0 skipped
 ```text
-$ pnpm lint
-> eslint .
-(no output, exit 0)
+$ pnpm vitest run
+ Test Files  40 passed (40)
+      Tests  219 passed (219)
 ```
 
-**Format**: PASSED
-```text
-$ pnpm format:check
-> prettier --check .
-Checking formatting...
-All matched files use Prettier code style!
-```
+Growth since the last recorded verify report (S5c, 149/149): +70 tests across S5d (parsing/site/ports-audit), S5e (axios-transport, main.ts composition), and S5f (response-view/detail-page rebuilt against captured live markup).
 
-**Tests**: 149 passed / 0 failed / 0 skipped
-```text
-$ pnpm test
-> vitest run
- Test Files  30 passed (30)
-      Tests  149 passed (149)
-```
+### Spec Compliance Matrix (49 requirements / 95 scenarios)
 
-Matches the apply actor's reported 149/149 - independently reproduced, not taken on faith.
+#### core-coverage-accounting (7 requirements / 16 scenarios) -- all COMPLIANT
 
-### Authored Diff Size vs. Review Budget
+| Requirement | Scenario | Test | Result |
+|---|---|---|---|
+| Cell State Ledger | Cell under the adapter cap is complete | coverage.test.ts: classifies a cell under the adapter-declared cap as complete | COMPLIANT |
+| Cell State Ledger | Saturated single-day cell is truncated | coverage.test.ts: classifies a cell at or above the adapter-declared cap as truncated | COMPLIANT |
+| Cell State Ledger | Cell that exhausted retries is failed | scraper.test.ts failure-ledger tests (permanentError/hostDefect cap paths) | COMPLIANT |
+| Cell State Ledger | Successfully subdivided cell is recorded, not discarded | scraper.test.ts: calls split() on a saturated unit, enqueues its children, and records the parent as subdivided | COMPLIANT (mutation-audited, S5c report audits #1/#3) |
+| Cell State Ledger | Site with no declared cap never saturates | coverage.test.ts + scraper.test.ts null-cap tests | COMPLIANT (mutation-audited, audit #10) |
+| Cell State Ledger | Declared cap absence is recorded faithfully | ports.ts declaredCap: number or null; buildCoverageRecord passes it through unchanged | COMPLIANT |
+| Run Summary Arithmetic | Summary matches ledger counts | coverage.test.ts: reports exact counts derived from the ledger, not an estimate | COMPLIANT |
+| Run Summary Arithmetic | Subdivided parent is not double-counted | coverage.test.ts: excludes a subdivided parent from all three tallies | COMPLIANT (mutation-audited, audit #6) |
+| Idempotence Verification by Set Hash | Repeated search on an unchanged cell yields matching hash | coverage.test.ts: produces matching hashes for the same set of ids observed twice | COMPLIANT |
+| Idempotence Verification by Set Hash | Live data change is detected as a hash mismatch | coverage.test.ts: reports a differing hash when the underlying set changed | COMPLIANT |
+| Deduplication by Adapter-Declared Identity Key | Same item appears in two overlapping cells | scraper.test.ts: writes the same item once across two overlapping cells | COMPLIANT |
+| Partition Invariant Verification | Per-facet-value sum satisfies the invariant | coverage.test.ts: passes when the per-facet-value sum exceeds the unfiltered day count | COMPLIANT |
+| Partition Invariant Verification | Invariant violation is flagged | coverage.test.ts: flags a violation rather than silently accepting the discrepancy | COMPLIANT |
+| Partition Invariant Verification | Invariant is checked against the persisted parent record | coverage.test.ts: sources the unfiltered count from the LATEST facetValue-null record | COMPLIANT (mutation-audited, audit #7) |
+| Separate Checkpoint and Failure Ledger Concerns | Document retry does not re-discover | scraper.test.ts: retrying a failed document re-issues only fetchDocument, never the cell discovery | COMPLIANT |
+| Observation-Timestamped Completeness | Complete cell later contradicted by a re-check | coverage.test.ts: does not treat an earlier complete observation as invalidated by a later re-check | COMPLIANT |
 
-```text
-$ git diff --shortstat e6315c1..HEAD -- src
-18 files changed, 1042 insertions(+), 42 deletions(-)   -> 1084 authored src lines
-```
+Note: the S5c report WARNING 1 (resume-path SaturationInfo.resultCount fabricated from the declared cap) is RESOLVED. Task 7.30 added CheckpointRecord.resultCount, wired it at the checkpoint-write call site, and fixed the resume loop to read it. Confirmed this session: the extended scraper.test.ts resume test explicitly asserts the persisted observed result count, not the declared cap, is what reaches SaturationInfo.
 
-Matches tasks.md's and apply-progress.md's own reported "1084 authored src/ lines actual" exactly - independently reproduced via git diff --numstat. This exceeds the 800-line per-slice budget; the owner's 2026-09-04 size:exception for S5c (recorded in tasks.md) is the accepted authority for that overage. This report does not re-litigate that decision - it is settled per the session brief.
+#### core-frontier-crawl (6 requirements / 9 scenarios) -- all NOT IMPLEMENTED
 
-### Spec Compliance Matrix
+| Requirement | Scenario | Test | Result |
+|---|---|---|---|
+| Deferred Phase-2 Invocation | Plain scrape does not run frontier crawl | none | UNTESTED -- no code |
+| Deferred Phase-2 Invocation | Frontier run consumes seeds from a prior process | none | UNTESTED -- no code |
+| Seed Harvesting and Prioritization | Higher-ranked seed kind is selected first | none | UNTESTED -- no code |
+| Seed Harvesting and Prioritization | Complete-cell seeds are deprioritised | none | UNTESTED -- no code |
+| Yield-Decay Stop Condition | Consecutive seeds yield no new items | none | UNTESTED -- no code |
+| Request Budget Ceiling | Budget exhausted before yield decays | none | UNTESTED -- no code |
+| Mandatory Date Range on Seed Searches | Seed search without a date range is rejected | none | UNTESTED -- no code |
+| Mandatory Date Range on Seed Searches | Saturated seed search bisects | none | UNTESTED -- no code |
+| Documented Unmeasurable Bias | Run summary states the limitation | none | UNTESTED -- no code |
 
-#### core-scraping-engine - Saturation-Driven Subdivision (4 scenarios)
+src/engine/frontier.ts and src/adapters/trf5/seeds.ts do not exist (confirmed by direct listing this session). tasks.md 6.1-6.13 are all unchecked. This is scoped, planned, off-by-default future work per tasks.md's own sequencing -- not a regression in any completed slice -- but it is real, incomplete scope against these six requirements and is not counted as delivered.
 
-| Scenario | Test | Result |
-|---|---|---|
-| Saturated unit is subdivided and children are enqueued | scraper.test.ts "calls split() on a saturated unit, enqueues its children, and records the parent as subdivided" | COMPLIANT - independently re-run; independently mutation-tested (audits #1, #3 below) |
-| Traversal port reports no further subdivision is possible | scraper.test.ts "records a truncated gap and enqueues nothing when split() returns null (regression: null-split path unchanged)" | COMPLIANT |
-| A misbehaving port cannot cause an infinite loop | scraper.test.ts "bounds a lineage to the configured max split depth, recording truncated without calling split() again" | COMPLIANT - independently mutation-tested (audits #4/#5 disclosed, not independently re-run by this report) |
-| Requeued children resume like any other unit | scraper.test.ts "resumes a subdivided checkpoint by re-splitting it directly, never re-discovering, skipping already-complete children" | COMPLIANT for the scenario literal text (children skipped/reprocessed correctly) - independently mutation-tested (audit #9 below). See WARNING 1: the SaturationInfo.resultCount passed to split() on this exact resume path is fabricated, not read from persisted state, though this does not break the scenario as written. |
+#### core-resilience-policy (6 requirements / 10 scenarios) -- 4 COMPLIANT, 2 WARNING
 
-#### core-scraping-engine - Site-Agnostic Failure Vocabulary (2 scenarios)
+| Requirement | Scenario | Test | Result |
+|---|---|---|---|
+| FetchOutcome to RetryDecision Mapping | Transient outcome schedules backoff | retry-policy.test.ts: schedules backoff via retryAfter when the attempt count is within the cap | COMPLIANT (literal) -- see WARNING 1 |
+| FetchOutcome to RetryDecision Mapping | Session-expired outcome retries immediately | retry-policy.test.ts: re-primes and retries immediately with zero delay | COMPLIANT |
+| FetchOutcome to RetryDecision Mapping | Host-defect outcome retries a bounded number of times | retry-policy.test.ts: retries within the 1-2 attempt cap / records and stops once the cap is reached | COMPLIANT |
+| FetchOutcome to RetryDecision Mapping | Permanent error never retries | retry-policy.test.ts: never retries | COMPLIANT |
+| Composable Backoff Strategies | Exponential backoff grows per attempt | backoff.test.ts: grows per attempt with base 1000ms and factor 2 | COMPLIANT |
+| Composable Backoff Strategies | Jitter varies delay within the configured ratio | backoff.test.ts: keeps every computed delay within +/-30% of the base delay | COMPLIANT |
+| Retry-After Precedence | Server supplies Retry-After | retry-policy.test.ts: lets a server Retry-After override the computed backoff delay | COMPLIANT |
+| Mandatory Backoff Cap | Delay never exceeds the cap | backoff.test.ts: never exceeds the cap at attempt 12 | COMPLIANT |
+| Global 429 Cooldown | One workers 429 pauses all workers | rate-limiter.test.ts: pauses every worker once one trips the cooldown, and resumes only after it elapses | COMPLIANT (literal, at the RateLimiter unit level) -- see WARNING 2 |
+| Stubbed-Transport Test Isolation | Backoff test uses fake time | backoff.test.ts / retry-policy.test.ts / rate-limiter.test.ts all use vi.useFakeTimers(); no live-host string found under src/ | COMPLIANT |
 
-| Scenario | Test | Result |
-|---|---|---|
-| Failure-reason vocabulary contains no site-specific concept | engine/types.ts literal union type itself (notFound / invalidReference / schemaMismatch); enforced by tsc, confirmed by mutation audit #11b (moving a site literal into reason fails pnpm typecheck, not a unit test) | COMPLIANT - a stronger, type-system guarantee than a runtime assertion |
-| A new site-specific permanent failure does not require an engine type change | adapters/trf5/detail.test.ts (D12 describe block) + adapters/trf5/documents.test.ts (D12 tests) | COMPLIANT - independently re-run; independently mutation-tested (audit #11a below) |
+WARNING 1 / WARNING 2 (detailed in Issues Found below): the transient FetchOutcome kind -- the entire 429/5xx/backoff/cooldown machinery this domain exists to test -- is never constructed by any production adapter code. Every mapping/backoff/cooldown scenario above is proven correct in isolation against a hand-built FetchOutcome literal, which is exactly what the spec Purpose statement asks for. The gap is one layer up: nothing wires a real 429/503/timeout response into a transient outcome, so this whole domain is currently unreachable from real traffic.
+#### core-run-control-and-output (10 requirements / 20 scenarios) -- 9 COMPLIANT, 1 with a carried-forward SUGGESTION
 
-#### core-coverage-accounting - Cell State Ledger (6 scenarios)
+| Requirement | Scenario | Test | Result |
+|---|---|---|---|
+| CLI Bound Enforcement | Max-documents bound stops document fetching | budget.test.ts + scraper.test.ts: stops fetching further documents once --max-documents is reached, across the whole run | COMPLIANT |
+| CLI Bound Enforcement | Max-items bound stops item collection | budget.test.ts + scraper.test.ts: stops collecting further items once --max-items is reached | COMPLIANT |
+| Default Request Ceiling Requiring Override | Run without explicit override respects the default ceiling | budget.test.ts: an omitted --max-requests still stops at the default ceiling | COMPLIANT |
+| Default Request Ceiling Requiring Override | Unbounded run requires explicit opt-in | args.test.ts: only the literal unbounded disables --max-requests -- never reachable by omission | COMPLIANT |
+| Dry-Run Forecast | Dry-run issues zero discovery requests | dry-run.test.ts: forecastRun accepts no HttpTransport/SitePort at all -- zero requests by construction | COMPLIANT |
+| JSONL Append-Only Output | Process killed mid-run leaves valid output | jsonl-item-sink.test.ts: leaves every already-written line valid after a run is killed mid-way | COMPLIANT |
+| JSONL Append-Only Output | Records are never mutated | jsonl-item-sink.test.ts: never mutates an already-written line when the same item is observed again | COMPLIANT |
+| Mandatory Envelope Fields | Record carries all mandatory envelope fields | scraper.test.ts: writes the same item once with the exact mandatory envelope | COMPLIANT |
+| English camelCase Property Naming | Source-language field is renamed on output | payload.test.ts: never emits a source page Portuguese form/query-parameter name as a payload property name | COMPLIANT |
+| English camelCase Property Naming | Domain acronym survives translation | payload.test.ts: cpf/oabNumber/oabState preserved | COMPLIANT |
+| English camelCase Property Naming | Core envelope does not constrain payload shape | scraper.ts buildEnvelope passes payload through unchanged | COMPLIANT |
+| Separate Coverage Ledger File | Coverage and item data are not interleaved | jsonl-coverage-sink.test.ts: never interleaves coverage records into the items file | COMPLIANT |
+| Persisted Identifier Stability | Persisted record survives its originating session | persisted-identifier-stability.test.ts (document path, TraversalCursor, CheckpointRecord) | COMPLIANT |
+| Persisted Identifier Stability | Session-scoped token is not the only handle | persisted-identifier-stability.test.ts: none of the three targets carry ca/jsessionid/ViewState | COMPLIANT |
+| Structured Run Observability | Lifecycle transition is observable after the fact | scraper.test.ts: unit.started/unit.completed, unit.saturated, fetch.retry, session.reprimed, document.persisted/failed via RecordingLogger | COMPLIANT |
+| Structured Run Observability | A failing logger does not fail the run | scraper.test.ts: a Logger that throws does not fail the run or change its outcome | COMPLIANT (mutation-confirmed, S5a report) |
+| Structured Run Observability | Log output does not corrupt the run summary | console-logger.test.ts (stderr-only) + jsonl-logger.test.ts (file-only), every Logger implementation individually proven never to touch stdout | COMPLIANT, by exhaustive per-implementation proof -- see SUGGESTION 1 |
+| Personal Data Handling Rules | Output directories are git-ignored | gitignore entries for output, data, pdfs, logs; git status confirmed clean of these paths at session start | COMPLIANT |
+| Personal Data Handling Rules | Test fixtures use synthetic data | per-fixture README checklists (S3/S4a); S5f fixtures are captured-and-redacted per their own header comments | COMPLIANT |
+| Personal Data Handling Rules | Emitted log events carry no personal data or session token | redacting-logger.test.ts: redacts cpf/partyName/jsessionid/viewState/ca by field name, never by sniffing values | COMPLIANT |
 
-| Scenario | Test | Result |
-|---|---|---|
-| Cell under the adapter cap is complete | coverage.test.ts "classifies a cell under the adapter-declared cap as complete" (pre-existing, unaffected) | COMPLIANT |
-| Saturated single-day cell is truncated | coverage.test.ts "classifies a cell at or above the adapter-declared cap as truncated" + scraper.test.ts null-split regression | COMPLIANT |
-| Cell that exhausted retries is failed | coverage.test.ts (pre-existing failed-state coverage, unaffected by this slice) | COMPLIANT |
-| Successfully subdivided cell is recorded, not discarded | coverage.test.ts "excludes a subdivided parent..." (7.4) + scraper.test.ts "calls split()..." (7.8) | COMPLIANT - independently mutation-tested (audits #3, #6) |
-| Site with no declared cap never saturates | coverage.test.ts "never classifies a cell as truncated when the adapter declares no cap (null)" (7.2) + "is always false when the adapter declares no cap (null)" + scraper.test.ts "never treats a null-cap site as saturated..." (7.16) | COMPLIANT - independently mutation-tested (audit #10) |
-| Declared cap absence is recorded faithfully | engine/ports.ts declaredCap: number \| null type + scraper.ts buildCoverageRecord passing cap through unchanged (read verbatim, never coerced) | COMPLIANT |
+SUGGESTION 1 (carried forward from the S5a verify report, still open): now that main.ts (S5e) exists, no test drives a true end-to-end run with stdout captured to a file to confirm log events never reach it in the composed system, as opposed to per-Logger-implementation proof. main.test.ts (2 tests plus a pdfsDir persistence test) does not cover this. Low severity, but still open two slices later than when it was first raised.
 
-#### core-coverage-accounting - Run Summary Arithmetic (2 scenarios)
+#### core-scraping-engine (7 requirements / 14 scenarios) -- 5 COMPLIANT, 2 WARNING
 
-| Scenario | Test | Result |
-|---|---|---|
-| Summary matches ledger counts | coverage.test.ts "reports exact counts derived from the ledger, not an estimate" (pre-existing, unaffected) | COMPLIANT |
-| Subdivided parent is not double-counted | coverage.test.ts "excludes a subdivided parent from all three tallies, counting only its children" | COMPLIANT - independently mutation-tested (audit #6 below) |
+| Requirement | Scenario | Test | Result |
+|---|---|---|---|
+| Two-Stage Discover-Then-Fetch Execution | Document fetch fails after successful discovery | scraper.test.ts: still writes the item when its document fetch fails, and records the document failure | COMPLIANT (literal) -- see WARNING 3 |
+| Two-Stage Discover-Then-Fetch Execution | Discover stage fails | scraper.test.ts: skips the fetch stage entirely when discovery fails | COMPLIANT |
+| Payload-Generic Port Contracts | Engine compiles and runs against a fake adapter | portability.test.ts + portability-non-date.test.ts: full engine suite green against two independent fake adapters; adapters/trf5 never imported | COMPLIANT |
+| Payload-Generic Port Contracts | amended -- proven against the first real SitePort implementation | site.test.ts (TRF5Site, 9 tests) + ports-implementation-audit.test.ts | COMPLIANT |
+| Opaque Checkpoint Persistence | Cursor round-trips through the checkpoint store | jsonl-checkpoint-store.test.ts: round-trips a cursor as byte-identical JSON | COMPLIANT |
+| Enforced Adapter Seam | Engine file imports an adapter module | eslint.config.js no-restricted-imports scoped to src/engine, mutation-confirmed in S5a report | COMPLIANT |
+| Enforced Adapter Seam | Engine file imports axios or cheerio directly | same ESLint rule, same mutation-confirmed mechanism | COMPLIANT |
+| Bounded In-Process Worker Pool | Concurrency never exceeds the configured limit | pool.test.ts | COMPLIANT |
+| Bounded In-Process Worker Pool | No external infrastructure dependency | package.json dependency graph has no Redis/BullMQ/queue client | COMPLIANT |
+| Saturation-Driven Subdivision | Saturated unit is subdivided and children are enqueued | scraper.test.ts: calls split on a saturated unit, enqueues its children, and records the parent as subdivided | COMPLIANT (literal, stub-proven) -- see WARNING 4 |
+| Saturation-Driven Subdivision | Traversal port reports no further subdivision is possible | scraper.test.ts: records a truncated gap and enqueues nothing when split returns null | COMPLIANT |
+| Saturation-Driven Subdivision | A misbehaving port cannot cause an infinite loop | scraper.test.ts: bounds a lineage to the configured max split depth | COMPLIANT (mutation-audited) |
+| Saturation-Driven Subdivision | Requeued children resume like any other unit | scraper.test.ts: resumes a subdivided checkpoint by re-splitting it directly | COMPLIANT (mutation-audited) |
+| Site-Agnostic Failure Vocabulary | Failure-reason vocabulary contains no site-specific concept | engine/types.ts literal union type; mutation audit confirms the type system rejects a site-specific literal in reason | COMPLIANT, stronger than a runtime test |
+| Site-Agnostic Failure Vocabulary | A new site-specific permanent failure does not require an engine type change | detail.test.ts and documents.test.ts D12 tests | COMPLIANT (mutation-audited) |
 
-#### core-coverage-accounting - Partition Invariant Verification (3 scenarios)
+WARNING 3 and WARNING 4 are detailed in Issues Found below. WARNING 4 is the single most important finding in this report: the live acceptance run in S5f hit a real saturated day and split returned null instead of children, because the class-catalogue fetch in classes.ts is unreliable against a real, aged session -- meaning the mechanism that is fully green and mutation-audited against a stub transport has never yet successfully subdivided a real saturated cell.
+#### trf5-adapter (13 requirements / 26 scenarios) -- 10 COMPLIANT, 3 WARNING, 1 NOT IMPLEMENTED
 
-| Scenario | Test | Result |
-|---|---|---|
-| Per-facet-value sum satisfies the invariant | coverage.test.ts "passes when the per-facet-value sum exceeds the unfiltered day count" (pre-existing, unaffected) | COMPLIANT |
-| Invariant violation is flagged | coverage.test.ts "flags a violation rather than silently accepting the discrepancy" (pre-existing, unaffected) | COMPLIANT |
-| Invariant is checked against the persisted parent record | coverage.test.ts "sources the unfiltered count from the LATEST facetValue-null record, never the first array match" | COMPLIANT - independently mutation-tested (audit #7, disclosed, not independently re-run by this report) |
+| Requirement | Scenario | Test | Result |
+|---|---|---|---|
+| Session Priming and Field Harvesting | Priming harvests all required fields | session.test.ts: harvest jsessionid/ViewState/fieldNames/triggerId from actual response content | COMPLIANT |
+| Session Priming and Field Harvesting | Server-generated ids differ between runs | session.test.ts: two priming responses with different j_id values each use their own harvested values | COMPLIANT |
+| Session Expiry Detection and Re-Priming | Expired ViewState triggers re-prime | search.test.ts: re-primes and replays once on an Ajax-Response redirect to login.seam | COMPLIANT |
+| Complete Search Form Field Set | All fields present, some empty | search.test.ts: includes every documented field, populated ones with real values and the rest empty | COMPLIANT -- see WARNING 5 |
+| Complete Search Form Field Set | Missing date range is rejected before request | search.test.ts: rejects a request built without dataAutuacaoInicio/dataAutuacaoFim before sending | COMPLIANT |
+| Detail Fetch Session Requirement | Detail fetch without primed session | detail.test.ts: primes a session first when none is provided, then fetches the detail page | COMPLIANT |
+| Document Byte-Level ISO-8859-1 Decoding | Percent-encoded accented label decodes correctly | encoding.test.ts (4 tests: primary decode, second accented label, passthrough, UTF-8 negative case) | COMPLIANT |
+| Stable Document Filename Derivation | Three same-labeled documents in one process | documents.test.ts: 3-distinct-paths case | COMPLIANT (mutation-audited, S4d) |
+| Stable Document Filename Derivation | Document path is human-navigable | documents.test.ts happy-path case | COMPLIANT |
+| Stable Document Filename Derivation | Hostile label cannot escape the output directory | documents.test.ts hostile-label case | COMPLIANT (mutation-audited, S4d mutation #2) |
+| Stable Document Filename Derivation | Same document re-scraped in a later session keeps its path | documents.test.ts repeated-call stability case | COMPLIANT (mutation-audited, S4d mutation #4) |
+| Document Persistence to Disk | Fetched document reaches the filesystem | fs-document-sink.test.ts: bytes on disk match the fetched body exactly | COMPLIANT (mutation-audited, S4d) |
+| Document Persistence to Disk | Failed document fetch writes no file | scraper.test.ts: writes no file when the document fetch fails, while still writing the item and the ledger entry | COMPLIANT |
+| Full Field Inventory Extraction | Party with nested lawyer is extracted | detail-page.test.ts, rebuilt in S5f against a real captured detail page | COMPLIANT (literal) -- see WARNING 6 |
+| Full Field Inventory Extraction | Assunto hierarchy retains CNJ codes | detail-page.test.ts subjects test, against real captured markup | COMPLIANT |
+| Content-Based Validity Chain | Invalid ca token produces a shell page | response-view.test.ts + validity-chain.test.ts, now against a real captured invalid-token shell (5f.1/5f.6) | COMPLIANT -- notably strengthened in S5f from a hand-authored fixture to a captured live response |
+| Content-Based Validity Chain | Valid process with zero documents is not mistaken for a shell | validity-chain.test.ts (S4a case), still passing after the S5f rebuild | COMPLIANT |
+| Content-Based Validity Chain | Host defect page is distinguished from valid data | validity-chain.test.ts host-defect case | COMPLIANT |
+| Declared Result-Page Cap and Item Identity Key | Adapter declares a cap of 30 | site.test.ts: declares a result-page cap of 30; independently confirmed on the live acceptance run (2026-03-10 returned exactly 30 rows) | COMPLIANT |
+| Declared Result-Page Cap and Item Identity Key | Adapter declares the process number as identity key | site.test.ts: declares processNumber as the item identity key | COMPLIANT |
+| Declared Result-Page Cap and Item Identity Key | Declared identity key populates the envelope itemId | payload.test.ts: produces an item whose declared itemId equals the payload processNumber | COMPLIANT |
+| Declared Partition Facet | Adapter declares classeJudicial as the partition facet | traversal.test.ts: declares classeJudicial as its partition facet | COMPLIANT |
+| Judicial Record Payload Contract | Payload case class carries both code and label | payload.test.ts, against real captured markup after S5f | COMPLIANT |
+| Judicial Record Payload Contract | Payload nests parties, movements, and documents | payload.test.ts | COMPLIANT |
+| Judicial Record Payload Contract | Portuguese source field names do not reach the output | payload.test.ts banned-field-name scan | COMPLIANT |
+| Declared Seed Kinds and Ranking | Adapter ranks OAB above name | none -- seeds.ts does not exist | NOT IMPLEMENTED |
 
-**Compliance summary**: 17/17 scenarios COMPLIANT across 5/5 requirements.
+WARNING 5 (Complete Search Form Field Set): toBrDate (site.ts:39), the function that converts the traversal cursor ISO date into the BR-format dataAutuacaoInicio/dataAutuacaoFim search-form values, has zero test coverage anywhere. search.test.ts exercises buildSearchRequestBody directly with already-formatted date strings supplied by the test, never through TRF5Site.discover, and site.test.ts discover tests use a stub transport without ever inspecting the outgoing request body for the date fields. A defect in this conversion (for example a locale or padding mistake) would silently narrow or shift every search window and would not be caught by any test in the suite.
 
-### Mutation-Audit Independent Spot-Check
+WARNING 6 (Full Field Inventory Extraction): two disclosed, real-data gaps remain against the literal "MUST extract the complete detail-page field inventory" text, both confirmed present in the code this session: (a) documentoSemLoginHTML document rows (the newer, born-digital document delivery mechanism) are enumerated as skipped, not fetched -- a process whose documents are entirely this shape yields zero fetchable documents; (b) a CNPJ-identified party does not match the CPF-only party regex and is recorded with role UNKNOWN and cpf null rather than being structurally parsed. Both are disclosed in apply-progress.md and docs/RESEARCH.md and neither is silently dropped (the party is still recorded, the document row is still visible in the fixture-driven skip test), but neither satisfies "complete" for real processes exhibiting either shape.
+### Correctness (Static Evidence) -- summary
 
-The apply actor disclosed that the original RED evidence for tasks 7.1-7.27 was lost (session interruption) and substituted an 11-behavior mutation-detection audit claiming 11/11 caught, in lieu of a normal RED-then-GREEN transcript. Per this verification instructions, that table was NOT taken on faith. Five of the eleven audited behaviors were independently re-mutated by this verification pass, including all four the session brief flagged as highest-risk:
-
-| # | Behavior | Mutation applied (this verification) | Command | Result | Observed failure (quoted, independently reproduced) |
-|---|---|---|---|---|---|
-| 1 | A saturated unit calls split() and enqueues the children | Removed queue.push(child) from processUnit child-enqueue loop (scraper.ts, kept splitDepth.set) | vitest run src/engine/scraper.test.ts | Caught - 2 tests failed | expected [ item-1, item-2, item-3, (2) ] to deeply equal [ item-1, item-2, item-3, (4) ] (children items never appear); second failure in the max-split-depth test |
-| 3 | A successfully split parent is recorded subdivided, carrying the observed result count | buildCoverageRecord: resultCount: state === subdivided ? 0 : result.count | vitest run src/engine/scraper.test.ts | Caught - exactly the subdivided-parent test | expected object to match { state: subdivided, resultCount: 5 } - "resultCount": 5 became "resultCount": 0 |
-| 6 | summarizeRunCoverage excludes subdivided from all three tallies and never double-counts a parent against its children | coverage.ts: reverted the explicit three-branch if/else-if/else-if to the old catch-all else failed += 1 | vitest run src/engine/coverage.test.ts | Caught - exactly the subdivided-exclusion test | expected object to deeply equal { complete: 1, truncated: 1, ... } - "failed": 0 became "failed": 1 |
-| 9 | Resume re-splits a subdivided parent WITHOUT re-issuing its discover request | Scraper.run() resume loop: added await this.config.site.discover(reconstructed) before split() | vitest run src/engine/scraper.test.ts | Caught - the resume test throws by design (asserting on the stub transport recorded discover calls, not merely the outcome) | Error: no scripted discover outcome for A |
-| 10 | A site declaring resultPageCap: null never saturates and is never passed to split() | classifyCellState: removed the declaredCap === null guard | vitest run src/engine/scraper.test.ts | Caught - exactly the null-cap test. Also independently confirmed the disclosed defense-in-depth finding: traversal.splitCalls stayed at 0 under this mutation, because scraper.ts own cap !== null guard independently blocks split() | expected object to match { state: complete, ... } - "state": "complete" became "state": "truncated" |
-
-5/5 independently re-run mutations caught, for exactly the reasons disclosed. After each mutation the exact covering command was re-run, the failure was read and confirmed to name the correct defect, the mutation was reverted, and the file was diffed against git status (clean) before the next mutation. The full suite (pnpm test) was re-confirmed at 149/149 after the last revert, and git status --short was empty at the end of this session - no residual mutation was left in the working tree. This independently corroborates the apply actor disclosed audit for the four highest-risk behaviors named in the verification brief plus one additional (#10), and finds no discrepancy between the disclosed table and actual runtime behavior for the five re-tested rows. The remaining six rows (#2, #4, #5, #7, #8, #11a/#11b) were read and are structurally plausible given the source inspected, but were not independently re-mutated by this pass.
-
-### Findings Verification
-
-#### Finding 1 - Partition-contract fake (tasks 7.24-7.26)
-
-Read engine/__fixtures__/portability-non-date.test.ts, fake-non-date-site.ts, and fake-non-date-traversal.ts directly, and re-ran both scenarios (part of the full green suite above). The disclosure in apply-progress.md is confirmed accurate, neither over-claimed nor under-claimed:
-
-- RunBounds.dateFrom/dateTo are indeed repurposed as opaque numeric-string bounds - confirmed at fake-non-date-traversal.ts:32-33 (Number(bounds.dateFrom) / Number(bounds.dateTo)). This is a genuine type-level fiction, exactly as disclosed, and does not break anything at runtime because the engine never parses these fields.
-- RunBounds.maxFacetValues is confirmed entirely unread by either fake file (grep -n maxFacetValues inside both files returns nothing) - exactly as disclosed.
-- TraversalPort.facetName is declared (region) but never consulted anywhere in engine/, and this fake never needed a second partitioning dimension to reach every leaf under the cap - so the disclosure central claim ("this fake did not actually test whether a genuinely multi-dimensional split would be blocked or merely inconvenienced") is accurate: the fake proves single-non-date-dimension bisection and null-cap non-saturation, and nothing more. It does not over-claim a multi-dimensional portability proof it does not have.
-
-#### Finding 2 - Reverse-coverage audit (tasks 7.28-7.29)
-
-Counted the exported symbols in engine/ports.ts by hand: 25 exported interface/type declarations, matching the audit own count and the 25-row REQUIREMENT_MAP. Spot-checked 11 symbol-to-requirement claims (nearly double the required 6) directly against the retrieved spec text in openspec/changes/scraper-core/specs/:
-
-| Symbol | Claimed requirement(s) | Verified against spec text |
-|---|---|---|
-| HttpRequest | core-resilience-policy: Stubbed-Transport Test Isolation; trf5-adapter: Complete Search Form Field Set | Accurate - carries the POST body the Complete Search Form Field Set requirement governs; sent through the stubbed transport the resilience-policy requirement mandates |
-| HttpResponse | core-resilience-policy: Stubbed-Transport Test Isolation; trf5-adapter: Document Byte-Level ISO-8859-1 Decoding | Accurate - body: Uint8Array is exactly what the byte-level decoding requirement decodes |
-| RunBounds | core-run-control-and-output: CLI Bound Enforcement; core-frontier-crawl: Mandatory Date Range on Seed Searches | Accurate - dateFrom/dateTo/maxFacetValues map directly to --from/--to/--max-facet-values; frontier seed searches reuse the same bounds type |
-| AdapterStateStore | core-frontier-crawl: Deferred Phase-2 Invocation | Accurate - the spec text literally names AdapterStateStore ("consuming seeds persisted by an earlier scrape run via a durable AdapterStateStore") |
-| SaturationInfo | core-scraping-engine: Saturation-Driven Subdivision | Accurate - this exact requirement is what split() second parameter serves |
-| CheckpointRecord | core-scraping-engine: Opaque Checkpoint Persistence; core-scraping-engine: Saturation-Driven Subdivision | Accurate - confirmed via design.md Re-split inputs row, which explicitly requires CheckpointRecord to carry facetValue/label for this exact purpose |
-| LogEvent | core-run-control-and-output: Structured Run Observability; core-run-control-and-output: Personal Data Handling Rules | Accurate - the Personal Data Handling Rules requirement own scenario text names "a log event whose fields include a CPF..." directly |
-| DiscoverResult | core-scraping-engine: Two-Stage Discover-Then-Fetch Execution | Accurate - discover() return type is exactly this requirement subject |
-| StoredDocument | trf5-adapter: Document Persistence to Disk | Accurate - the spec text literally names StoredDocument ("A StoredDocument result MUST describe a document that was actually persisted") |
-| ItemSink | core-run-control-and-output: JSONL Append-Only Output; core-coverage-accounting: Deduplication by Adapter-Declared Identity Key | Accurate - ItemSink.write() is the JSONL append point and the dedup requirement output sink |
-| Clock | core-resilience-policy: Stubbed-Transport Test Isolation | Accurate - the requirement own scenario mandates fake-time testing, which Clock port abstraction (backed by FakeClock in tests) exists to satisfy |
-
-No false mapping found in the 11 spot-checked rows. The audit own claim - "all 25 symbols trace to at least one named requirement, no untraced symbol found" - is independently corroborated for every row checked.
-
-### Documentation Check (task 7.27)
-
-Read docs/sweep-flow.md in full (185 lines, two Mermaid diagrams) and cross-checked its claims against the actual implementation:
-
-- The work-unit flowchart branching (discover -> cap check -> split-if-budget-remains -> subdivided/enqueue, or truncated on null/exhausted-depth) matches scraper.ts processUnit exactly, including the depth-bound fallback.
-- The four-cell-states table (complete/truncated/failed/subdivided) and the explanation of why subdivided is excluded from the three summary tallies matches coverage.ts summarizeRunCoverage and design.md D10 exactly.
-- The "why the parent record survives" section (resume re-split; partition invariant) matches the actual resume loop in scraper.ts and verifyPartitionInvariant in coverage.ts.
-- The bisection-tree worked example is explicitly illustrative (a made-up 35-result scenario), consistent with the generic mechanism description and not a claim about real TRF5 data.
-
-No documentation defect found. The document describes behavior the code actually has.
+All S1 through S5f production modules named in design.md now have a real, non-fixture implementation, confirmed by engine/ports-implementation-audit.test.ts: TRF5Site (SitePort), TRF5Traversal (TraversalPort), AxiosTransport (HttpTransport), SystemClock (Clock), FsDocumentSink (DocumentSink), JsonlLogger/ConsoleLogger (Logger). The single disclosed, tracked exception is FrontierCapable, which has no implementation because S6 does not exist. This audit is itself mutation-tested (RED observed by temporarily stripping implements SitePort from site.ts).
 
 ### Design Coherence
 
 | Decision | Followed? | Notes |
 |---|---|---|
-| D10 (fourth subdivided state, excluded from summary tallies) | Yes | coverage.ts, scraper.ts, ports.ts all match exactly |
-| D11 (resultPageCap/declaredCap: number or null, never a sentinel) | Yes | Confirmed in ports.ts, coverage.ts null-cap guards, and scraper.ts buildCoverageRecord explicit cap !== null guard |
-| D12 (permanentError.reason site-agnostic, detail opaque) | Yes | Confirmed in types.ts, detail.ts, documents.ts - both TRF5 construction sites updated |
-| Partitioning pseudocode (process(unit)) | Yes | scraper.ts processUnit matches the pseudocode branches exactly, including the max-split-depth-as-null-split treatment |
-| Resumability and Idempotency - Resume row (re-split, never re-discover) | Yes, for the behavior described | Confirmed: run() resume loop reconstructs the WorkUnit and calls split() directly, never discover() |
-| Resumability and Idempotency - Re-split inputs row (SaturationInfo "read off the parent own subdivided coverage record") | No - see WARNING 1 | The implementation fabricates resultCount: cap ?? 0 instead |
+| D1 (two adapter-facing ports only) | Yes | SitePort + TraversalPort, confirmed in ports.ts |
+| D2 (transport returns bytes, never decoded text) | Yes | HttpResponse.body: Uint8Array; decoding happens in adapters/trf5/decode.ts and encoding.ts |
+| D3 (frontier support is a separate interface) | Not yet exercised | FrontierCapable exists on the port surface but has no implementation (S6 not started) |
+| D4 (lazy facet expansion) | Yes | traversal.ts split() only expands facets after a saturated single-day window |
+| D5 (append-only JSONL state) | Yes | All stores confirmed append-only with torn-line handling |
+| D6 (rate limiter is a global gate) | Yes | rate-limiter.test.ts |
+| D7 (zod parses a normalized ResponseView) | Yes | response-view.ts / validity-chain.ts |
+| D8 (invalid-token shell detected by absence of header/parties block) | Yes, and now real-data-proven | response-view.test.ts against a real captured shell (S5f) |
+| D9 (null means known-absent) | Yes | Consistently applied across payload.ts, ports.ts |
+| D10 (subdivided cell state) | Yes | coverage.ts / scraper.ts, mutation-audited |
+| D11 (resultPageCap: number or null, never a sentinel) | Yes | ports.ts, coverage.ts null-cap guards, scraper.ts explicit cap !== null guard |
+| D12 (permanentError.reason site-agnostic, detail opaque) | Yes | types.ts, detail.ts, documents.ts, both TRF5 construction sites confirmed updated |
+| Partitioning pseudocode (process(unit)) | Yes, mechanism proven; not yet proven on real saturated data | See WARNING 4 -- classes.ts catalogue reliability blocked this on the one live saturated day observed |
 
 ### Issues Found
 
-**CRITICAL**: None.
+**CRITICAL** (8 -- 7 unimplemented requirements plus 1 tasks.md bookkeeping defect; the bookkeeping item does not itself block archive but is CRITICAL per this project's own "unchecked tasks always remain CRITICAL" rule):
 
-**WARNING**:
+1. core-frontier-crawl: Deferred Phase-2 Invocation -- not implemented (no engine/frontier.ts).
+2. core-frontier-crawl: Seed Harvesting and Prioritization -- not implemented (no adapters/trf5/seeds.ts).
+3. core-frontier-crawl: Yield-Decay Stop Condition -- not implemented.
+4. core-frontier-crawl: Request Budget Ceiling (frontier-specific) -- not implemented.
+5. core-frontier-crawl: Mandatory Date Range on Seed Searches -- not implemented.
+6. core-frontier-crawl: Documented Unmeasurable Bias -- not implemented.
+7. trf5-adapter: Declared Seed Kinds and Ranking -- not implemented (depends on seeds.ts).
+8. tasks.md bookkeeping: tasks 4.17 and 4.18 (S4b) are unchecked despite the described work (documents.ts buildDocumentFilename + documents.test.ts) existing, passing, and being superseded by S4c's buildDocumentPath. No requirement is affected -- Stable Document Filename Derivation is COMPLIANT below on current code -- but the checkbox state itself is wrong and should be corrected in tasks.md.
 
-1. The resume path SaturationInfo.resultCount is fabricated, not read from persisted state, contradicting design.md own "Re-split inputs" claim - and this is an undisclosed deviation. scraper.ts resume loop (run(), the "for (const checkpoint of checkpoints.values())" block) calls this.config.traversal.split(reconstructed, { resultCount: cap ?? 0, cap }). cap here is simply this.config.site.resultPageCap - the adapter DECLARED cap, not the ACTUAL OBSERVED result count at the moment the parent originally saturated. design.md Resumability and Idempotency table, Re-split inputs row, states explicitly: "SaturationInfo (resultCount, declaredCap) is read off the parent's own subdivided coverage record, which is a second reason D10 must persist that cell." This is architecturally impossible with the current port shape: CoverageSink (engine/ports.ts:164-166) has only a write() method, no load()/read capability at all, and CheckpointRecord (the only state run() actually loads on resume) has no resultCount field - only facetValue/label were added for D10 (task 7.1 own scope). Concretely: apply-progress.md S5c section states "No implementation deviation from design.md D10-D12 was found or introduced by this session" - this claim is inaccurate for the "Re-split inputs" design row. The gap is also completely untested: the resume test (scraper.test.ts, "resumes a subdivided checkpoint...") records traversal.splitCalls[0].saturated via the stub (confirmed at scraper.test.ts:130) but never asserts on it, unlike the live-saturation test at the same file (line 676), which does assert saturated: { resultCount: 5, cap: 5 }. This does not break any scenario as literally worded in spec.md - "Requeued children resume like any other unit" only requires children to be skipped/reprocessed correctly, which they are, and TRF5 own split() ignores SaturationInfo entirely (design.md own text acknowledges this), so no currently-shipped behavior is observably wrong. But it is a real, undisclosed gap in the same shape as this project own repeated pattern (S4c DocumentSink, S5a Logger, this very slice TraversalPort.split() wiring itself) - a promise made in design.md that no task or test actually delivers, silently degrading a future adapter that DOES rely on the observed count to choose how to subdivide. Recommend either (a) adding resultCount to CheckpointRecord alongside facetValue/label (the cheapest fix, consistent with D10 existing persistence extension), or (b) correcting design.md prose to match the current, cap-based placeholder - plus a test asserting on traversal.splitCalls[0].saturated in the resume scenario either way.
+Findings 1-7 trace to the same root cause: tasks.md 6.1-6.13 (13 tasks) are unchecked and no S6 code exists. Per this project own strict-verification discipline, an unchecked task is always CRITICAL regardless of how well the completed slices score -- this is stated explicitly to avoid the exact failure mode this change has repeatedly caught in its own history (a green suite and a 100% coverage map that both quietly hid a real gap). This is scoped, planned, additive, off-by-default work per tasks.md own sequencing, not a regression introduced by any applied slice; S1 through S5f are not implicated by this finding.
 
-**SUGGESTION**: None beyond the remediation folded into WARNING 1 above.
+**WARNING** (6):
 
+1. (core-resilience-policy: FetchOutcome to RetryDecision Mapping) No production adapter code anywhere constructs FetchOutcome.kind === 'transient'. Confirmed by exhaustive grep across src/: documents.ts, detail.ts, and site.ts each map every unrecognized or unexpected HTTP status to hostDefect, never transient. The mapping function itself (retry-policy.ts decide()) is correctly proven against hand-built transient literals, satisfying the spec own scenario text and its explicit stubbed-transport-only Purpose statement -- but the practical consequence is that a real 429 or 503 from the live TRF5 host currently gets bounded-retried-then-abandoned via the hostDefect path (cap 2) rather than backed off and cooled down via the transient path (cap 5, global cooldown, Retry-After honored). This is disclosed in apply-progress.md S5f as a known follow-up ("must land before any unbounded live sweep") and independently confirmed here, not merely repeated from the disclosure.
+2. (core-resilience-policy: Global 429 Cooldown) Direct consequence of WARNING 1: since transient is never constructed by the adapter, tripCooldown is never reachable from real traffic either. rate-limiter.test.ts proves the RateLimiter class correctly pauses all workers when directly told to trip -- that mechanism is sound -- but nothing in the current adapter ever tells it to.
+3. (trf5-adapter: Complete Search Form Field Set) toBrDate (site.ts:39) has zero test coverage, direct or indirect. See WARNING 5 detail above.
+4. (trf5-adapter: Full Field Inventory Extraction) documentoSemLoginHTML document rows are skipped entirely, and a CNPJ-identified party falls through to an UNKNOWN/null placeholder rather than being structurally extracted. See WARNING 6 detail above.
+5. (core-scraping-engine: Two-Stage Discover-Then-Fetch Execution) DiscoverResult has no partial-failure shape (ports.ts:26-30: items, documentsByItemId, count -- no per-row outcome). The live acceptance run in S5f hit exactly this: a single misclassified row failed the entire discover-stage outcome for the unit, discarding every other item that unit would otherwise have yielded. This does not violate the literal two scenarios (which are both about a whole-stage outcome, not row-level partial failure), but it is a real, live-confirmed correctness gap disclosed in tasks.md own S5f section as a deliberate non-fix.
+6. (core-scraping-engine: Saturation-Driven Subdivision) The mechanism is fully wired and mutation-audited against StubTransport (11/11 mutations caught per the S5c report), but the one live saturated day this change has ever observed (2026-03-10, 30/30 rows) did not subdivide: split() returned null because classes.ts unscoped, unvalidated li scan returned far fewer than the real roughly-132-entry class catalogue under a real, already-aged session. Recorded in docs/RESEARCH.md 9.9 and apply-progress.md, and independently corroborated here by reading classes.ts, which indeed has no content-based validity check on the catalogue response (unlike every other TRF5 response type, which is validated through the zod chain). This is the clearest instance in this change of the pattern the launch prompt names: a mechanism proven green against a fixture the implementation itself controls, silent on the one real occasion it was tested.
+
+**SUGGESTION** (1):
+
+1. (core-run-control-and-output: Structured Run Observability) No end-to-end test with a real composed run (main.ts) captures stdout to a file and asserts it contains only summary/forecast output, as opposed to the exhaustive per-Logger-implementation proof that already exists. Carried forward from the S5a verify report; still open two slices later.
 ### TDD Compliance
 
 | Check | Result | Details |
-|---|---|---|
-| TDD Evidence reported | Partial, disclosed | Tasks 7.1-7.27: genuine RED evidence was lost (session interruption); substituted by an 11-behavior mutation-detection audit, independently spot-checked above (5/5 re-run, matching). Tasks 7.28-7.29: genuine, observed RED (AssertionError: expected [ Logger ] to deeply equal []), quoted and disclosed. |
-| All tasks have tests | Yes | 29/29 tasks map to a covering test or type-level enforcement |
-| RED confirmed (tests exist) | Yes | All listed test files exist and were read directly by this verification |
-| GREEN confirmed (tests pass) | Yes | 149/149 pass on independent re-run |
-| Non-vacuousness of the lost-RED substitution | Yes, for the 5 rows re-run | Confirmed independently, not taken on the apply actor word |
-| Non-vacuousness of the reverse-coverage audit (7.28) | Yes | Genuine RED quoted in apply-progress.md, and the map own mutation self-test (ports-coverage-audit.test.ts third it) still passes |
+|-------|--------|---------|
+| TDD Evidence reported | Yes, with disclosed exceptions | Every slice S1-S5f has a TDD Cycle Evidence table in apply-progress.md. Two slices (S4c, S5c tasks 7.1-7.27) disclosed lost or retroactive RED and substituted an equal-strength mutation-detection audit instead of a fabricated RED narrative -- itself a strength of this project process, not a compliance failure, since the substitution is independently verifiable and was independently re-run for 5 of 11 S5c-audited behaviors in the historical S5c verify report. |
+| All tasks have tests | Yes, for S1-S5f | 145/145 complete tasks map to a covering test or a type-level enforcement, confirmed by source inspection this session. S6 (13 tasks) has no tests because it has no code. |
+| RED confirmed (tests exist) | Yes | All referenced test files exist under src/, confirmed by this session grep listing (40 files). |
+| GREEN confirmed (tests pass) | Yes | 219/219 pass on this session own independent re-run. |
+| Non-vacuousness of substituted RED (S4c, S5c) | Yes | S4d exists specifically to mutation-prove S4c own suite (9/10 caught, 1 gap closed). S5c own entry mutation-proves 11/11 behaviors, 5 of which were independently re-run by the historical S5c verify report, not merely trusted. |
+| Strict TDD honesty discipline | Consistently upheld | Every non-vacuous or retroactive cycle across S1-S5f is disclosed by name in apply-progress.md rather than presented as a clean RED. This session found no undisclosed fabricated RED claim anywhere in the trail. |
 
-**TDD Compliance**: Honest disclosure confirmed accurate; no fabricated RED claim found anywhere in this slice evidence trail.
-
-### Quality Metrics
-
-**Linter**: No errors (pnpm lint, exit 0)
-**Type Checker**: No errors (pnpm typecheck, exit 0)
-**Formatter**: No errors (pnpm format:check, exit 0)
-**Tests**: 149/149 passing (independently reproduced)
-
-### Verdict
-
-**PASS WITH WARNINGS** - All 29 S5c tasks (7.1-7.29) are complete, independently re-verified against the amended core-scraping-engine/core-coverage-accounting specs (17/17 scenarios COMPLIANT across 5/5 requirements), independently re-tested (149/149 passing, clean typecheck/lint/format), and the disclosed lost-RED mutation-detection audit was independently spot-checked (5/5 re-run mutations caught for the disclosed reasons, including all four highest-risk behaviors named in the verification brief). Both disclosed findings (the partition-contract fake type-level fiction and the reverse-coverage audit "nothing untraced" result) were independently confirmed accurate - neither over-claimed nor under-claimed. docs/sweep-flow.md accurately describes the implemented mechanism. One WARNING is recorded: the resume path SaturationInfo.resultCount is a fabricated placeholder rather than the persisted observed count design.md promises, an undisclosed deviation that does not break any current spec scenario or shipped behavior but should be tracked and either fixed or documented before a future adapter relies on it.
-
----
-
-## Historical: S5a Verification Report (preserved, unaltered below)
-
-```yaml
-schema: gentle-ai.verify-result/v1
-evidence_revision: sha256:d1afc159b30bdee530931e76bb3ca8592bc7f15cd78ffe96ae7ba3dd9e5e2e35
-verdict: pass_with_warnings
-blockers: 0
-critical_findings: 0
-requirements: 2/2
-scenarios: 4/4
-test_command: pnpm test
-test_exit_code: 0
-test_output_hash: sha256:e4819506192a8381d2543abb2eae0c0da842968117a64a2fc37a94798244162c
-build_command: pnpm typecheck
-build_exit_code: 0
-build_output_hash: sha256:38ac890c60e7f38d59ddfb410325cdfb5fca83c9411765c5481754e01c021630
-```
-
-## Verification Report
-
-**Change**: scraper-core
-**Slice**: S5a - Structured logging port and implementations (tasks 5.12-5.18)
-**Version**: N/A (no spec version field)
-**Mode**: Strict TDD
-**Reviewed range**: 948cb50..863fcaa on feat/scraper-core-s5a-structured-logging
-**Working tree**: clean except the expected untracked openspec/changes/scraper-core/.gentle-ai-instance bookkeeping file
-
-### Completeness
-
-| Metric | Value |
-|--------|-------|
-| Tasks total (S5a) | 7 (5.12-5.18) |
-| Tasks complete | 7 |
-| Tasks incomplete | 0 |
-
-All 7 S5a tasks are checked `[x]` in tasks.md and each maps to real, currently-passing code and tests (see Spec Compliance Matrix and TDD Compliance below). S5b (5.1-5.11) and S6 correctly remain unchecked and untouched.
-
-### Build & Tests Execution
-
-**Build (typecheck)**: PASSED
-```text
-$ pnpm typecheck
-> tsc -p tsconfig.json --noEmit
-(no output, exit 0)
-```
-
-**Lint**: PASSED
-```text
-$ pnpm lint
-> eslint .
-(no output, exit 0)
-```
-
-**Format**: PASSED
-```text
-$ pnpm format:check
-> prettier --check .
-Checking formatting...
-All matched files use Prettier code style!
-```
-
-**Tests**: 126 passed / 0 failed / 0 skipped
-```text
-$ pnpm test
-> vitest run
- Test Files  28 passed (28)
-      Tests  126 passed (126)
-```
-
-Matches the apply actor's reported 126/126 - independently reproduced, not taken on faith.
-
-**Coverage** (pnpm test:coverage, informational only): all S5a-created files at 100% statements -
-redacting-logger.ts 8/8, jsonl-logger.ts 6/6, console-logger.ts 5/5, null-logger.ts 0/0 (trivial),
-recording-logger.ts (fixture) 2/2, jsonl.ts 22/22 stmts / 5 branch groups, jsonl-item-sink.ts 3/3.
-scraper.ts overall 89.18% stmts / 73.07% branch (pre-existing uncovered ranges from earlier slices, not newly introduced by S5a's diff).
-
-### Authored Diff Size vs. Review Budget
-
-```text
-$ git diff --shortstat 948cb50..HEAD -- src
-14 files changed, 550 insertions(+), 25 deletions(-)   -> 575 authored src lines
-$ git diff --numstat 948cb50..HEAD -- eslint.config.js
-13 insertions, 2 deletions                              -> 15 lines
-```
-
-Total authored: **590 lines**, against the 800-line review budget (74% of budget) and well inside the
-1050-line max-changed-lines ceiling on the acquired attempt. Matches the apply actor's reported 575 + 15 -
-independently reproduced via git diff --numstat.
-
-### Spec Compliance Matrix
-
-| Requirement | Scenario | Test | Result |
-|---|---|---|---|
-| Structured Run Observability | Lifecycle transition is observable after the fact | engine/scraper.test.ts - separate assertions for unit.started/unit.completed, unit.saturated, fetch.retry, session.reprimed, document.persisted, document.failed, each via RecordingLogger.events, asserting level + typed fields (unitKey, attempt, delayMs, itemId, documentId, etc.) | COMPLIANT |
-| Structured Run Observability | A failing logger does not fail the run | engine/scraper.test.ts - ThrowingLogger test; run resolves, itemSink/coverageSink/checkpointStore outcomes unchanged | COMPLIANT (independently confirmed non-vacuous by mutation - see TDD Compliance) |
-| Structured Run Observability | Log output does not corrupt the run summary | infra/logging/console-logger.test.ts proves stderr-only / never stdout; infra/logging/jsonl-logger.test.ts proves file-only; every Logger implementation that exists in this codebase (Console/Jsonl/Null/Recording) is unit-proven to never call process.stdout.write | COMPLIANT (by exhaustive per-implementation proof) - no CLI exists yet to run an end-to-end stdout-redirect scenario (S5b's explicit job per tasks.md task 5.9), but since every current Logger implementation is individually proven never to touch stdout, the guarantee holds regardless of which one a future CLI wires in; recommend S5b's verify phase adds one true end-to-end confirmation for extra confidence (see Suggestions) |
-| Personal Data Handling Rules | Emitted log events carry no personal data or session token | infra/logging/redacting-logger.test.ts - cpf, partyName, jsessionid, viewState, ca redacted to '[REDACTED]'; unlisted field with a CPF-shaped value (referenceNumber) passes through unchanged, proving name-keyed (not value-sniffing) redaction | COMPLIANT - decorator fully implements and is tested against the exact contract; no current S5a-emitted event populates any of the five redacted field names (confirmed by reading every this.emit(...) call site in scraper.ts); wiring withRedaction around a real destination logger is explicitly tasks.md task 5.9 (S5b's composition root), not part of S5a's scope |
-
-**Compliance summary**: 4/4 scenarios fully compliant
-
-### Correctness (Static Evidence)
-
-| Requirement | Status | Notes |
-|---|---|---|
-| Logger/LogEvent/LogLevel port | Implemented | engine/ports.ts:172-187, fire-and-forget contract documented in the doc comment |
-| withRedaction decorator | Implemented | infra/logging/redacting-logger.ts, field-name-keyed, same composable shape as withJitter/withCap |
-| JsonlLogger | Implemented | Appends to logs/run-<runId>.jsonl via the existing appendJsonlLine primitive; UTF-8 explicit |
-| ConsoleLogger | Implemented | stderr-only, level-gated |
-| NullLogger / RecordingLogger | Implemented | Structural default / in-memory test fixture |
-| Engine event emission | Implemented | scraper.ts's private emit() wraps every logger.log() call in try/catch; 8 call sites across processUnit, runWithRetry, retryFailedDocuments |
-| jsonl.ts console removal | Implemented | readJsonlFile's torn-line warning now goes through an optional logger: Logger = new NullLogger() parameter, not console.warn |
-| Console seam (no-console ESLint rule) | Implemented and independently verified | See "Independent Seam Verification" below |
-| Engine/infra-logging import seam | Implemented and independently verified | See "Independent Seam Verification" below |
-
-### Coherence (Design)
-
-| Decision | Followed? | Notes |
-|---|---|---|
-| design.md line 25 infra/logging/logger.ts (renamed to a directory of files) | Yes | Directory infra/logging/ matches the declared seam; file split (redacting/jsonl/console/null-logger) is a reasonable refinement, not a deviation |
-| design.md "no over-engineering" (no timestamp field, LEVEL_RANK duplicated rather than shared) | Yes | Matches the "Declined Abstractions" ethos; disclosed explicitly in apply-progress.md |
-| design.md lines 160-164, Partitioning pseudocode: saturated -> TraversalPort.split() -> children requeued or null -> truncated gap | Not implemented in the phase-1 discover loop | See "Confirmed Pre-Existing Gap" below - real, but not introduced by S5a and out of S5a's own task scope |
-
-### Independent Seam Verification
-
-Both seam claims were re-derived from scratch (not trusted from apply-progress.md) and then mutation-tested by deliberately violating each rule and confirming lint fails, then reverting:
-
-1. grep -rn "infra/logging" src/engine -> empty (no match, exit 1). Confirmed.
-2. grep -rln "console\." src --include="*.ts" outside infra/logging/ -> only infra/storage/jsonl-item-sink.test.ts, which contains vi.spyOn(console, 'warn')...expect(warnSpy).not.toHaveBeenCalled() - a negative proof that console.warn is not called in production code, not a production call. Confirmed.
-3. Mutation A - inserted console.log('mutation-test-violation') into scraper.ts's emit() method -> pnpm lint failed: "75:5 error Unexpected console statement no-console". Reverted; pnpm lint clean again.
-4. Mutation B - inserted import { NullLogger } from '../infra/logging/null-logger.js' into scraper.ts -> pnpm lint failed: "'../infra/logging/null-logger.js' import is restricted... engine/ must not import an adapter - this is the ports/adapters seam  no-restricted-imports". Reverted; pnpm lint clean again.
-
-Both ESLint rules genuinely enforce the claimed seams; they are not just grep-confirmed conventions.
-
-### Independent Mutation Confirmation - Disclosure 1 (ThrowingLogger absorption)
-
-The apply actor disclosed that the "a Logger that throws does not fail the run" cycle could not produce a genuine RED under normal TDD sequencing, and that non-vacuousness was instead proven by mutating emit()'s try/catch. This was independently reproduced:
-
-- Removed the try { ... } catch { ... } wrapper from Scraper.emit(), leaving a direct this.config.logger.log(...) call.
-- Re-ran pnpm exec vitest run src/engine/scraper.test.ts -t "Logger that throws" -> failed, with Error: simulated logger failure propagating unhandled out of scraper.run() (stack trace: ThrowingLogger.log -> Scraper.emit -> Scraper.processUnit -> Pool.run -> Scraper.run).
-- Reverted the mutation; pnpm exec vitest run src/engine/scraper.test.ts -> 15/15 passing again.
-
-Confirmed: the absorption test genuinely proves the try/catch behavior, not a vacuous pass.
-
-### Independent Confirmation - Disclosure 2 (unit.saturated substitution for "cell saturation and split")
-
-Confirmed real by direct code inspection, independent of the apply actor's own account:
-
-- grep -rn "\.split(" src shows TraversalPort.split() is only called from adapters/trf5/traversal.test.ts (the adapter's own unit tests) - never from engine/scraper.ts.
-- engine/scraper.ts's processUnit only calls classifyCellState(...), and when the result is 'truncated' it emits unit.saturated and writes a truncated coverage record - it never calls this.config.traversal.split(...) to bisect and requeue children.
-- design.md lines 160-164 (the discover-loop pseudocode) and lines 225-234 (the "Partitioning" pseudocode) both describe the intended behavior as saturated -> children = split(unit) -> requeue children (parent records no cell) -> else truncated gap - i.e., bisection is supposed to be attempted before a cell is marked truncated.
-- core-coverage-accounting's "Saturated single-day cell is truncated" scenario is scoped to "a single-day, single-class search... with no further bisection possible" - implying bisection is attempted for multi-day cells, and truncated is the terminal case only.
-- core-frontier-crawl's "Saturated seed search bisects" scenario explicitly says the frontier crawl reuses "the same recursive bisection as phase 1" - implying phase 1 (the discover loop this slice instruments) already performs that bisection.
-- tasks.md S6 tasks 6.11/6.12 only wire split reuse into the frontier seed-search path (a different code path); no task in tasks.md S1 through S6 wires TraversalPort.split()'s children-requeue path into the phase-1 discover loop (engine/scraper.ts) itself.
-
-Confirmed real, and broader than S5a's own disclosure suggests: this is not merely an S5a observability substitution - the phase-1 discover loop's own saturation handling never bisects/requeues at all, contrary to design.md's own pseudocode, and the current S1-S6 task plan never revisits it. unit.saturated is therefore an accurate (not misleading) representation of what the engine loop actually does today, since no "split" transition currently exists to fail to observe. But this is a real, standing design/implementation gap predating S5a (present since S3, per S3's own apply-progress and confirmed again here) - flagged as a WARNING below for the orchestrator's tracking, not a defect introduced by this slice and not a reason to fail S5a's own scope.
-
-### Issues Found
-
-**CRITICAL**: None.
-
-**WARNING**:
-1. design.md's own Partitioning pseudocode (lines 160-164, 225-234) specifies that a saturated cell in the phase-1 discover loop should bisect via TraversalPort.split() and requeue its children before falling back to a truncated gap. engine/scraper.ts never calls split(); every saturated cell is marked truncated unconditionally. This gap predates S5a (present since S3) and is not addressed by any task through S6 in the current tasks.md. It does not block S5a (whose scope is exactly 5.12-5.18, logging only) but is a standing design/implementation mismatch worth explicit tracking - recommend the orchestrator or a future slice either add a task to wire split() into the discover loop or update design.md to reflect that bisection is deferred/declined for phase 1.
-
-**SUGGESTION**:
-1. core-run-control-and-output's "Log output does not corrupt the run summary" scenario is currently proven only by exhaustive per-implementation unit tests (every existing Logger never touches stdout), since no CLI/main.ts exists yet to run a true end-to-end proof. Recommend S5b's own verify phase adds one true end-to-end confirmation (an actual scrape run with stdout captured to a file) once cli/summary.ts, cli/dry-run.ts, and main.ts exist, for defense-in-depth beyond the per-implementation guarantee.
-
-### TDD Compliance
-
-| Check | Result | Details |
-|---|---|---|
-| TDD Evidence reported | Yes | Full "TDD Cycle Evidence" table present in apply-progress.md S5a section |
-| All tasks have tests | Yes | 7/7 tasks have covering test files |
-| RED confirmed (tests exist) | Yes | All listed test files exist in the codebase (redacting-logger.test.ts, jsonl-logger.test.ts, console-logger.test.ts, null-logger.test.ts, scraper.test.ts, jsonl-item-sink.test.ts) |
-| GREEN confirmed (tests pass) | Yes | 126/126 pass on independent re-run |
-| Triangulation adequate | Yes | Every non-structural test file has 2 or more cases with distinct expected values (redaction: positive + value-sniffing negative; jsonl/console loggers: append + threshold no-op); null-logger.test.ts correctly claims the structural single-case skip allowance |
-| Safety Net for modified files | Yes | scraper.test.ts (10/10 pre-existing from S4d, now 15/15) and jsonl-item-sink.test.ts (5/5 pre-existing from S2a, now 6/6) both still pass in full |
-
-**TDD Compliance**: 6/6 checks passed
-
-Non-vacuous cycle disclosure independently confirmed: see "Independent Mutation Confirmation - Disclosure 1" above.
+**TDD Compliance**: honest disclosure confirmed accurate across every slice; no fabricated RED claim found.
 
 ---
 
 ### Test Layer Distribution
 
-| Layer | Tests | Files | Tools |
-|---|---|---|---|
-| Unit (pure, decorator) | 2 | 1 (redacting-logger.test.ts) | vitest |
-| Unit + real temp-dir I/O | 3 | 2 (jsonl-logger.test.ts, +1 in jsonl-item-sink.test.ts) | vitest, node:fs |
-| Unit + spied process.std{err,out}/console | 3 | 2 (console-logger.test.ts, +1 spy in jsonl-item-sink.test.ts) | vitest, vi.spyOn |
-| Unit (structural) | 1 | 1 (null-logger.test.ts) | vitest |
-| Unit + in-memory engine stores | 8 new/extended | 1 (scraper.test.ts, 15/15 total) | vitest, RecordingLogger/ThrowingLogger fixtures |
-| **Total new/extended** | **18** (13 new-file tests + 5 new scraper.test.ts tests, +3 existing tests gained assertions) | 7 | |
-
-No CLI/integration/E2E layer exists yet for this slice (correctly deferred to S5b - no main.ts composition root).
-
----
-
-### Changed File Coverage
-
-| File | Line % | Rating |
+| Layer | Approx. Tests | Tools |
 |---|---|---|
-| infra/logging/redacting-logger.ts | 100% (8/8 stmts) | Excellent |
-| infra/logging/jsonl-logger.ts | 100% (6/6 stmts) | Excellent |
-| infra/logging/console-logger.ts | 100% (5/5 stmts) | Excellent |
-| infra/logging/null-logger.ts | 100% (0/0 stmts, trivial) | Excellent |
-| engine/__fixtures__/recording-logger.ts | 100% (2/2 stmts) | Excellent |
-| infra/storage/jsonl.ts | 100% (22/22 stmts) | Excellent |
-| infra/storage/jsonl-item-sink.ts | 100% (3/3 stmts) | Excellent |
-| engine/scraper.ts (whole file, incl. pre-existing code) | 89.18% stmts / 73.07% branch | Acceptable (uncovered ranges predate S5a's diff) |
+| Unit (pure functions, no I/O) | Majority of the 219 | vitest |
+| Unit + StubTransport / fake HttpTransport | Session priming, search, traversal, detail, documents, site.ts discover/fetchDocument | vitest + hand-rolled stub |
+| Unit + real temp-dir file I/O | JSONL sinks, fs-document-sink, jsonl-logger | vitest + node:fs |
+| Unit + in-memory engine stores | scraper.ts full loop (dedup, checkpoint ordering, split/resume, budget, logging) | vitest + in-memory store fakes |
+| Unit + local node:http stub server | axios-transport.ts | vitest + a real local server, never the live host |
+| Portability / module-graph proof | engine suite against two independent fake adapters | vitest + source-text module-graph check |
+| Live-host, automated | None -- forbidden by design | N/A |
+| Live-host, manual-smoke-only | One dry-run, one narrow live run (S5e task 9.6, S5f task 5f.8) | Recorded in apply-progress.md, never in the suite |
 
-**Average changed file coverage** (S5a-created/touched files, excluding pre-existing scraper.ts ranges): ~100%
+Integration/E2E in the conventional sense (browser automation) is N/A by explicit design decision (design.md); the closest analogue -- a real composed run over a local stub HTTP server and a real filesystem -- exists via main.test.ts and the two manual-smoke live runs.
 
 ---
 
 ### Assertion Quality
 
-**Assertion quality**: All assertions verify real behavior - no tautologies, ghost loops, orphaned empty-collection checks, smoke-test-only patterns, or mock-heavy tests found across redacting-logger.test.ts, jsonl-logger.test.ts, console-logger.test.ts, null-logger.test.ts, the new/extended scraper.test.ts assertions, and the new jsonl-item-sink.test.ts case. Every assertion checks a concrete field value against an expected value, following a real production-code call.
+No tautologies, ghost loops over possibly-empty collections, or assertion-without-production-call patterns were found across the files inspected this session (coverage.test.ts, scraper.test.ts, site.test.ts, detail.test.ts, documents.test.ts, retry-policy.test.ts, backoff.test.ts, rate-limiter.test.ts). Every mutation-audit row in the S4d and S5c apply-progress entries independently demonstrates a real production-code call is exercised and a real, specific failure message is produced, which is a stronger non-vacuousness proof than assertion-shape inspection alone provides.
+
+**Assertion quality**: no CRITICAL or WARNING findings from this session own inspection.
 
 ---
 
 ### Quality Metrics
 
-**Linter**: No errors (pnpm lint, exit 0)
-**Type Checker**: No errors (pnpm typecheck, exit 0)
-**Formatter**: No errors (pnpm format:check, exit 0)
+**Linter**: not re-run this session (typecheck and full test suite were run; lint was not part of the declared strict-TDD test/build command pair for this verification, and no lint-affecting change was made). Prior sessions (S5a, S5c) confirmed clean.
+**Type Checker**: No errors (pnpm typecheck, exit 0) -- independently reproduced this session.
+**Tests**: 219/219 passing -- independently reproduced this session.
+
+---
 
 ### Verdict
 
-**PASS WITH WARNINGS** - All 7 S5a tasks (5.12-5.18) are complete, independently re-tested (126/126 passing, clean typecheck/lint/format), and both seam claims were independently confirmed by mutation-testing the ESLint rules. Both disclosed TDD/design concerns were independently verified as accurately reported. All 4 in-scope scenarios (3 Structured Run Observability + 1 Personal Data Handling Rules log-redaction) are COMPLIANT. One WARNING is recorded: a pre-existing design/implementation gap (phase-1 discover loop never wires TraversalPort.split() per design.md's own pseudocode) is confirmed real but predates S5a and is out of its scope. It is not a defect introduced by this slice and does not block proceeding to S5b.
+**FAIL** -- not ready to archive as a complete 49-requirement change.
+
+S1 through S5f (143 of 158 tasks, 42 of 49 requirements, 85 of 95 scenarios) are genuinely well-built and well-tested: every completed slice independently re-runs green, the strict-TDD discipline is honestly disclosed throughout including two substituted-RED cases that are themselves mutation-proven, and S5f in particular measurably improved the evidence quality of the weakest prior area (Content-Based Validity Chain and Full Field Inventory Extraction are now proven against real captured live markup, not an invented fixture).
+
+But the change is not complete against its own 49-requirement specification: seven requirements (all of core-frontier-crawl, plus trf5-adapter Declared Seed Kinds and Ranking) have no implementation at all, because S6 (13 tasks) has not been started. This is CRITICAL by this project own stated verification discipline ("unchecked tasks always remain CRITICAL"), and it is the honest reason the previously-persisted verify-report.md (5/5 requirements, scoped to S5c only) could never have been a valid stand-in for a full-change report: it never claimed to cover the other 44 requirements, and this report is what closes that gap.
+
+Independently of S6, six WARNING-level findings are recorded against implemented, tested, and passing code, matching the pattern this project has repeatedly and honestly caught in its own history: real mechanisms (FetchOutcome.transient construction, Global 429 Cooldown reachability, saturation-driven subdivision under a real class catalogue, full field inventory for two real document/party shapes, and the date-format conversion feeding every search) are proven correct only against a fixture or in isolation, and the one live run this change has ever executed surfaced exactly the gap the verification lens warned about for split() and DiscoverResult. None of these six break a literal spec scenario as worded, and none is a regression -- all are already disclosed in apply-progress.md or docs/RESEARCH.md by the applying sessions themselves -- but none should be silently passed either.
+
+**Recommendation**: do not archive yet. Either (a) run sdd-apply for S6 to close the seven NOT IMPLEMENTED requirements and re-verify, or (b) if S6 is to be explicitly descoped from this change, update the spec set and tasks.md to remove or defer core-frontier-crawl and the seed-kinds requirement before archiving, so the archived change no longer claims 49 requirements it does not deliver. The six WARNING findings do not block archive on their own but should be tracked (most urgently WARNING 1/2, since they leave the single most safety-critical mechanism in this change -- 429 handling against a real judicial portal -- currently unreachable).
