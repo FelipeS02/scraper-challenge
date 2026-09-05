@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Budget, unboundedBudget } from './budget.js';
 import type {
   CheckpointRecord,
   CheckpointStore,
@@ -240,6 +241,7 @@ function buildScraper(overrides: {
   checkpointStore?: MemoryCheckpointStore;
   failureLedger?: MemoryFailureLedger;
   logger?: Logger;
+  budget?: Budget;
   concurrency?: number;
   maxSplitDepth?: number;
 }): {
@@ -271,6 +273,7 @@ function buildScraper(overrides: {
     checkpointStore,
     failureLedger,
     logger,
+    budget: overrides.budget ?? unboundedBudget(),
     maxSplitDepth: overrides.maxSplitDepth ?? 3,
     runId: 'run-1',
     schemaVersion: 1,
@@ -326,6 +329,67 @@ describe('Scraper — two-stage discover -> fetch loop', () => {
     expect(site.fetchCalls).toBe(0);
     expect(failureLedger.entries).toHaveLength(1);
     expect(failureLedger.entries[0]).toMatchObject({ itemId: 'B', documentId: null });
+  });
+});
+
+describe('Scraper — budget enforcement (core-run-control-and-output)', () => {
+  it('stops collecting further items once --max-items is reached, still proceeding to summary', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-A' }, { id: 'item-B' }], new Map())]);
+
+    const budget = new Budget({
+      maxItems: 1,
+      maxDocuments: 10,
+      documentsPerItem: null,
+      maxRequests: null,
+    });
+    const { scraper, itemSink } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+      budget,
+    });
+
+    await scraper.run(bounds);
+
+    expect(itemSink.records).toHaveLength(1);
+    expect(itemSink.records[0]?.itemId).toBe('item-A');
+  });
+
+  it('stops fetching further documents once --max-documents is reached, across the whole run', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }, { id: 'doc-2' }]]])),
+    ]);
+    site.scriptFetch('item-A', 'doc-1', [
+      {
+        kind: 'ok',
+        value: {
+          documentId: 'doc-1',
+          byteLength: 1,
+          contentType: null,
+          fileName: 'a.pdf',
+          bytes: new Uint8Array(),
+        },
+      },
+    ]);
+
+    const budget = new Budget({
+      maxItems: null,
+      maxDocuments: 1,
+      documentsPerItem: null,
+      maxRequests: null,
+    });
+    const { scraper, itemSink, documentSink } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+      budget,
+    });
+
+    await scraper.run(bounds);
+
+    expect(documentSink.writes).toHaveLength(1);
+    expect(site.fetchCalls).toBe(1); // doc-2's fetch is never issued once the ceiling is reached
+    expect(itemSink.records).toHaveLength(1); // the item is still written despite the truncated document loop
   });
 });
 

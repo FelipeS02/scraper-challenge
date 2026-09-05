@@ -17,6 +17,7 @@ import type {
   OutputRecord,
   RunBounds,
 } from '../ports.js';
+import { unboundedBudget } from '../budget.js';
 import { Pool } from '../pool.js';
 import { RateLimiter } from '../rate-limiter.js';
 import type { RetryPolicyConfig } from '../retry-policy.js';
@@ -125,6 +126,7 @@ describe('engine portability against a non-date-partitioning fake adapter', () =
       checkpointStore,
       failureLedger: new MemoryFailureLedger(),
       logger: new NoopLogger(),
+      budget: unboundedBudget(),
       maxSplitDepth: 5,
       runId: 'run-1',
       schemaVersion: 1,
@@ -176,6 +178,7 @@ describe('engine portability against a non-date-partitioning fake adapter', () =
       checkpointStore: new MemoryCheckpointStore(),
       failureLedger: new MemoryFailureLedger(),
       logger: new NoopLogger(),
+      budget: unboundedBudget(),
       maxSplitDepth: 5,
       runId: 'run-1',
       schemaVersion: 1,

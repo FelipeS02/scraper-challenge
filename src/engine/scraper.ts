@@ -1,3 +1,4 @@
+import type { Budget } from './budget.js';
 import { classifyCellState, computeSetHash, pendingDocumentFailures } from './coverage.js';
 import type { Pool } from './pool.js';
 import type {
@@ -37,6 +38,12 @@ export interface ScraperConfig<TItem, TDoc, TCursor> {
   readonly checkpointStore: CheckpointStore;
   readonly failureLedger: FailureLedger;
   readonly logger: Logger;
+  /**
+   * Shared, run-wide bound tracker (core-run-control-and-output, "CLI Bound
+   * Enforcement" + "Default Request Ceiling Requiring Override"). One instance per
+   * run — the document ceiling is global, not per-cell.
+   */
+  readonly budget: Budget;
   readonly runId: string;
   readonly schemaVersion: number;
   /**
@@ -147,6 +154,11 @@ export class Scraper<TItem, TDoc, TCursor> {
         for (;;) {
           const unit = queue.shift();
           if (!unit) return;
+          // Both axes stop the whole run, never just this unit: an exhausted
+          // item ceiling means no further discovery should even be attempted,
+          // and an exhausted request ceiling bounds every remaining fetch
+          // (core-run-control-and-output, "CLI Bound Enforcement").
+          if (!this.config.budget.canRecordItem() || !this.config.budget.canSpendRequest()) return;
           const requeue = await this.processUnit(unit, queue);
           if (requeue) queue.push(unit);
         }
@@ -201,6 +213,7 @@ export class Scraper<TItem, TDoc, TCursor> {
   private async processUnit(unit: WorkUnit<TCursor>, queue: WorkUnit<TCursor>[]): Promise<boolean> {
     this.emit('info', 'unit.started', { unitKey: unit.unitKey, windowKey: unit.windowKey });
 
+    this.config.budget.recordRequest();
     const discoverResult = await this.runWithRetry(() => this.config.site.discover(unit));
 
     if (!discoverResult.ok) {
@@ -216,13 +229,26 @@ export class Scraper<TItem, TDoc, TCursor> {
 
     const { items, documentsByItemId } = discoverResult.value;
     for (const item of items) {
+      // Stops collecting further items once --max-items is reached; the cell
+      // still proceeds to its coverage/checkpoint record below, never erroring
+      // the run (core-run-control-and-output, "Max-items bound").
+      if (!this.config.budget.canRecordItem()) break;
       const itemId = this.config.site.itemId(item);
       if (this.seenItemIds.has(itemId)) continue;
       this.seenItemIds.add(itemId); // synchronous claim — no await between check and set
+      this.config.budget.recordItem();
 
       const docs = documentsByItemId.get(itemId) ?? [];
       let unitRequeue = false;
       for (const doc of docs) {
+        // Stops fetching further documents once --max-documents (default 10)
+        // or --documents-per-item is reached, across the whole run — the
+        // ceiling is global, not per-cell (core-run-control-and-output,
+        // "Max-documents bound stops document fetching").
+        if (!this.config.budget.canFetchDocument(itemId) || !this.config.budget.canSpendRequest())
+          break;
+        this.config.budget.recordDocument(itemId);
+        this.config.budget.recordRequest();
         const docResult = await this.runWithRetry(() => this.config.site.fetchDocument(item, doc));
         if (docResult.ok) {
           // Persistence is the engine's concern, driven through DocumentSink — the
