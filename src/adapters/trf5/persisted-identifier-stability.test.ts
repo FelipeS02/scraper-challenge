@@ -17,6 +17,14 @@ import { TRF5Traversal } from './traversal.js';
 describe('Persisted Identifier Stability (core-run-control-and-output spec)', () => {
   const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
 
+  it('harvested a non-null jsessionid, so the leak assertions below are not vacuous', () => {
+    // `jsessionid` is null whenever the client already holds the cookie. This
+    // fixture models a cold, cookie-less priming precisely so the canary below
+    // has a real value to search for; without this guard the leak checks would
+    // silently pass against null.
+    expect(session.jsessionid).not.toBeNull();
+  });
+
   function assertNoSessionScopedValue(label: string, value: unknown): void {
     const serialized = JSON.stringify(value);
     expect(serialized, `${label} leaks the harvested jsessionid`).not.toContain(session.jsessionid);
