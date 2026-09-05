@@ -14,3 +14,15 @@ openspec/
 # which silently rewrites verbatim samples of what the site actually returned.
 # Formatting owns the code; it does not own the research record.
 *.md
+
+# Response fixtures, for the same reason one level closer to the bone: these files
+# are evidence about what the server emits, and their value is fidelity. Prettier
+# reformats the JavaScript inside an `onclick`, unquoting object keys — which is
+# exactly the string `session.ts` parses to find the a4j submit trigger. A fixture
+# that has been prettified is no longer a sample of the site; it is a sample of our
+# formatter. The `.xml` fixtures escape today only because no parser is inferred
+# for them, which is luck, not a rule — so the directory is excluded wholesale.
+# `stub-transport.ts` is code and stays formatted via the negation below.
+src/**/__fixtures__/*.html
+src/**/__fixtures__/*.xml
+src/**/__fixtures__/*.pdf
