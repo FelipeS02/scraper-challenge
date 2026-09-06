@@ -4,7 +4,8 @@ import type { ResponseView } from './response-view.js';
 /**
  * Ordered zod `.safeParse()` chain over a `ResponseView` (design.md D7, trf5-adapter
  * spec "Content-Based Validity Chain") — first match wins: sessionExpired >
- * unprimedSession > hostDefect > invalidTokenShell > validData. `invalidTokenShell`
+ * unprimedSession > hostDefect (rendered OR reached via redirect) >
+ * invalidTokenShell > validData. `invalidTokenShell`
  * matches by absence of the detail header/parties block, never by document absence or
  * byte size (design.md D8). Both schemas require `isHtmlPage` so a `text/xml` search
  * fragment — which also lacks a detail block — never matches either.
@@ -18,6 +19,14 @@ const hostDefectSchema = z.object({
   isErrorUnexpectedPage: z.literal(true),
   hasPersistenceException: z.literal(true),
 });
+/**
+ * The same host-defect landing page, reached instead via an empty-bodied 3xx
+ * redirect (measured live 2026-09-06) — `hasPersistenceException` cannot be
+ * read from an empty body, so this is judged from `isErrorRedirect` alone
+ * (built from the `Location` header) rather than the body-derived fields
+ * `hostDefectSchema` above uses.
+ */
+const hostDefectRedirectSchema = z.object({ isErrorRedirect: z.literal(true) });
 const invalidTokenShellSchema = z.object({
   status: z.literal(200),
   isHtmlPage: z.literal(true),
@@ -43,6 +52,7 @@ export function classifyValidity(view: ResponseView): ValidityOutcome {
   if (sessionExpiredSchema.safeParse(view).success) return { kind: 'sessionExpired' };
   if (unprimedSessionSchema.safeParse(view).success) return { kind: 'unprimedSession' };
   if (hostDefectSchema.safeParse(view).success) return { kind: 'hostDefect' };
+  if (hostDefectRedirectSchema.safeParse(view).success) return { kind: 'hostDefect' };
   if (invalidTokenShellSchema.safeParse(view).success) return { kind: 'invalidTokenShell' };
   if (validDataSchema.safeParse(view).success) return { kind: 'validData' };
   return { kind: 'unclassified' };

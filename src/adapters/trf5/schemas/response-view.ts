@@ -20,6 +20,14 @@ export interface ResponseView {
   readonly hasDetailHeaderBlock: boolean;
   /** Presence of any of the three party-list containers (active/passive/others). */
   readonly hasPartiesBlock: boolean;
+  /**
+   * A 3xx redirect whose `Location` header points at `errorUnexpected.seam`
+   * (measured live 2026-09-06: the same host-defect landing page `case 2`/`5`
+   * render directly at 200, reached instead via an empty-bodied redirect —
+   * `hasPersistenceException`/`isErrorUnexpectedPage` cannot be read from an
+   * empty body, so this is a separate signal, read from the header instead).
+   */
+  readonly isErrorRedirect: boolean;
 }
 
 /**
@@ -56,5 +64,9 @@ export function buildResponseView(response: HttpResponse): ResponseView {
       idBlockPresent(bodyText, 'processoPartesPoloAtivoResumidoList') ||
       idBlockPresent(bodyText, 'processoPartesPoloPassivoResumidoList') ||
       idBlockPresent(bodyText, 'processoParteOutrosInteressadosResumidoList'),
+    isErrorRedirect:
+      response.status >= 300 &&
+      response.status < 400 &&
+      (response.headers.location ?? '').includes('errorUnexpected.seam'),
   };
 }

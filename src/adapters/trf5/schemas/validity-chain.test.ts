@@ -14,6 +14,7 @@ const overlappingView: ResponseView = {
   isHtmlPage: false,
   hasDetailHeaderBlock: false,
   hasPartiesBlock: false,
+  isErrorRedirect: false,
 };
 
 describe('classifyValidity — ordered chain, first match wins (trf5-adapter spec)', () => {
@@ -64,5 +65,27 @@ describe('classifyValidity — ordered chain, first match wins (trf5-adapter spe
   it('does not classify a text/xml search fragment as invalidTokenShell even when it lacks detail blocks', () => {
     const view = buildResponseView(fixtureResponse(200, 'text/xml', 'search-ok.xml'));
     expect(classifyValidity(view).kind).not.toBe('invalidTokenShell');
+  });
+
+  it('matches hostDefect for a 302 redirect to errorUnexpected.seam, with an empty body (measured live 2026-09-06)', () => {
+    const view = buildResponseView({
+      status: 302,
+      headers: {
+        location: 'https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam?cid=104706',
+      },
+      body: new Uint8Array(),
+    });
+
+    expect(classifyValidity(view)).toEqual({ kind: 'hostDefect' });
+  });
+
+  it('does not swallow a 302 to an unrelated location into hostDefect — it still falls through to unclassified', () => {
+    const view = buildResponseView({
+      status: 302,
+      headers: { location: 'https://pjett.trf5.jus.br/pjeconsulta/somewhereElse.seam' },
+      body: new Uint8Array(),
+    });
+
+    expect(classifyValidity(view)).toEqual({ kind: 'unclassified' });
   });
 });

@@ -19,3 +19,35 @@ describe('buildResponseView — detail/parties block detection against a capture
     expect(view.hasPartiesBlock).toBe(false);
   });
 });
+
+describe('buildResponseView — a 302 redirect landing on errorUnexpected.seam (measured live 2026-09-06)', () => {
+  it('sets isErrorRedirect from the Location header when a 302 body is empty', () => {
+    const view = buildResponseView({
+      status: 302,
+      headers: { location: 'https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam?cid=1' },
+      body: new Uint8Array(),
+    });
+
+    expect(view.isErrorRedirect).toBe(true);
+  });
+
+  it('does not set isErrorRedirect for a 302 to an unrelated location', () => {
+    const view = buildResponseView({
+      status: 302,
+      headers: { location: 'https://pjett.trf5.jus.br/pjeconsulta/somewhereElse.seam' },
+      body: new Uint8Array(),
+    });
+
+    expect(view.isErrorRedirect).toBe(false);
+  });
+
+  it('does not set isErrorRedirect for a non-redirect status even if Location happens to be present', () => {
+    const view = buildResponseView({
+      status: 200,
+      headers: { location: 'https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam' },
+      body: new Uint8Array(),
+    });
+
+    expect(view.isErrorRedirect).toBe(false);
+  });
+});

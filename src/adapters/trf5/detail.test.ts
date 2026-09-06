@@ -113,6 +113,46 @@ describe('fetchDetail — documents-grid pagination (S5h tasks 5h.6/5h.7/5h.8, d
   });
 });
 
+describe('fetchDetail — a detail page reached via a 302-to-errorUnexpected.seam redirect (measured live 2026-09-06)', () => {
+  it('classifies it as hostDefect exactly like the directly-rendered 200 version, never unclassified/hostDefect-by-fallback', async () => {
+    const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
+    const transport = new StubTransport([
+      {
+        status: 302,
+        headers: {
+          location: 'https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam?cid=104706',
+        },
+        body: new Uint8Array(),
+      },
+    ]);
+
+    const outcome = await fetchDetail(transport, PRIMING_URL, session, 'stub-ca-token-0001');
+
+    expect(outcome).toEqual({
+      kind: 'hostDefect',
+      reason: 'errorUnexpected.seam with PersistenceException',
+    });
+  });
+
+  it('a 302 to an unrelated location is NOT swallowed into hostDefect by the new branch', async () => {
+    const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
+    const transport = new StubTransport([
+      {
+        status: 302,
+        headers: { location: 'https://pjett.trf5.jus.br/pjeconsulta/somewhereElse.seam' },
+        body: new Uint8Array(),
+      },
+    ]);
+
+    const outcome = await fetchDetail(transport, PRIMING_URL, session, 'stub-ca-token-0001');
+
+    // Still classified via the pre-existing 'unclassified' -> hostDefect
+    // fallback (detail.ts's own mapping) — behavior unchanged for a redirect
+    // this specific branch does not recognize.
+    expect(outcome).toEqual({ kind: 'hostDefect', reason: 'unrecognized detail response' });
+  });
+});
+
 describe('fetchDetail — site-agnostic failure vocabulary (design.md D12)', () => {
   it('reports an invalid-token shell as permanentError:invalidReference with the site detail preserved, never a site-specific reason literal', async () => {
     const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
