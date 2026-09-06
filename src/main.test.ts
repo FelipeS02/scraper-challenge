@@ -7,7 +7,7 @@ import { fixtureResponse, StubTransport } from './adapters/trf5/__fixtures__/stu
 import type { TrfPayload } from './adapters/trf5/schemas/payload.js';
 import type { ScrapeArgs } from './cli/args.js';
 import type { Clock, CoverageRecord, OutputRecord } from './engine/ports.js';
-import { runScraper } from './main.js';
+import { deriveMaxSplitDepth, runScraper } from './main.js';
 
 /**
  * Task 9.3: drives the whole composition through a stubbed transport, proving
@@ -29,6 +29,7 @@ function scrapeArgs(overrides: Partial<ScrapeArgs> = {}): ScrapeArgs {
     dateTo: '2026-01-01',
     maxDays: 31,
     maxFacetValues: 20,
+    maxNameProbes: 30,
     maxItems: null,
     maxDocuments: 10,
     documentsPerItem: null,
@@ -46,8 +47,22 @@ let outputDir: string;
 let pdfsDir: string;
 
 afterEach(() => {
-  rmSync(outputDir, { recursive: true, force: true });
+  if (outputDir) rmSync(outputDir, { recursive: true, force: true });
   if (pdfsDir) rmSync(pdfsDir, { recursive: true, force: true });
+});
+
+describe('deriveMaxSplitDepth — design.md D4 constraint (maxSplitDepth >= ceil(log2(range_days)) + 2)', () => {
+  it('covers a single day: 0 bisection hops + 1 class + 1 name level', () => {
+    expect(deriveMaxSplitDepth('2026-09-03', '2026-09-03')).toBe(2);
+  });
+
+  it('covers a 10-day window: ceil(log2(10)) = 4 bisection hops + 2', () => {
+    expect(deriveMaxSplitDepth('2026-09-01', '2026-09-10')).toBe(6);
+  });
+
+  it('covers a one-year window: ceil(log2(365)) = 9 bisection hops + 2 (design.md D4 worked example: 11)', () => {
+    expect(deriveMaxSplitDepth('2026-01-01', '2026-12-31')).toBe(11);
+  });
 });
 
 describe('runScraper — the composition root wiring (S5e)', () => {

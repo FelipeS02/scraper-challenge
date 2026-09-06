@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { NameHarvester } from './adapters/trf5/name-probes.js';
 import { primeSession } from './adapters/trf5/session.js';
 import { TRF5Seeds } from './adapters/trf5/seeds.js';
 import { resultPageCap, TRF5Site } from './adapters/trf5/site.js';
@@ -51,8 +52,28 @@ const RETRY_POLICY: RetryPolicyConfig = {
 // A misbehaving split() cannot loop forever, but a wide date range legitimately
 // bisects several times before the facet branch ever runs — generous rather
 // than tuned to any one --max-days value (core-scraping-engine, "Saturation-
-// Driven Subdivision").
-const MAX_SPLIT_DEPTH = 20;
+// Driven Subdivision"). Used as a floor by deriveMaxSplitDepth below so an
+// unusually short run window never REDUCES today's headroom.
+const DEFAULT_MAX_SPLIT_DEPTH = 20;
+
+/**
+ * design.md D4: `maxSplitDepth >= ceil(log2(range_days)) + 2` — +1 for class
+ * expansion, +1 for the name-substring level trf5-name-substring-axis adds.
+ * Derived from the actually configured run window rather than a bare
+ * hardcoded number, so a wide `--max-days` (or `--to` minus `--from`) can
+ * never silently truncate the name level as a false `truncated` gap. The
+ * caller (`runScraper` below) floors this at `DEFAULT_MAX_SPLIT_DEPTH` so a
+ * short window never gets LESS headroom than every run had before this
+ * change.
+ */
+export function deriveMaxSplitDepth(dateFrom: string, dateTo: string): number {
+  const rangeDays =
+    Math.round(
+      (Date.parse(`${dateTo}T00:00:00Z`) - Date.parse(`${dateFrom}T00:00:00Z`)) / 86_400_000,
+    ) + 1;
+  const bisectionHops = rangeDays <= 1 ? 0 : Math.ceil(Math.log2(rangeDays));
+  return bisectionHops + 2;
+}
 
 export interface RunDeps {
   readonly transport: HttpTransport;
@@ -95,8 +116,23 @@ function resolveLogger(args: ParsedArgs, deps: RunDeps): Logger {
 export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void> {
   const logger = resolveLogger(args, deps);
   const session = await primeSession(deps.transport, PRIMING_URL);
-  const site = new TRF5Site({ transport: deps.transport, primingUrl: PRIMING_URL });
-  const traversal = new TRF5Traversal({ transport: deps.transport, session });
+  // Shared, run-wide instance (trf5-name-substring-axis task 1.3): TRF5Site
+  // WRITES to it during discover() (row party names), TRF5Traversal READS
+  // from it during split() (name-probe ranking) — the one new coupling
+  // design.md D2 introduces.
+  const nameHarvester = new NameHarvester();
+  const site = new TRF5Site({
+    transport: deps.transport,
+    primingUrl: PRIMING_URL,
+    harvester: nameHarvester,
+  });
+  const maxNameProbes = args.command === 'scrape' ? args.maxNameProbes : 0;
+  const traversal = new TRF5Traversal({
+    transport: deps.transport,
+    session,
+    maxNameProbes,
+    harvester: nameHarvester,
+  });
   // Harvesting is unconditional across every `scrape`, on or off `--frontier`
   // (core-frontier-crawl, "Plain scrape does not run frontier crawl": seeds
   // are persisted regardless; only *searching* them is deferred). This same
@@ -114,14 +150,21 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
         })
       : unboundedBudget();
 
+  // Computed once, shared by the frontier branch and the phase-1 sweep below
+  // (design.md D4): `deriveMaxSplitDepth` needs the same clamped window
+  // `scraper.run()`/`runFrontierCrawl` will actually search.
+  const bounds: RunBounds | null =
+    args.command === 'scrape'
+      ? {
+          ...clampDateRange(args.dateFrom, args.dateTo, args.maxDays),
+          maxFacetValues: args.maxFacetValues,
+        }
+      : null;
+
   // core-frontier-crawl, "Deferred Phase-2 Invocation": a `--frontier` run
   // replaces the phase-1 sweep entirely for this invocation — it never runs
   // both in the same process.
-  if (args.command === 'scrape' && args.frontier) {
-    const bounds: RunBounds = {
-      ...clampDateRange(args.dateFrom, args.dateTo, args.maxDays),
-      maxFacetValues: args.maxFacetValues,
-    };
+  if (args.command === 'scrape' && args.frontier && bounds) {
     const result = await runFrontierCrawl({
       site,
       frontierCapable,
@@ -139,6 +182,14 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
     printFrontierRunSummary(result);
     return;
   }
+
+  // design.md D4: floored at DEFAULT_MAX_SPLIT_DEPTH so a short window never
+  // gets less headroom than every run had before this change; `retry-failed`
+  // never calls split() at all, so it just gets the floor.
+  const maxSplitDepth =
+    bounds !== null
+      ? Math.max(DEFAULT_MAX_SPLIT_DEPTH, deriveMaxSplitDepth(bounds.dateFrom, bounds.dateTo))
+      : DEFAULT_MAX_SPLIT_DEPTH;
 
   const scraper = new Scraper({
     site,
@@ -158,19 +209,15 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
     budget,
     runId: deps.runId,
     schemaVersion: SCHEMA_VERSION,
-    maxSplitDepth: MAX_SPLIT_DEPTH,
+    maxSplitDepth,
     ...(args.command === 'scrape'
       ? { frontierSeedHarvest: { frontierCapable, stateStore: seedStateStore } }
       : {}),
   });
 
-  if (args.command === 'retry-failed') {
+  if (args.command === 'retry-failed' || bounds === null) {
     await scraper.retryFailedDocuments();
   } else {
-    const bounds: RunBounds = {
-      ...clampDateRange(args.dateFrom, args.dateTo, args.maxDays),
-      maxFacetValues: args.maxFacetValues,
-    };
     await scraper.run(bounds);
   }
 

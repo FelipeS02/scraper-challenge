@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MAX_DOCUMENTS, DEFAULT_MAX_REQUESTS } from '../engine/budget.js';
 import { DEFAULT_REQUEST_SPACING_MS } from '../engine/rate-limiter.js';
-import { parseArgs, type ScrapeArgs } from './args.js';
+import { DEFAULT_MAX_NAME_PROBES, parseArgs, type ScrapeArgs } from './args.js';
 
 describe('parseArgs — scrape command', () => {
   it('parses the complete documented flag set', () => {
@@ -149,6 +149,41 @@ describe('parseArgs — scrape command', () => {
       '--frontier',
     ]) as ScrapeArgs;
     expect(withFlag.frontier).toBe(true);
+  });
+
+  it('parses --max-name-probes and defaults it when omitted (trf5-adapter spec, "Name-Probe Budget")', () => {
+    const withFlag = parseArgs([
+      'scrape',
+      '--from',
+      '2026-01-01',
+      '--to',
+      '2026-01-01',
+      '--max-name-probes',
+      '10',
+    ]) as ScrapeArgs;
+    expect(withFlag.maxNameProbes).toBe(10);
+
+    const withoutFlag = parseArgs([
+      'scrape',
+      '--from',
+      '2026-01-01',
+      '--to',
+      '2026-01-01',
+    ]) as ScrapeArgs;
+    expect(withoutFlag.maxNameProbes).toBe(DEFAULT_MAX_NAME_PROBES);
+  });
+
+  it('accepts 0 for --max-name-probes to disable the name-substring level (trf5-adapter spec, "Zero budget disables the level")', () => {
+    const args = parseArgs([
+      'scrape',
+      '--from',
+      '2026-01-01',
+      '--to',
+      '2026-01-01',
+      '--max-name-probes',
+      '0',
+    ]) as ScrapeArgs;
+    expect(args.maxNameProbes).toBe(0);
   });
 
   it('rejects an unrecognized --log-level', () => {

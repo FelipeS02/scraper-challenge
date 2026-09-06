@@ -14,6 +14,13 @@ const LOG_FORMATS = ['console', 'jsonl'] as const;
 export type LogFormat = (typeof LOG_FORMATS)[number];
 
 const DEFAULT_MAX_FACET_VALUES = 20;
+/**
+ * Sized from the measured yield (docs/RESEARCH.md §3, "Measured partition
+ * yield"): the adaptive strategy fully desaturated both residual saturated
+ * classes on `03/09/2026` in 22 and ~28 probes respectively — 30 covers
+ * either with headroom (trf5-adapter spec, "Name-Probe Budget").
+ */
+export const DEFAULT_MAX_NAME_PROBES = 30;
 
 export interface ScrapeArgs {
   readonly command: 'scrape';
@@ -21,6 +28,12 @@ export interface ScrapeArgs {
   readonly dateTo: string;
   readonly maxDays: number;
   readonly maxFacetValues: number;
+  /**
+   * Bounds name-probe children per saturated single-day class cell
+   * (trf5-adapter spec, "Name-Probe Budget"). `0` disables the
+   * name-substring level entirely.
+   */
+  readonly maxNameProbes: number;
   readonly maxItems: number | null;
   readonly maxDocuments: number;
   readonly documentsPerItem: number | null;
@@ -152,6 +165,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     dateTo: requireString(flags, 'to'),
     maxDays: intWithDefault(flags, 'max-days', Number.POSITIVE_INFINITY),
     maxFacetValues: intWithDefault(flags, 'max-facet-values', DEFAULT_MAX_FACET_VALUES),
+    maxNameProbes: intWithDefault(flags, 'max-name-probes', DEFAULT_MAX_NAME_PROBES),
     maxItems: optionalInt(flags, 'max-items'),
     maxDocuments: intWithDefault(flags, 'max-documents', DEFAULT_MAX_DOCUMENTS),
     documentsPerItem: optionalInt(flags, 'documents-per-item'),
