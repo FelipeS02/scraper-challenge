@@ -284,6 +284,136 @@ searches minutes apart (`b72d0376cf3b` → `87402dd14bb1`). **The data is live a
 A window marked complete is complete *as observed at that time*, which is exactly why the
 checkpoint records an observation timestamp rather than an absolute claim.
 
+### Measured partition yield
+
+The yield of each partition axis was measured end to end against the live site on
+`03/09/2026` (a saturated day). All counts are unique `ca` tokens after deduplication.
+
+| Strategy | Requests | Unique processes |
+|---|---|---|
+| Base (no filter, capped) | 1 | 30 |
+| Date × judicial class (union of all 132 classes) | ~132 | 128 |
+| Date × class × name-substring (on the residual saturated classes) | +~50 | 191 |
+
+Two findings shape the design of the third axis:
+
+- **The class axis already does most of the work.** Only 19 of 132 classes had any results
+  that day, and only **2 still saturated at 30** (`APELAÇÃO CÍVEL`, `AGRAVO DE INSTRUMENTO`).
+  The date × class sweep is not broken — the name axis only has to attack that residue.
+- **A third axis exists and it works: `nomeParte` / `nomeAdv` are literal, case-insensitive
+  SUBSTRING filters** (not prefix, not token-AND; verified: a mid-name fragment matches, a
+  real-token-wrong-order string returns 0), requiring at least two space-separated tokens.
+  They compose with both the date window and the class filter. On the two residual saturated
+  classes a name-substring sweep fully desaturated them (0 of 28 probes still hit 30):
+  `APELAÇÃO CÍVEL` 30 → 85, `AGRAVO DE INSTRUMENTO` 30 → 38.
+
+**Static dictionary vs adaptive extension.** Two ways to choose the substring probes were
+compared on the dense cell `APELAÇÃO CÍVEL`. A fixed dictionary of common PT-BR surname
+bigrams reached 85 unique in 29 requests. An adaptive strategy — probes ranked by frequency
+across the party names already visible in the returned rows, stopped on yield decay — reached
+**95 unique in 22 requests** (−24% requests, +12% coverage), because it spends requests on
+the fragments that actually dominate that cell (institutional litigants: INSS, CEF, conselhos,
+municípios) instead of a blind surname list. The result rows carry the party names, so the
+filter's own output seeds the next probe. This is heuristic coverage, not provable
+completeness — the honest-gap reporting stands; the residue simply shrinks.
+
+The result rows themselves already carry the parties column
+(`<PARTE A> e outros (N) X <PARTE B>`), which is what makes the adaptive seed possible with
+no extra detail-page fetch.
+
+### Bounded live acceptance attempt (2026-09-06): blocked before any A/B could run
+
+**This does not replace the `2026-09-03` measurements above** — those numbers stand as the
+record of what the class axis alone recovers on that day. This is a separate, later
+acceptance attempt for the shipped `trf5-name-substring-axis` implementation, and it never
+reached the point of producing a comparable number.
+
+The plan was a controlled same-day A/B — run the identical date twice against a fresh
+`output/` each time, `--max-name-probes 0` (class-only baseline) then `--max-name-probes 30`
+(axis on) — rather than trusting the `2026-09-03`/`128` constant against an unrelated date,
+since that number only ever meant anything for that specific day.
+
+**Every attempt failed before either half of the A/B could run**, on the SAME cause across
+four different dates:
+
+| Date tried | Result |
+|---|---|
+| `2026-09-03` (1st attempt, before a classification fix) | `discover()` failed: one row's detail page returned a 302 to `errorUnexpected.seam`, classified as `unclassified` (a real gap, since fixed) |
+| `2026-09-03` (2nd attempt, after the fix) | `discover()` still failed: the SAME row now correctly classifies as `hostDefect` ("errorUnexpected.seam with PersistenceException"), but the fix was never meant to make a permanently-broken row succeed — it only makes the failure honest |
+| `2026-09-01`, `2026-09-02`, `2026-09-04` (bounded 3-candidate retry, ordinary weekdays, no Brazilian holiday) | Each failed identically: at least one process among that day's unfaceted 30-row result set returns `errorUnexpected.seam with PersistenceException` on every retry |
+
+**The finding**: `TRF5Site.discover()` fails its ENTIRE result set on a single row's
+detail-fetch failure (`site.ts`'s own comment: "a single row's detail-fetch failure fails the
+whole discover() call rather than silently dropping the row"). Hitting this on **every one of
+four dates tried** — not one unlucky process on one unlucky day — indicates this is not a rare
+edge case for the scraper's current operating conditions; it is a live, present blocker for
+*any* full day-level sweep with detail fetching enabled, independent of the name-substring
+axis this change adds. The class axis (`APELAÇÃO CÍVEL`/`AGRAVO DE INSTRUMENTO` etc.) itself
+never gets exercised on any of these dates today, because the very first, unfaceted
+`discover()` call never completes.
+
+**Root cause, isolated (2026-09-06, decisive, read-only diagnostics — throwaway scripts, not
+committed):** two competing hypotheses produced the identical symptom above and had to be told
+apart directly, not inferred from the aggregate pattern:
+- **H1 — scattered broken records.** The corpus itself contains individual processes whose
+  detail page unconditionally raises a Hibernate `PersistenceException` server-side; any
+  30-row page that happens to include one fails, regardless of what the client does.
+- **H2 — a client-side Seam conversation bug.** The scraper's OWN detail-fetch sequence
+  poisons the JBoss Seam conversation (the `cid` in `errorUnexpected.seam?cid=<n>` is a Seam
+  conversation id), so the Nth detail fetch of a session dies regardless of which process it
+  names.
+
+**Test A (decisive): fetch the known-failing row as the FIRST request of a brand-new session.**
+A completely fresh `AxiosTransport` (new cookie jar, new priming GET, new `jsessionid`, new
+ViewState) searched `03/09/2026`, then fetched row index 1
+(`0001647-83.2005.4.05.8308`) as its very FIRST detail request — before row 0, before
+anything else that could poison a conversation:
+
+```
+status=302 location=https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam?cid=109060
+```
+
+It failed identically, with the same `PersistenceException` shape, as the FIRST request of a
+session that had never made a prior detail fetch. **This directly falsifies H2**: there was no
+earlier conversation for this request to inherit or poison. The fault travels with the
+process, not with request order or session state.
+
+**Test B: cross-date first-failure index, sequential row order, fresh session per date.**
+
+| Date | First-failing index | Process number | `cid` |
+|---|---|---|---|
+| `2026-09-03` | 1 | `0001647-83.2005.4.05.8308` | `107039` |
+| `2026-09-02` | 1 | `0820320-27.2019.4.05.8300` | `107049` |
+
+Read in isolation this table's "same low index, different process numbers" shape is the
+pattern that would suggest H2 — but Test A already ran the direct causal experiment and
+falsified H2's required mechanism for exactly the `2026-09-03` row this table also names: it
+fails with zero prior requests in its session, so it cannot be an artifact of request order.
+**H1 stands: these are two genuinely different, individually broken records, one per date**,
+and Test B's own `cid` values (`107039`, `107049`, and Test A's separate `109060` — all
+close in magnitude despite being three unrelated sessions run seconds apart) confirm `cid` is
+a server-global, per-request Seam conversation counter, not a session-scoped value our
+client could corrupt. The observation that failure has consistently landed near index 1
+across the dates sampled so far is a real, currently unexplained pattern in the corpus itself
+(possibly related to result ordering correlating with record age or filing batch) — but it is
+a property of the SITE's data, not of the scraper's session handling, and is not investigated
+further here (out of scope for this diagnostic round).
+
+**Correction to the earlier reading in this subsection**: the initial framing above ("at least
+one process... on every date tried... indicates a live blocker") was written before this
+causal isolation and left the cause ambiguous between H1 and H2. It is now confirmed as H1 —
+individually broken source records, not a scraper-side session/conversation defect — so no
+correction is needed to the recommended fix (a `discover()` partial-row-tolerance change is
+still the right target), only to the certainty of the diagnosis, which is now direct rather
+than inferred.
+
+**Consequence for this change**: the name-substring partition level (`split()`'s L3/L4
+cascade, `NameHarvester`, `nomeParte` mapping) is fully implemented and unit-tested — see
+`apply-progress.md` — but could not be exercised end-to-end live in this apply batch. A
+`discover()` partial-row-tolerance fix (skip/record a permanently broken row and continue with
+the rest of that page) is a separate, larger `trf5-adapter`/`core-scraping-engine` change,
+explicitly out of scope for this attempt.
+
 So a complete sweep is not a pagination problem, it is a **partitioning** problem. The only
 usable lever is the filing-date range (`dataAutuacaoInicio` / `dataAutuacaoFim`):
 
@@ -480,8 +610,10 @@ the minimum a technically competent implementation owes the people in the record
 
 ## 8. Not yet verified
 
-- How much of a saturated day the 132-class partition actually recovers in practice. The
-  mechanism is proven; the yield is not measured.
+- ~~How much of a saturated day the 132-class partition actually recovers in practice.~~
+  **Measured 2026-09-04 (see §3, "Measured partition yield").** On `03/09/2026` the class
+  axis lifts a saturated day from 30 to 128, leaving 2 residual saturated classes; a
+  name-substring sub-partition then lifts those to 191 total.
 - Whether a process can carry more than one judicial class (which would mean the class
   partition double-counts rather than partitions). Deduplication by process number makes
   this harmless either way, but it is worth confirming.
