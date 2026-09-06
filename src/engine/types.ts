@@ -36,4 +36,13 @@ export interface WorkUnit<TCursor> {
   readonly facetValue: string | null;
   readonly label: string; // human-readable, for logs and coverage records
   readonly cursor: TCursor; // opaque JSON, round-tripped byte-identical
+  /**
+   * Optional adapter-declared bag of partition dimensions, passed through
+   * verbatim onto the resulting `CoverageRecord.dimensions`
+   * (core-coverage-accounting delta, trf5-name-substring-axis). Generic
+   * pass-through ONLY — the engine never reads or interprets any key here.
+   * Absent (`undefined`) for every unit that declares none, so every
+   * existing adapter/test keeps exactly today's `{}` coverage dimensions.
+   */
+  readonly dimensions?: Readonly<Record<string, unknown>>;
 }

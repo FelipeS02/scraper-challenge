@@ -288,6 +288,13 @@ function unit(unitKey: string): WorkUnit<{ readonly day: string }> {
   };
 }
 
+function unitWithDimensions(
+  unitKey: string,
+  dimensions: Readonly<Record<string, unknown>>,
+): WorkUnit<{ readonly day: string }> {
+  return { ...unit(unitKey), dimensions };
+}
+
 function okDiscover(
   items: readonly TestItem[],
   documentsByItemId: ReadonlyMap<string, readonly TestDoc[]>,
@@ -1193,6 +1200,36 @@ describe('Scraper — saturation-driven subdivision (Saturation-Driven Subdivisi
     expect(traversal.splitCalls).toHaveLength(0); // never asked to subdivide
     const record = coverageSink.records.find((r) => r.unitKey === 'A');
     expect(record).toMatchObject({ state: 'complete', saturated: false, declaredCap: null });
+  });
+});
+
+describe('Scraper — WorkUnit.dimensions pass-through (core-coverage-accounting delta, generic pass-through only)', () => {
+  it('carries an adapter-declared dimensions bag onto the coverage record unchanged', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-1' }], new Map())]);
+
+    const dimensions = { date: '2026-01-01', class: 'APELACAO CIVEL', nameProbe: 'DA SILVA' };
+    const traversal = new StubTraversal([unitWithDimensions('A', dimensions)]);
+
+    const { scraper, coverageSink } = buildScraper({ site, traversal });
+
+    await scraper.run(bounds);
+
+    const record = coverageSink.records.find((r) => r.unitKey === 'A');
+    expect(record?.dimensions).toEqual(dimensions);
+  });
+
+  it('defaults to an empty dimensions bag when the adapter declares none (unchanged for every existing WorkUnit)', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-1' }], new Map())]);
+
+    const traversal = new StubTraversal([unit('A')]);
+    const { scraper, coverageSink } = buildScraper({ site, traversal });
+
+    await scraper.run(bounds);
+
+    const record = coverageSink.records.find((r) => r.unitKey === 'A');
+    expect(record?.dimensions).toEqual({});
   });
 });
 

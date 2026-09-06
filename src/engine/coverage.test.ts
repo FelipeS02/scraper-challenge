@@ -183,6 +183,145 @@ describe('verifyPartitionInvariant', () => {
       { windowKey: '2026-01-03', unfilteredCount: 30, facetSum: 45, holds: true },
     ]);
   });
+
+  it('compares a subdivided class cell against the sum of its own name-probe children (one level down, core-coverage-accounting delta)', () => {
+    const dims = (nameProbe: string) => ({
+      date: '2026-09-03',
+      class: 'APELACAO CIVEL',
+      nameProbe,
+    });
+    const records: CoverageRecord[] = [
+      coverageRecord({
+        windowKey: '2026-09-03',
+        facetValue: 'APELACAO CIVEL',
+        unitKey: '2026-09-03..2026-09-03|APELACAO CIVEL',
+        resultCount: 30,
+        state: 'subdivided',
+      }),
+      coverageRecord({
+        windowKey: '2026-09-03',
+        facetValue: 'APELACAO CIVEL',
+        unitKey: '2026-09-03..2026-09-03|APELACAO CIVEL|SEGURO SOCIAL',
+        resultCount: 45,
+        dimensions: dims('SEGURO SOCIAL'),
+      }),
+      coverageRecord({
+        windowKey: '2026-09-03',
+        facetValue: 'APELACAO CIVEL',
+        unitKey: '2026-09-03..2026-09-03|APELACAO CIVEL|DA SILVA',
+        resultCount: 40,
+        dimensions: dims('DA SILVA'),
+      }),
+      coverageRecord({
+        windowKey: '2026-09-03',
+        facetValue: 'APELACAO CIVEL',
+        unitKey: '2026-09-03..2026-09-03|APELACAO CIVEL|REGIONAL DE',
+        resultCount: 55,
+        dimensions: dims('REGIONAL DE'),
+      }),
+    ];
+
+    const results = verifyPartitionInvariant(records);
+
+    expect(results).toEqual([
+      {
+        windowKey: '2026-09-03',
+        facetValue: 'APELACAO CIVEL',
+        unfilteredCount: 30,
+        facetSum: 140,
+        holds: true,
+      },
+    ]);
+  });
+
+  it('flags a name-probe-level violation rather than silently accepting the discrepancy', () => {
+    const records: CoverageRecord[] = [
+      coverageRecord({
+        windowKey: '2026-09-04',
+        facetValue: 'AGRAVO DE INSTRUMENTO',
+        unitKey: '2026-09-04..2026-09-04|AGRAVO DE INSTRUMENTO',
+        resultCount: 30,
+        state: 'subdivided',
+      }),
+      coverageRecord({
+        windowKey: '2026-09-04',
+        facetValue: 'AGRAVO DE INSTRUMENTO',
+        unitKey: '2026-09-04..2026-09-04|AGRAVO DE INSTRUMENTO|DA SILVA',
+        resultCount: 10,
+        dimensions: { date: '2026-09-04', class: 'AGRAVO DE INSTRUMENTO', nameProbe: 'DA SILVA' },
+      }),
+    ];
+
+    const results = verifyPartitionInvariant(records);
+
+    expect(results).toEqual([
+      {
+        windowKey: '2026-09-04',
+        facetValue: 'AGRAVO DE INSTRUMENTO',
+        unfilteredCount: 30,
+        facetSum: 10,
+        holds: false,
+      },
+    ]);
+  });
+
+  it('detects a deeper partition level from dimension-bag SHAPE alone, never from a concrete key name (core-coverage-accounting delta: "the core does not learn a concrete name field")', () => {
+    // A hypothetical, unrelated third partition axis a DIFFERENT adapter might
+    // declare — no "nameProbe" key anywhere. The engine must recognize this
+    // exactly like any other deeper partition, from shape alone.
+    const records: CoverageRecord[] = [
+      coverageRecord({
+        windowKey: '2026-09-05',
+        facetValue: 'SOME CLASS',
+        unitKey: '2026-09-05..2026-09-05|SOME CLASS',
+        resultCount: 30,
+        state: 'subdivided',
+      }),
+      coverageRecord({
+        windowKey: '2026-09-05',
+        facetValue: 'SOME CLASS',
+        unitKey: '2026-09-05..2026-09-05|SOME CLASS|REGION-A',
+        resultCount: 20,
+        dimensions: { date: '2026-09-05', class: 'SOME CLASS', region: 'REGION-A' },
+      }),
+      coverageRecord({
+        windowKey: '2026-09-05',
+        facetValue: 'SOME CLASS',
+        unitKey: '2026-09-05..2026-09-05|SOME CLASS|REGION-B',
+        resultCount: 15,
+        dimensions: { date: '2026-09-05', class: 'SOME CLASS', region: 'REGION-B' },
+      }),
+    ];
+
+    const results = verifyPartitionInvariant(records);
+
+    expect(results).toEqual([
+      {
+        windowKey: '2026-09-05',
+        facetValue: 'SOME CLASS',
+        unfilteredCount: 30,
+        facetSum: 35,
+        holds: true,
+      },
+    ]);
+  });
+
+  it('degenerate case: an adapter that declares no dimensions anywhere produces no deeper-partition entries at all', () => {
+    const records: CoverageRecord[] = [
+      coverageRecord({ windowKey: '2026-09-06', facetValue: null, resultCount: 30 }),
+      coverageRecord({ windowKey: '2026-09-06', facetValue: 'A', resultCount: 20 }),
+      coverageRecord({ windowKey: '2026-09-06', facetValue: 'B', resultCount: 15 }),
+    ];
+
+    const results = verifyPartitionInvariant(records);
+
+    // Only the pre-existing day-level check fires; nothing has a dimensions
+    // bag that is a strict superset of anything else in its own facetValue
+    // bucket, so zero class-level entries are ever produced.
+    expect(results).toEqual([
+      { windowKey: '2026-09-06', unfilteredCount: 30, facetSum: 35, holds: true },
+    ]);
+  });
 });
 
 describe('pendingDocumentFailures', () => {

@@ -508,7 +508,11 @@ export class Scraper<TItem, TDoc, TCursor> {
       itemSetHash: computeSetHash(itemIds),
       observedAt: this.config.clock.now().toISOString(),
       failureReason: null,
-      dimensions: {},
+      // Generic pass-through only (core-coverage-accounting delta): the
+      // engine never interprets these keys, it only forwards whatever the
+      // adapter declared on the WorkUnit — `{}` for every unit that declares
+      // none, exactly today's behavior.
+      dimensions: unit.dimensions ?? {},
     };
   }
 }
