@@ -9,6 +9,7 @@ import type {
 import type { FetchOutcome, WorkUnit } from '../../engine/types.js';
 import { fetchDetail } from './detail.js';
 import { fetchDocument as fetchDocumentFile } from './documents.js';
+import { extractPartyNames, NameHarvester } from './name-probes.js';
 import { summarizeDocumentsGrid, type DocumentRow } from './parsing/detail-page.js';
 import { parseResultFragment } from './parsing/result-fragment.js';
 import type { TrfPayload } from './schemas/payload.js';
@@ -46,6 +47,13 @@ function toBrDate(isoDate: string): string {
 export interface TRF5SiteConfig {
   readonly transport: HttpTransport;
   readonly primingUrl: string;
+  /**
+   * Shared with `TraversalConfig.harvester` by the composition root
+   * (trf5-name-substring-axis task 1.3) — this is where it gets WRITTEN,
+   * from every row's parsed parties column. Defaults to a fresh, empty
+   * harvester so a caller that never wires one still runs unaffected.
+   */
+  readonly harvester?: NameHarvester;
 }
 
 /**
@@ -61,8 +69,11 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
   readonly identityKeyName = identityKeyName;
 
   private session: SessionState | null = null;
+  private readonly harvester: NameHarvester;
 
-  constructor(private readonly config: TRF5SiteConfig) {}
+  constructor(private readonly config: TRF5SiteConfig) {
+    this.harvester = config.harvester ?? new NameHarvester();
+  }
 
   itemId(item: TrfPayload): string {
     return itemId(item);
@@ -96,6 +107,10 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
       // field the Complete Search Form Field Set already declares (S3), never
       // a new field this run adds to the request.
       ...(cursor.seedCpf !== undefined ? { documentoParte: cursor.seedCpf } : {}),
+      // Present only at partition level 3 (trf5-adapter spec, "Discover
+      // applies the cursor's name probe to nomeParte") — the traversal's own
+      // name-substring probe, never a new field this run invents.
+      ...(cursor.nameProbe !== undefined ? { nomeParte: cursor.nameProbe } : {}),
       dataAutuacaoInicio: toBrDate(cursor.dateFrom),
       dataAutuacaoFim: toBrDate(cursor.dateTo),
     };
@@ -134,6 +149,15 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
     }
 
     const fragment = parseResultFragment(response.body);
+
+    // Adaptive name-probe extension (trf5-adapter spec, "Adaptive Name-Probe
+    // Extension"): reads only the already-parsed parties column, no request
+    // of its own. Runs before the per-row detail loop below so a caller that
+    // only cares about coverage (e.g. --max-documents 0) still harvests.
+    for (const row of fragment.rows) {
+      this.harvester.observe(extractPartyNames(row.parties));
+    }
+
     const items: TrfPayload[] = [];
     const documentsByItemId = new Map<string, readonly DocumentRow[]>();
 

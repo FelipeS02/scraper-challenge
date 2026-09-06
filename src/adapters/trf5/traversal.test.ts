@@ -122,6 +122,60 @@ describe('TRF5Traversal — frontier seed-cursor propagation (core-frontier-craw
   });
 });
 
+describe('TRF5Traversal — name-substring partition level (trf5-adapter spec, "Name-Substring Partition Level")', () => {
+  it('expands a saturated single-day class cell into bounded name-probe children with unique unitKeys', async () => {
+    const transport = new StubTransport([]);
+    const traversal = new TRF5Traversal({ transport, session, maxNameProbes: 3 });
+
+    const children = await traversal.split(
+      unit('2026-09-03', '2026-09-03', 'APELACAO CIVEL'),
+      saturated,
+    );
+
+    expect(children).not.toBeNull();
+    expect(children).toHaveLength(3);
+    const unitKeys = new Set((children ?? []).map((child) => child.unitKey));
+    expect(unitKeys.size).toBe(3); // no duplicate siblings
+    for (const child of children ?? []) {
+      expect(child.facetValue).toBe('APELACAO CIVEL'); // class stays the declared facet (D5)
+      expect(child.cursor.dateFrom).toBe('2026-09-03');
+      expect(child.cursor.dateTo).toBe('2026-09-03');
+      expect(typeof child.cursor.nameProbe).toBe('string');
+    }
+    // The static dictionary floor requires no request at all (harvester is empty).
+    expect(transport.requests).toHaveLength(0);
+  });
+
+  it('returns null for a cell that already carries a name probe and is still saturated (irreducible residue)', async () => {
+    const transport = new StubTransport([]);
+    const traversal = new TRF5Traversal({ transport, session, maxNameProbes: 3 });
+    const probedUnit: WorkUnit<TraversalCursor> = {
+      unitKey: '2026-09-03..2026-09-03|APELACAO CIVEL|DA SILVA',
+      windowKey: '2026-09-03..2026-09-03',
+      facetValue: 'APELACAO CIVEL',
+      label: '2026-09-03..2026-09-03|APELACAO CIVEL|DA SILVA',
+      cursor: { dateFrom: '2026-09-03', dateTo: '2026-09-03', nameProbe: 'DA SILVA' },
+    };
+
+    const result = await traversal.split(probedUnit, saturated);
+
+    expect(result).toBeNull();
+  });
+
+  it('disables the name-substring level entirely when maxNameProbes is 0, matching pre-change behavior', async () => {
+    const transport = new StubTransport([]);
+    const traversal = new TRF5Traversal({ transport, session, maxNameProbes: 0 });
+
+    const result = await traversal.split(
+      unit('2026-09-03', '2026-09-03', 'APELACAO CIVEL'),
+      saturated,
+    );
+
+    expect(result).toBeNull();
+    expect(transport.requests).toHaveLength(0);
+  });
+});
+
 describe('TRF5Traversal — date bisection boundary contract', () => {
   it('splits an even-length window at mid/mid+1 with no gap or overlap', async () => {
     const transport = new StubTransport([]);

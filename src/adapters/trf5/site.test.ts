@@ -4,6 +4,7 @@ import type { WorkUnit } from '../../engine/types.js';
 import { fixtureResponse, loadFixtureBytes, StubTransport } from './__fixtures__/stub-transport.js';
 import { parseDetailPage, type DocumentRow } from './parsing/detail-page.js';
 import { assembleTrfPayload, type TrfPayload } from './schemas/payload.js';
+import { NameHarvester } from './name-probes.js';
 import { identityKeyName, resultPageCap, TRF5Site } from './site.js';
 import type { TraversalCursor } from './traversal.js';
 
@@ -240,6 +241,59 @@ describe('TRF5Site.discover — frontier seed search (core-frontier-crawl, "Seed
     // documentoParte is still present, as every documented field must be on
     // every POST (S3, "Complete Search Form Field Set") — just empty.
     expect(searchRequest?.body).not.toContain(encodeURIComponent('000.000.000-00'));
+  });
+});
+
+describe('TRF5Site.discover — name-substring partition level (trf5-adapter spec, "Discover applies the cursor\'s name probe to nomeParte")', () => {
+  it("sends the cursor's name probe as nomeParte, alongside the mandatory date range and class", async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      searchFragment(0),
+    ]);
+    const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+    await site.discover(
+      unit({
+        facetValue: 'APELACAO CIVEL',
+        cursor: { dateFrom: '2026-09-03', dateTo: '2026-09-03', nameProbe: 'DA SILVA' },
+      }),
+    );
+
+    const searchRequest = transport.requests[1];
+    // URLSearchParams.toString() encodes spaces as "+", not "%20".
+    expect(searchRequest?.body).toContain('nomeParte=DA+SILVA');
+    expect(searchRequest?.body).toContain('classeJudicial=APELACAO+CIVEL');
+  });
+
+  it('omits nomeParte entirely for a unit whose cursor carries no name probe', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      searchFragment(0),
+    ]);
+    const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+    await site.discover(unit());
+
+    const searchRequest = transport.requests[1];
+    expect(searchRequest?.body).toContain('nomeParte=&');
+  });
+});
+
+describe('TRF5Site.discover — adaptive name-probe harvesting (trf5-adapter spec, "Adaptive Name-Probe Extension")', () => {
+  it('harvests party names from parsed rows into the shared harvester, issuing no extra request', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      searchFragment(1),
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'),
+    ]);
+    const harvester = new NameHarvester();
+    const site = new TRF5Site({ transport, primingUrl: PRIMING_URL, harvester });
+
+    await site.discover(unit());
+
+    // searchFragment(1)'s own row text ends with " PARTE UM X PARTE DOIS".
+    expect(harvester.ranked()).toEqual(expect.arrayContaining(['PARTE UM', 'PARTE DOIS']));
+    expect(transport.requests).toHaveLength(3); // priming + search + 1 detail — no extra request
   });
 });
 
