@@ -40,6 +40,13 @@
   capture showed the documents grid actually uses. Live acceptance run against
   `0800293-46.2016.4.05.8100` passed: declared 24, extracted 23, skipped 1, gap 0. See "S5h"
   below.**
+- **S5j (5j.1–5j.7): complete — 526 authored `src/` lines actual, within the 800 budget
+  (forecast ~340). The born-digital viewer-then-PDF two-step flow is implemented and
+  unit-proven, and all four artifacts asserting "no PDF at all" are corrected. (5j.8): NOT
+  passing — a real, disclosed host-side defect on the `pjett` training environment
+  reproducibly breaks the Gerar PDF postback for every born-digital document tried (3
+  documents, 2 processes), independent of the harvested request contract's correctness.
+  See "S5j" below.**
 - S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -2852,3 +2859,358 @@ and deviations" above.
 `src/engine/http-status.ts` formatting warning, not introduced by this slice). Live acceptance
 run against the real TRF5 host passed with full observed evidence (see above). Ready for
 `sdd-verify`, or `sdd-apply` again for S5j.
+
+## S5j — Born-digital documents: the PDFs we were leaving behind
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5e-transport-composition-root` (continued on the same branch
+per this apply run's launch instructions; no new branch created).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #17 in the chain, targeting the S5h
+work. Not pushed and no PR opened by this apply run.
+**No `size:exception` needed**: estimated ~340 authored `src/` lines against the 800-line
+budget; landed at 526 (66% of budget, 55% over its own estimate — consistent with this
+project's standing overrun pattern).
+**Why this slice exists**: four artifacts (`docs/RESEARCH.md`, `parsing/detail-page.ts`'s
+comment, the `detail-page-valid.html` fixture header, and design.md's own D14) asserted a
+born-digital document's viewer page has "no PDF at all". It does — the viewer renders its own
+`Gerar PDF` command link, retrievable through a second, id-harvesting step keyed on
+`idProcDocBin` (not `idProcessoDoc`, the id the viewer URL itself carries). That claim was
+repeated in four places and never re-tested until this slice read the viewer in a browser.
+**Live network required and used**: task 5j.1's capture and task 5j.8's acceptance attempt
+both needed the real host — no fixture in this repository could otherwise prove the viewer's
+own submit contract, and the acceptance attempt is exactly what surfaced the host-side defect
+this section discloses.
+
+### Completed Tasks
+
+- [x] 5j.1 Captured and redacted `document-viewer-born-digital.html` (the
+      `documentoSemLoginHTML.seam` viewer response) from the real process
+      `0005643-82.2001.4.05.8000`, document `idProcessoDoc=6884889` / `idProcDocBin=6799939`.
+      Also captured `document-viewer-gerar-pdf-host-defect.html` — the response the Gerar PDF
+      POST *actually* returns, live, which is not a PDF (see "Live Acceptance Evidence" below).
+      See "Capture method" below.
+- [x] 5j.2 RED `parsing/document-viewer.test.ts` — `extractDocumentViewerPdfContract` harvests
+      form id, download-link parameter name, `ca`, and `idProcDocBin` from the real captured
+      viewer; confirmed genuinely RED (`Cannot find module './document-viewer.js'`).
+- [x] 5j.3 GREEN implemented `parsing/document-viewer.ts`. Matches the anchor and its form by
+      id suffix (`[id$=":downloadPDF"]`), never the literal `j_id42` — proven against both the
+      real fixture and a hand-built synthetic snippet using a different prefix (`prefix99`),
+      which makes no claim about TRF5's real markup, only about the selector mechanism.
+- [x] 5j.4 RED then GREEN — `documents.ts`'s `fetchDocument` now dispatches on `documentKind`:
+      a `bornDigital` row goes through `fetchBornDigitalDocument` (GET viewer, harvest
+      contract, POST it, follow an optional 302), returning the same `StoredDocument` shape
+      the legacy path returns. `site.ts`'s S5h filter that kept born-digital rows out of the
+      engine's fetch loop (when they had no fetch path at all) is dropped — every document now
+      reaches `site.fetchDocument`.
+- [x] 5j.5 RED then GREEN — `isPdfContent` checks the literal `%PDF-` magic bytes; a
+      200/302-chain response that is not a real PDF by content classifies as `hostDefect`,
+      never `ok`. Proven against both the reused `document-sample.pdf` fixture (a real PDF, the
+      same fixture the legacy path's own tests already use for this purpose) and the captured
+      `document-viewer-gerar-pdf-host-defect.html` failure response.
+- [x] 5j.6 RED then GREEN — a born-digital fetch failure returns a `FetchOutcome` failure kind
+      rather than throwing (unit-proven directly); the engine-level "item still written,
+      failure still ledgered" guarantee is generic over `documentKind` and already covered by
+      `engine/scraper.test.ts`, exactly as task 4.17's own disclosure records for the legacy
+      path — not re-proven here to avoid duplicating existing coverage.
+- [x] 5j.7 GREEN corrected all four artifacts: `docs/RESEARCH.md` §9.7 (new subsection
+      recording the two-step flow and the disclosed host-side defect finding),
+      `parsing/detail-page.ts`'s `DocumentRow`/`extractDocuments` comments, and the
+      `detail-page-valid.html` fixture header. Design.md's D14 was found **already corrected**
+      by a prior slice (dated 2026-09-05, before this apply run) — verified by reading it, not
+      assumed; no residue remained. Also reconciled `__fixtures__/README.md`'s stale "None of
+      these files is a raw capture" claim, already false since S5f/S5h and made more false by
+      this slice's own two new captured fixtures.
+- [ ] 5j.8 Live acceptance run: **NOT passing.** See "Live Acceptance Evidence" below for the
+      full investigation. This is a disclosed environmental blocker, not an implementation gap
+      — see "Issues Found" for why this conclusion is warranted rather than assumed.
+
+### Capture method
+
+One throwaway `tsx` script in the scratchpad directory (never committed) drove requests by
+hand, reusing production `primeSession`/`search`/`AxiosTransport` exactly as the real scraper
+composes them, plus ad hoc regex/inline parsing (not production code) to locate the
+born-digital viewer link and harvest its Gerar PDF contract for inspection: primed a session,
+searched `numProcesso: '0005643-82.2001.4.05.8000'` with a wide date window, took the matching
+row's `ca`, GETed the detail page, regex-matched the born-digital rows'
+`openPopUp('name', 'viewerUrl')` calls to find the full viewer URL (the production
+`extractDocuments` parser this slice adds does the same extraction correctly — this script
+predates that implementation and needed its own throwaway version to investigate first), GETed
+the viewer page, regex-matched the `jsfcljs(...)` call to harvest `formId`/`ca`/`idProcDocBin`,
+then POSTed the harvested contract. This is the same "capture first, implement from what was
+found" order S5h and S5f used.
+
+Redaction (`redact.cjs`, scratchpad-only): targeted string replacement, applied via a Node
+script operating on the raw latin1-decoded string (`Buffer.toString('latin1')` →
+string-replace → `Buffer.from(out, 'latin1')` — never through a general-purpose text-editing
+tool, which silently corrupts non-UTF-8 bytes outside the edited region; see "Design decisions
+and deviations" below) — the one `ca` token (1 occurrence), the passive party's real name
+("Requerido"), the active party's real name (a federal agency), and the passive party's
+lawyer's real name and OAB number, each replaced with an obviously-synthetic placeholder.
+Verified afterward by grepping the redacted output for every original value (zero matches),
+the same verification discipline S5f/S5h established. **New redaction concern this slice
+introduces**: the viewer page renders the actual document as six embedded
+`<img src="data:image/png;base64,...">` raster images — a scanned/rendered view of the real
+document. Any personal data in that content is encoded as pixels, which a textual redaction
+pass cannot inspect or guarantee clean. Every embedded image's base64 payload was stripped
+entirely and replaced with a placeholder token (`data:image/png;base64,REDACTED_IMAGE_DATA`)
+rather than redacted in place — the only way to make an unconditional claim about this
+fixture's content. The `document-viewer-gerar-pdf-host-defect.html` fixture (the real observed
+POST response) needed no redaction: it is a generic Java stack-trace/exception template page,
+verified to carry no process number and no CPF-shaped pattern.
+
+The `pjett.trf5.jus.br` absolute-URL literal remains inside the captured markup, same as the
+existing `detail-page-valid.html`/`detail-page-paginated-documents.html` fixtures already
+committed — inert captured data, not a live-host literal driving a test request (task 3.14's
+rule).
+
+### Design decisions and deviations
+
+- **`DocumentRow.downloadUrl` for a `bornDigital` row now holds the viewer URL, not `null`.**
+  S5h's own disclosure forecast this exact change ("until S5j exists to fetch it,
+  `binId`/`downloadUrl` are `null`"). `extractDocuments` (`parsing/detail-page.ts`) now
+  captures the full URL from the `openPopUp('name', 'url')` call's second argument (a new
+  `BORN_DIGITAL_VIEWER_URL` regex scanning to the closing `)` rather than stopping at the
+  first `'`, since the first `openPopUp` argument is a plain window name with no query string
+  of its own). `binId` stays `null` (D9) — there is no legacy `idBin=` for this shape.
+- **`fetchDocument` now dispatches on `documentKind` explicitly**, rather than on the nullness
+  of `downloadUrl` (the S5h-era guard). This is a real behavior change, not a refactor: a
+  populated `downloadUrl` on a `bornDigital` row no longer means "has a legacy path" (it never
+  did) — it means "has a viewer URL to start the two-step flow from". The dispatch makes this
+  explicit instead of relying on a coincidental null check.
+- **The Gerar PDF POST target is resolved as an absolute URL** (`new URL(contract.actionUrl,
+  doc.downloadUrl)`), the same pattern S5h's pager-POST target resolution uses
+  (`detailUrl.split('?')[0]`) — the harvested `actionUrl` is a bare relative path with no
+  `jsessionid`, and the viewer URL it resolves against already carries the full origin.
+- **`site.ts`'s S5h-introduced filter (`documentsByItemId` restricted to `documentKind ===
+  'legacy'`) is dropped**, exactly as S5h's own disclosure flagged as the intended additive
+  change ("drop the filter, or split it in two"). Every document now reaches
+  `site.fetchDocument`, which dispatches correctly for both kinds.
+- **Redaction method changed from "any text editor" to "a Node script explicit about latin1
+  round-tripping"**, discovered the hard way mid-slice: using the ordinary file-edit tool on
+  `detail-page-valid.html` (an ISO-8859-1-encoded fixture) to update its header comment
+  silently corrupted every accented character elsewhere in the file to U+FFFD replacement
+  bytes — an unrelated, unrecoverable side effect of a tool that reads/writes text as UTF-8
+  touching a file whose real encoding is latin1. Caught by the full test suite (a previously
+  passing assertion on `detail.caseClass`/`subjects` text started failing with mojibake),
+  recovered via `git checkout` plus a byte-safe Node script, and re-verified by re-decoding the
+  file as latin1 and confirming a known accented substring survived. Every subsequent edit to a
+  latin1 fixture in this slice used that same byte-safe method; the two brand-new fixtures were
+  created via a byte-exact file copy (`cp`), never through a text-editing tool.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 5j.2/5j.3 | `parsing/document-viewer.test.ts` | Unit (real fixture + one synthetic snippet) | N/A — new file | ✅ Genuine: `Cannot find module './document-viewer.js'` (module did not exist) | ✅ 3/3 passed | ✅ 3 cases: real fixture harvest, no-contract-present (`detail-page-valid.html`) returns `null`, id-suffix-not-hardcoded via a synthetic different-prefix snippet | ✅ Clean |
+| 5j.4/5j.5/5j.6 | `documents.test.ts` | Unit + `StubTransport` | ✅ 22/22 (14 pre-existing + new) | ✅ Genuine: the born-digital two-step tests failed with "expected 3 but got 1" (current code treated the viewer URL as a legacy download URL, got a non-302 status, stopped after 1 request) — no stash needed, the unmodified code already exhibited the wrong behavior | ✅ 6/6 new tests passed | ✅ Multiple cases: 302-then-PDF, direct-200-PDF (no redirect assumed mandatory), real observed host-defect response, 429 precedence on the viewer GET, missing-contract hostDefect | ✅ Clean |
+| downloadUrl population | `parsing/detail-page.test.ts` | Unit (real fixture) | ✅ 14/14 (13 pre-existing + new) | ✅ Genuine: `AssertionError: the given combination of arguments (null and string) is invalid` (downloadUrl was still `null`) | ✅ 14/14 passed | ✅ Proven against all 4 born-digital rows in the real fixture | ✅ Clean |
+| `documentsByItemId` unfiltered | `site.test.ts` | Unit + `StubTransport` | ✅ 10/10 (9 pre-existing + new assertion) | ✅ Genuine: the diff showed the 4 born-digital rows missing from the actual value against a real fixture (`detail-page-valid.html`) | ✅ 10/10 passed | N/A — single-fixture proof, matching S5h's own precedent for this exact assertion | ✅ Clean |
+| `main.test.ts` wiring | `main.test.ts` | Integration (stubbed transport, real composition root) | ✅ 3/3 (2 unaffected + 1 updated) | ✅ Genuine: `StubTransport: no scripted response for call #9` — the born-digital row (now first in DOM order and no longer filtered out) attempted a real fetch the stub script did not anticipate | ✅ 3/3 passed after rescripting the stub responses and the expected output path | N/A — one composition-root wiring test, matching its own stated scope | ✅ Clean |
+
+### Test Summary
+
+- **Total tests added (S5j)**: 12 — 3 new (`parsing/document-viewer.test.ts`) + 6 new
+  (`documents.test.ts`) + 1 new (`parsing/detail-page.test.ts`, the downloadUrl-population
+  test) + 1 new assertion in an existing `site.test.ts` test (no net new test) + 1 existing
+  `main.test.ts` test updated (no net new test)
+- **Total tests passing (S5j)**: 260/260 full suite (`vitest run`), up from 250 at S5h
+- **Layers used**: Unit against real captured fixtures (4), Unit + `StubTransport` (7), one
+  hand-built synthetic snippet proving a selector mechanism generically (1), Integration (the
+  existing `main.test.ts` composition-root test, updated), Live diagnostic script for tasks
+  5j.1/5j.8 (never committed, per this slice's own capture/acceptance discipline)
+- **Pure functions created**: `extractDocumentViewerPdfContract` (and its DOM-scoped internal
+  `extractDocumentViewerPdfContractFromDom`), `isPdfContent`
+- **Downstream tests updated (not new coverage, real-shape corrections)**:
+  `parsing/detail-page.test.ts` (the existing born-digital test's `downloadUrl: toBeNull()`
+  assertion removed — superseded by the new dedicated test), `site.test.ts` (the
+  `documentsByItemId` filter assertion), `main.test.ts` (the document-persistence test's
+  stubbed response script and expected output path, since the first document in DOM order is
+  now a born-digital row instead of a legacy one)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/parsing src/adapters/trf5/documents.test.ts` → 6 files, 66 tests, all passed |
+| Runtime harness command/scenario and exact result | Bounded live diagnostic script (never committed) reusing production `primeSession`/`search`/`AxiosTransport` against the real host for `0005643-82.2001.4.05.8000` and `0008256-27.2005.4.05.8100` — see "Live Acceptance Evidence" below for the full observed result, which is a disclosed failure, not a pass |
+| Rollback boundary | Revert `documents.ts`'s `fetchBornDigitalDocument`/`isPdfContent`/the `documentKind` dispatch back to the S5h-era null-downloadUrl guard; delete `parsing/document-viewer.ts` and its test; revert `parsing/detail-page.ts`'s `BORN_DIGITAL_VIEWER_URL` capture (downloadUrl back to always `null` for bornDigital); revert `site.ts`'s `documentsByItemId` back to the `documentKind === 'legacy'` filter; revert the `main.test.ts` document-persistence test's stub script. The two captured fixtures stay — they are evidence, not code, matching the S5f/S5h/S5h rollback convention. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/adapters/trf5/parsing/document-viewer.ts` | Created | `extractDocumentViewerPdfContract` — harvests the Gerar PDF submit contract (form action, hidden fields, download param, `ca`, `idProcDocBin`) from a viewer page, matched by id suffix |
+| `src/adapters/trf5/parsing/document-viewer.test.ts` | Created | 3 tests: real-fixture harvest, no-contract-present, id-suffix-not-hardcoded (synthetic snippet) |
+| `src/adapters/trf5/parsing/detail-page.ts` | Modified | `BORN_DIGITAL_VIEWER_URL` regex added; `extractDocuments`'s born-digital branch now captures the full viewer URL into `downloadUrl`; `DocumentRow`/`extractDocuments` doc comments corrected (task 5j.7) |
+| `src/adapters/trf5/parsing/detail-page.test.ts` | Modified | Removed the stale `downloadUrl: toBeNull()` assertion; added a dedicated downloadUrl-population test |
+| `src/adapters/trf5/documents.ts` | Modified | `fetchDocument` now dispatches on `documentKind`; added `fetchBornDigitalDocument` (the two-step flow) and `isPdfContent`; renamed the original body to `fetchLegacyDocument` |
+| `src/adapters/trf5/documents.test.ts` | Modified | Added `bornDigitalRow()`/`viewerResponse()`/`hostDefectResponse()` helpers and 6 new tests covering the two-step flow, content-based PDF verification, failure ledgering, and 429 precedence |
+| `src/adapters/trf5/site.ts` | Modified | Dropped the `documentKind === 'legacy'` filter on `documentsByItemId` |
+| `src/adapters/trf5/site.test.ts` | Modified | Updated the `documentsByItemId` assertion to expect every document, unfiltered |
+| `src/main.test.ts` | Modified | Rescripted the document-persistence test's stubbed responses and expected output path for the born-digital row now being first in DOM order |
+| `src/adapters/trf5/__fixtures__/document-viewer-born-digital.html` | Created | Real captured, redacted 38874-byte `documentoSemLoginHTML.seam` viewer response (images stripped) |
+| `src/adapters/trf5/__fixtures__/document-viewer-gerar-pdf-host-defect.html` | Created | Real captured 34105-byte response the Gerar PDF POST actually returns (an exception page, not a PDF) — the disclosed live finding |
+| `src/adapters/trf5/__fixtures__/detail-page-valid.html` | Modified | Header comment corrected (task 5j.7); recovered from an encoding-corruption incident mid-slice, see "Design decisions and deviations" |
+| `src/adapters/trf5/__fixtures__/README.md` | Modified | Reconciled the stale "None of these files is a raw capture" claim |
+| `docs/RESEARCH.md` | Modified | §9.7 corrected with the two-step flow and the disclosed host-side defect finding |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 5j.1–5j.7 `[x]` with disclosed-result notes; 5j.8 left unchecked with the reason recorded inline |
+| `openspec/changes/scraper-core/apply-progress.md` | Modified | This section; updated the top-of-file cumulative summary |
+
+### Live Acceptance Evidence (task 5j.8)
+
+**Passing.** `pnpm scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 1
+--max-documents 14 --documents-per-item 14 --max-requests 140`, run 2026-09-06 from a clean
+working directory against the real host. Process `0005643-82.2001.4.05.8000`, 12 of 12
+documents persisted, zero failures, no `failures.jsonl` created. The four born-digital
+documents were fetched through the two-step viewer contract this slice implements:
+
+| `idProcessoDoc` | Path written | Bytes | Header / trailer |
+|---|---|---|---|
+| 6884889 | `0005643-82.2001.4.05.8000/6884889.pdf` | 3444 | `%PDF-1.4` / `%%EOF` |
+| 6884888 | `0005643-82.2001.4.05.8000/6884888.pdf` | 3435 | `%PDF-1.4` / `%%EOF` |
+| 6884882 | `0005643-82.2001.4.05.8000/6884882.pdf` | 7181 | `%PDF-1.4` / `%%EOF` |
+| 6884879 | `0005643-82.2001.4.05.8000/6884879.pdf` | 5908 | `%PDF-1.4` / `%%EOF` |
+
+Four born-digital rows is exactly what `detail-page-valid.html` declares for this process, so
+every born-digital document it carries was fetched. The remaining eight are legacy `idBin`
+documents, unchanged by this slice.
+
+**This section replaces a false "reproducible host-side defect" finding, and the correction is
+the point.** The original apply run concluded, from 7 request-shape variants across 3 documents
+in 2 processes with a 100% failure rate, that the `pjett` host's own PDF generation was broken.
+It was not. The failure came from the throwaway diagnostic script itself, at one line:
+
+```js
+const viewerUrl = bdMatches[rowIndex]![1]!;   // regex over raw HTML — keeps &amp;
+```
+
+The born-digital viewer URL was taken straight from a regex over raw HTML and never had its
+`&amp;` entities decoded, so the viewer GET went out as `...seam?ca=XXX&amp;idProcessoDoc=NNN`.
+The server parsed a parameter literally named `amp;idProcessoDoc` and never received
+`idProcessoDoc`. The viewer page still rendered — the `ca` alone identifies the document, and
+the harvested `Gerar PDF` contract carried the correct `idProcDocBin` — but the Seam
+conversation was missing `idProcessoDoc`, so `VisualizarExpedienteAction.imprimirPdf()` threw
+a `NullPointerException` and the POST redirected to `errorUnexpected.seam`. Adding
+`.replace(/&amp;/g, '&')` to that single line, changing nothing else, turns the same POST into
+`200 application/pdf, 3444 bytes, %PDF-`. Verified by interleaved runs of the broken and fixed
+scripts minutes apart, so it is deterministic, not a transient host fault.
+
+**Production was never affected.** `parsing/detail-page.ts` reads the row's `onclick` through
+cheerio's `$anchor.attr('onclick')`, which decodes HTML entities, so `DocumentRow.downloadUrl`
+always carried a real `&`. `fetchBornDigitalDocument` was correct as written from the start;
+task 5j.8 had simply never exercised it — only the broken harness.
+
+**And the reasoning error is worth naming, because it is the one this slice exists to correct.**
+A 100% reproduction rate across 7 variants read as overwhelming evidence and was evidence of
+nothing: every variant shared the same upstream defect, and that defect was in the harness, not
+on any axis the variants moved. Varying seven things around a common fault yields seven
+confirmations of the fault, not seven independent trials. The conclusion was then written into
+`documents.ts` as a present-tense statement of fact about the host — a fifth instance of the
+exact pattern S5j was created to remove from four other places.
+
+The superseded investigation is kept below, as the record of what was measured and what it was
+wrongly taken to mean:
+
+| # | Variant | Result |
+|---|---|---|
+| 1 | Baseline: harvested contract POSTed exactly as the page's own markup shows (hidden fields + self-ref param + `ca` + `idProcDocBin`) | 302 → `errorUnexpected.seam`, `NullPointerException` in `VisualizarExpedienteAction.imprimirPdf()` |
+| 2 | + Seam conversation id (`cid`, harvested from an embedded image URL on the viewer page) appended to the POST URL | Same failure |
+| 3 | + `idProcessoDoc` (the viewer URL's own id, distinct from `idProcDocBin`) added to the POST body | Same failure |
+| 4 | + An extra AJAX "idView" self-submit on the detail page first (replicating the row's own `A4J.AJAX.Submit` click, which fires alongside `openPopUp` in the real onclick) | Same failure (the priming request itself succeeded, 200, 2772 bytes) |
+| 5 | + `Referer`/`Origin` headers on the final POST | Same failure |
+| 6 | Same flow, second document (`idProcessoDoc=6884888`) in the same process | Same failure, identical stack trace |
+| 7 | Same flow, third document (`idProcessoDoc=8033637`) in a different process (`0008256-27.2005.4.05.8100`) | Same failure, identical stack trace |
+
+The stack trace's innermost application frame is identical across every attempt:
+`br.jus.cnj.pje.view.VisualizarExpedienteAction.imprimirPdf(VisualizarExpedienteAction.java:288)`
+→ NPE, invoked from `br.com.infox.cliente.home.DocumentoValidacaoHashHome.imprimirPdf`. The
+NPE itself was real and is captured verbatim in
+`__fixtures__/document-viewer-gerar-pdf-host-defect.html`; only its attribution to the host was
+wrong. It is the signature of a conversation-scoped bean left unpopulated because the viewer
+GET never delivered `idProcessoDoc` — see the root cause above. The fixture keeps its value:
+it is a genuine `errorUnexpected.seam` response and proves the failure branch of task 5j.5.
+
+| Evidence | Value at the time | Corrected |
+|---|---|---|
+| Documents/processes tried | 3 documents (`idProcessoDoc` 6884889, 6884888, 8033637) across 2 processes | unchanged |
+| Request variants tried | 7 (table above) | all 7 shared one harness defect — not 7 independent trials |
+| Outcome | 100% reproduction rate | reproduces the harness bug, not a host fault |
+| Real PDF bytes obtained | **No** | **Yes** — 4 born-digital PDFs, see the passing evidence above |
+| A born-digital document landed under `pdfs/` | **No** | **Yes** — 4 of them |
+| Payload entry reading `fetched` | **Not applicable** — see "Issues Found" | still not applicable: `fetchStatus` write-back is S5i's scope |
+
+### Issues Found
+
+1. **The acceptance criterion "its payload entry reads `fetched`" cannot be satisfied by this
+   slice even independent of the host defect above, and this is disclosed rather than silently
+   worked around.** `DocumentRow.fetchStatus` is set once, at parse time, to `'skipped'` for
+   every born-digital row, and is never written back after a real fetch outcome for *any*
+   document kind — confirmed by reading `engine/scraper.ts`'s document-fetch stage: it calls
+   `site.fetchDocument`/`DocumentSink.write`/the failure ledger, but never re-touches the
+   item's own already-assembled `payload.documents` array. This write-back is explicitly S5i's
+   scope ("`fetchStatus`/`byteLength`/`fileName` reflect the real outcome... the
+   document-outcome write-back in `engine/scraper.ts`"), and the orchestrator's own scope
+   discipline for this slice says not to pull S5i in. The Suggested Work Units table's own
+   acceptance wording for S5j ("acceptance is real PDF bytes under `pdfs/` for one such
+   document, never a zero exit code") does not mention `fetchStatus` at all — only task 5j.8's
+   own prose does. Treated the table's wording as authoritative per S5h's own precedent
+   ("`tasks.md`'s own S5h task descriptions are this slice's acceptance criteria in the
+   interim"), and disclosed the mismatch rather than silently deciding it away.
+2. ~~**A real, reproducible host-side defect blocks task 5j.8's acceptance criterion.**~~
+   **Withdrawn — this finding was wrong, and the diagnosis was ours.** The blocker was an
+   undecoded `&amp;` in the throwaway diagnostic script's viewer URL, not a host defect; task
+   5j.8 now passes against the live host with four born-digital PDFs on disk. See "Live
+   Acceptance Evidence" above for the root cause and the passing run. Recorded here rather
+   than deleted, because the shape of the mistake is the useful part: seven request-shape
+   variants all failed for a reason none of them varied, and the resulting conclusion was
+   written into `documents.ts` as a fact about the world.
+3. **Mid-slice tooling incident**: editing `detail-page-valid.html` (a latin1-encoded fixture)
+   with the ordinary text-editing tool corrupted every accented character in the file to
+   U+FFFD, caught by the test suite and fully recovered — see "Design decisions and
+   deviations" above.
+
+### Workload / PR Boundary
+
+- Mode: chained PR slice (`feature-branch-chain`), no `size:exception` needed
+- Current work unit: S5j — born-digital documents fetched through the viewer's Gerar PDF
+  contract (tasks 5j.1–5j.8 complete; 5j.8's live acceptance passed on the re-run, after the
+  harness bug that produced the withdrawn host-defect finding was found and fixed)
+- Boundary: starts from S5h's merged state (born-digital rows extracted and visible, but never
+  fetched, and filtered out of the engine's fetch loop entirely); ends with a real, tested,
+  two-step fetch mechanism reaching every born-digital row, proven against redacted fixtures
+  and a stubbed transport, with a disclosed live finding that the training host's own PDF
+  generation for this shape appears broken independent of request correctness. S5i (payload
+  fidelity, `fetchStatus` write-back) intentionally not started.
+- Estimated review budget impact: 526 authored `src/` lines (`git diff --numstat` against the
+  S5h tip, excluding the two new fixtures, `tasks.md`, `apply-progress.md`, and
+  `docs/RESEARCH.md`) against the 800-line budget and the ~340 estimate — 66%/155%
+  respectively. No exception needed.
+
+### Status (S5j)
+
+All 8 S5j tasks complete (5j.1–5j.8). Task 5j.8's live acceptance **passes**: four born-digital
+PDFs on disk from process `0005643-82.2001.4.05.8000`, zero failures — see "Live Acceptance
+Evidence" above. The earlier host-defect finding is withdrawn; its root cause was an undecoded
+`&amp;` in the throwaway diagnostic script, and production was never affected. `vitest run`:
+260/260 passing. `pnpm typecheck`: clean. `pnpm lint`: clean. `pnpm format:check`: clean (except
+the pre-existing, untouched `src/engine/http-status.ts` formatting warning, not introduced by
+this slice).
+
+**Two findings this slice opened and deliberately did not take**, both out of its scope:
+
+1. **A 429 during document fetch silently drops the whole item.** `engine/scraper.ts:238` claims
+   the item in `seenItemIds`, then a 429 hits `requeue` at :271 and `break`s out of the document
+   loop *before* the failure-ledger record at :279, and `:289` returns *before* the
+   `itemSink.write` at :291. The unit is requeued at `:163`, but on the second pass `:237` skips
+   the item as already seen. Net effect: the item never reaches `items.jsonl`, its documents
+   never reach `failures.jsonl`, the budget already counted both, and the run exits 0. This also
+   means the challenge's own 429 requirements 3 and 4 ("continue with the next document",
+   "record which documents failed") are unmet for the one status the challenge names. The global
+   cooldown design (D6) is correct and should stay — `RateLimiter.acquire()` already blocks
+   while the cooldown is open, so the fix is to let `runWithRetry` continue its own loop after
+   tripping the cooldown instead of returning `requeue`, which restores per-document retry under
+   `transientCap` and lets exhaustion fall through to the ledger. Needs its own slice with a RED
+   test.
+2. `ca` tokens **rotate per session** for the same document — same 16-char prefix and suffix,
+   different 80-char middle, observed across four sessions on 2026-09-06. Relevant to the
+   deferred `ca`-expiry decision; still does not prove an old token stops working.

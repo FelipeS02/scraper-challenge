@@ -603,11 +603,52 @@ completely different link, `documentoSemLoginHTML.seam?ca=<hash>&idProcessoDoc=<
 distinguishable by an `<i class="fa fa-external-link">` icon versus the PDF row's
 `<i class="fa fa-file-pdf-o">`, and by having `href="#"` (the real target lives only
 inside the `onclick`'s `openPopUp(...)` call). Fetching that URL returns **200
-`text/html`** — an in-browser rendered document editor view, complete with an
-electronic-signature block, not a PDF at all, and not a 302 anywhere in the chain.
-This scraper enumerates only the legacy `idBin` shape and skips the newer one; a
-process whose documents are *entirely* born-digital yields zero fetchable documents,
-not an error. Disclosed, not fixed in S5f.
+`text/html`** — an in-browser rendered document view, complete with an
+electronic-signature block.
+
+**Corrected S5j (design.md D14): this view is not a dead end.** Reading it in a
+browser (2026-09-06) showed it renders its own `Gerar PDF` command link, whose
+`onclick` calls JSF's `jsfcljs` client-side helper to submit a form carrying `ca` plus
+a second id, `idProcDocBin` — **not** the `idProcessoDoc` the viewer URL itself
+carries. Neither id derives from the other, and `idProcDocBin` appears nowhere on the
+detail page (verified against a fixture holding four born-digital rows: zero
+occurrences). S5h through S5i (and this file, before this correction) all asserted
+this view has "no PDF at all" — a claim reproduced in four places
+(`docs/RESEARCH.md`, `parsing/detail-page.ts`'s comment, the `detail-page-valid.html`
+fixture header, and design.md's own D14) and never re-tested until now. Retrieval is
+a two-step flow: GET the viewer, harvest its own submit contract, then POST it
+(`src/adapters/trf5/parsing/document-viewer.ts`, `documents.ts`).
+
+**Measured, live (2026-09-06)**: the POST returns `200 application/pdf` in a single
+request, with no redirect. Verified end to end by `pnpm scrape` against process
+`0005643-82.2001.4.05.8000`, which wrote all four of its born-digital documents —
+3444, 3435, 7181 and 5908 bytes, every one a structurally complete `%PDF-1.4` file.
+
+**A withdrawn finding, kept because the mistake is instructive.** This section
+previously recorded a "genuine host-side defect in the training environment's
+PDF-generation path", based on a 302 to `errorUnexpected.seam` carrying a
+`java.lang.NullPointerException` inside
+`br.jus.cnj.pje.view.VisualizarExpedienteAction.imprimirPdf()`, reproduced across
+three documents in two processes and unaffected by seven request-shape variants
+(`cid` propagation, `idProcessoDoc` in the body, an AJAX "idView" priming submit,
+`Referer`/`Origin` headers). **That conclusion was wrong.** The fault was in the
+throwaway diagnostic script: it took the viewer URL from a regex over raw HTML and
+never decoded `&amp;`, so the viewer GET sent a parameter named `amp;idProcessoDoc`
+and the Seam conversation never received `idProcessoDoc` — leaving the
+conversation-scoped bean that `imprimirPdf()` dereferences unpopulated. Decoding that
+one entity turns the same POST into a PDF. The seven variants never varied the axis
+that mattered, so their 100% failure rate measured one shared harness bug, not a host
+fault. Production was never affected: `parsing/detail-page.ts` reads the row's
+`onclick` through cheerio, which decodes entities. The captured error response is kept
+as `__fixtures__/document-viewer-gerar-pdf-host-defect.html` — it is a genuine
+`errorUnexpected.seam` page and proves the failure branch this adapter must reject.
+
+A process whose documents are *entirely* born-digital (`0008256-27.2005.4.05.8100` is
+one candidate) was previously recorded as yielding zero persisted documents. That is
+also withdrawn: born-digital documents are fetchable, so such a process should now
+yield its full set. Whether the production court server behaves identically
+is unverified and out of scope (RESEARCH §6/§9.11's standing rule: this scraper never
+probes a live judicial portal beyond what a bounded, disclosed acceptance run needs).
 
 ### 9.8 `pdfs/` was reserved since S1, never wired until S5f
 
