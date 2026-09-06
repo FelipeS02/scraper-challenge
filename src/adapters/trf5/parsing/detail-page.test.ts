@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { loadFixtureBytes } from '../__fixtures__/stub-transport.js';
-import { parseDetailPage } from './detail-page.js';
+import {
+  extractDocumentGridPager,
+  parseDetailPage,
+  parseDocumentGridPage,
+  summarizeDocumentsGrid,
+} from './detail-page.js';
 
 /**
  * Every expectation below is read from a real captured, redacted response
@@ -98,13 +103,16 @@ describe('parseDetailPage — movements (rawCells preserved verbatim, cnjCode nu
   });
 });
 
-describe('parseDetailPage — documents (enumeration only; only the legacy idBin-redirect shape)', () => {
-  it('enumerates the legacy idBin-redirect document rows with label and ids, skipping the newer documentoSemLoginHTML rows this slice does not fetch', () => {
+describe('parseDetailPage — documents (legacy idBin-redirect rows, plus born-digital rows S5h stops dropping)', () => {
+  it('enumerates the legacy idBin-redirect document rows with label and ids', () => {
     const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
 
-    // 12 rows on the real page: 4 documentoSemLoginHTML (skipped) + 8 legacy.
-    expect(detail.documents).toHaveLength(8);
-    expect(detail.documents[0]).toEqual({
+    // 12 rows on the real page: 4 documentoSemLoginHTML (born-digital, now
+    // extracted too, S5h) + 8 legacy.
+    const legacy = detail.documents.filter((doc) => doc.documentKind === 'legacy');
+    expect(legacy).toHaveLength(8);
+    expect(legacy[0]).toEqual({
+      documentKind: 'legacy',
       documentId: '6884863',
       binId: '6799913',
       documentHash: 'ca6635b5e2ee62df470430feb7a20bc574c3db40',
@@ -116,5 +124,116 @@ describe('parseDetailPage — documents (enumeration only; only the legacy idBin
       fetchStatus: 'skipped',
     });
     expect(detail.documents.every((doc) => doc.documentId.length > 0)).toBe(true);
+  });
+
+  it('extracts born-digital rows (documentoSemLoginHTML.seam, no idBin= anchor) with their identifier and a distinct outcome, never dropping them (D14, task 5h.4)', () => {
+    const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
+
+    const bornDigital = detail.documents.filter((doc) => doc.documentKind === 'bornDigital');
+    expect(bornDigital).toHaveLength(4);
+    for (const doc of bornDigital) {
+      expect(doc.documentId.length).toBeGreaterThan(0);
+      expect(doc.binId).toBeNull();
+      expect(doc.downloadUrl).toBeNull();
+      // 'skipped' is honest here: until S5j exists, the PDF itself is
+      // unreachable -- but the row is never invisible, which is the whole
+      // point (a shortfall against the declared total is now attributable).
+      expect(doc.fetchStatus).toBe('skipped');
+    }
+    expect(detail.documents).toHaveLength(12);
+  });
+});
+
+describe('parseDetailPage — documents grid declared total (task 5h.2/5h.3, design.md D13)', () => {
+  it('reads the declared total from the grid’s own footer, matched by id suffix never a hardcoded prefix', () => {
+    const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
+    expect(detail.documentsGrid.declaredTotal).toBe(12);
+  });
+
+  it('reads 24 for the real paginated capture, from page 1 alone (reconciliation across pages is detail.ts’s job, not parsing’s)', () => {
+    const detail = parseDetailPage(loadFixtureBytes('detail-page-paginated-documents.html'));
+    expect(detail.documentsGrid.declaredTotal).toBe(24);
+    // Page 1 alone: 14 legacy + 1 born-digital = 15, short of the declared
+    // 24 by the 9 rows that live on page 2 -- this is the exact gap S5h's
+    // pager-following in detail.ts closes; parsing one page can never see it.
+    expect(detail.documentsGrid.extractedCount).toBe(14);
+    expect(detail.documentsGrid.skippedCount).toBe(1);
+    expect(detail.documentsGrid.reportedGap).toBe(9);
+  });
+
+  it('reports zero declared and zero extracted when the grid renders no rows at all', () => {
+    const detail = parseDetailPage(loadFixtureBytes('detail-page-valid-no-documents.html'));
+    expect(detail.documentsGrid).toEqual({
+      declaredTotal: 0,
+      extractedCount: 0,
+      skippedCount: 0,
+      reportedGap: 0,
+    });
+  });
+});
+
+describe('summarizeDocumentsGrid — reconciliation arithmetic (task 5h.7)', () => {
+  it('reports zero gap when extracted + skipped equals the declared total', () => {
+    const documents = [
+      { documentKind: 'legacy' } as never,
+      { documentKind: 'legacy' } as never,
+      { documentKind: 'bornDigital' } as never,
+    ];
+    expect(summarizeDocumentsGrid(documents, 3)).toEqual({
+      declaredTotal: 3,
+      extractedCount: 2,
+      skippedCount: 1,
+      reportedGap: 0,
+    });
+  });
+
+  it('reports a positive gap as a shortfall, never inferred away, when fewer rows were read than declared', () => {
+    const documents = [{ documentKind: 'legacy' } as never];
+    expect(summarizeDocumentsGrid(documents, 5)).toEqual({
+      declaredTotal: 5,
+      extractedCount: 1,
+      skippedCount: 0,
+      reportedGap: 4,
+    });
+  });
+});
+
+describe('extractDocumentGridPager — harvests the pagination widget’s own submit contract (task 5h.5, design.md D13)', () => {
+  it('returns null for a single-page grid with no scroller at all (task 5h.8’s guard fixture)', () => {
+    const pager = extractDocumentGridPager(loadFixtureBytes('detail-page-valid.html'));
+    expect(pager).toBeNull();
+  });
+
+  it('harvests the real documents-grid pager — a rich:inputNumberSlider, never a guessed parameter name', () => {
+    const pager = extractDocumentGridPager(
+      loadFixtureBytes('detail-page-paginated-documents.html'),
+    );
+
+    expect(pager).not.toBeNull();
+    if (!pager) return;
+    expect(pager.formId).toBe('j_id146:j_id653');
+    expect(pager.pageFieldName).toBe('j_id146:j_id653:j_id654');
+    expect(pager.triggerParam).toBe('j_id146:j_id653:j_id655');
+    expect(pager.totalPages).toBe(2);
+    // Every hidden field the harvested form itself declares -- never
+    // hand-picked -- round-trips, including the slider's own current value
+    // and the ViewState the site's own markup carries.
+    expect(pager.hiddenFields.get('j_id146:j_id653')).toBe('j_id146:j_id653');
+    expect(pager.hiddenFields.get('autoScroll')).toBe('');
+    expect(pager.hiddenFields.get('javax.faces.ViewState')).toBe('j_id2');
+  });
+});
+
+describe('parseDocumentGridPage — parses a further pager page’s own AJAX response (task 5h.6)', () => {
+  it('extracts the 9 legacy rows from the real captured page-2 response, decoded per its own declared UTF-8 charset', () => {
+    const rows = parseDocumentGridPage(
+      loadFixtureBytes('detail-page-paginated-documents-page2.xml'),
+      'text/xml;charset=UTF-8',
+    );
+    expect(rows).toHaveLength(9);
+    expect(rows.every((row) => row.documentKind === 'legacy')).toBe(true);
+    // A UTF-8 mis-decode (e.g. as latin1) would mangle this accented label
+    // into mojibake instead of a clean match.
+    expect(rows.some((row) => row.label.includes('Decisão'))).toBe(true);
   });
 });

@@ -37,15 +37,29 @@ const movementSchema = z.object({
 });
 
 const documentSchema = z.object({
+  documentKind: z.enum(['legacy', 'bornDigital']),
   documentId: z.string().min(1),
-  binId: z.string(),
+  binId: z.string().nullable(),
   documentHash: z.string().nullable(),
   label: z.string(),
-  downloadUrl: z.string().min(1),
+  downloadUrl: z.string().nullable(),
   fileName: z.string().nullable(),
   contentType: z.string().nullable(),
   byteLength: z.number().nullable(),
   fetchStatus: z.enum(['fetched', 'skipped', 'failed']),
+});
+
+/**
+ * Reconciliation of the documents grid's declared total against what was
+ * actually read (design.md D13, S5h task 5h.7) — additional, beyond the
+ * spec's documented top-level property list, matching the precedent
+ * `sourceUrl` set at S4a for internal-but-necessary payload plumbing.
+ */
+const documentsGridSchema = z.object({
+  declaredTotal: z.number(),
+  extractedCount: z.number(),
+  skippedCount: z.number(),
+  reportedGap: z.number(),
 });
 
 export const payloadSchema = z.object({
@@ -67,6 +81,7 @@ export const payloadSchema = z.object({
   }),
   movements: z.array(movementSchema),
   documents: z.array(documentSchema),
+  documentsGrid: documentsGridSchema,
   // Not part of the spec's documented top-level list — internal plumbing so
   // `SitePort.sourceUrl(item)` can be derived from the item itself (see site.ts).
   sourceUrl: z.string().min(1),

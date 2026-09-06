@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import { isTag, type Element } from 'domhandler';
-import { decodeLatin1 } from '../decode.js';
+import { decodeByContentType, decodeLatin1 } from '../decode.js';
 
 /**
  * Full detail-page field inventory (trf5-adapter spec, "Full Field Inventory
@@ -51,17 +51,60 @@ export interface Movement {
   readonly rawCells: readonly string[];
 }
 
+/**
+ * The documents grid mixes two delivery shapes (design.md D14): `legacy`
+ * rows carry a real `idBin=` href (302-redirects to a PDF, fetched by
+ * `documents.ts`); `bornDigital` rows render through
+ * `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...`, a viewer page with
+ * no `idBin` at all. A `bornDigital` row is extracted with its own
+ * identifier and `fetchStatus: 'skipped'` rather than dropped (S5h task
+ * 5h.4) -- until S5j exists to fetch it, `binId`/`downloadUrl` are `null`
+ * (D9: `null` means known absent), never a guessed or borrowed value.
+ */
 export interface DocumentRow {
+  readonly documentKind: 'legacy' | 'bornDigital';
   readonly documentId: string;
-  readonly binId: string;
+  readonly binId: string | null;
   readonly documentHash: string | null;
   readonly label: string;
-  readonly downloadUrl: string;
+  readonly downloadUrl: string | null;
   // Populated by S4b's fetch stage; enumeration-only here.
   readonly fileName: string | null;
   readonly contentType: string | null;
   readonly byteLength: number | null;
   readonly fetchStatus: 'fetched' | 'skipped' | 'failed';
+}
+
+/**
+ * Reconciliation of the documents grid's own declared total against what
+ * was actually read across every page (design.md D13, task 5h.7). A
+ * shortfall is reported, never inferred away or silently tolerated -- the
+ * same "measured, never certified" discipline core-coverage-accounting
+ * already applies to cell counts.
+ */
+export interface DocumentsGridSummary {
+  readonly declaredTotal: number;
+  readonly extractedCount: number;
+  readonly skippedCount: number;
+  readonly reportedGap: number;
+}
+
+/**
+ * The documents grid's own pagination-widget submit contract, harvested
+ * from the page rather than assumed (task 5h.5). A live capture of an
+ * actually-paginated documents grid (2026-09-06) showed the real widget is
+ * a `rich:inputNumberSlider` (`Richfaces.Slider`) -- design.md D13's own
+ * prose assumed the parties-list scrollers' `Richfaces.Datascroller` shape,
+ * an inference never re-verified against a paginated documents grid until
+ * this capture. `hiddenFields` carries every named `<input>` the pager's
+ * own `<form>` declares, harvested verbatim rather than hand-picked.
+ */
+export interface DocumentGridPager {
+  readonly formId: string;
+  readonly triggerParam: string;
+  readonly pageFieldName: string;
+  readonly hiddenFields: ReadonlyMap<string, string>;
+  readonly totalPages: number;
 }
 
 export interface DetailPage {
@@ -75,6 +118,7 @@ export interface DetailPage {
   readonly parties: PartyGroups;
   readonly movements: readonly Movement[];
   readonly documents: readonly DocumentRow[];
+  readonly documentsGrid: DocumentsGridSummary;
 }
 
 function textOrNull(text: string): string | null {
@@ -258,33 +302,66 @@ function extractMovements($: cheerio.CheerioAPI): readonly Movement[] {
     });
 }
 
+const BORN_DIGITAL_ONCLICK = /documentoSemLoginHTML\.seam\?[^']*idProcessoDoc=(\d+)/;
+
 /**
  * The documents grid mixes TWO unrelated delivery shapes in the same table
- * (observed live 2026-09-05): legacy documents with a real `href` carrying
+ * (observed live 2026-09-05, corrected S5h task 5h.4/design.md D14): legacy
+ * documents with a real `href` carrying
  * `idBin=`/`numeroDocumento=`/`nomeArqProcDocBin=`/`idProcessoDocumento=`
  * (RESEARCH.md's originally documented shape, 302-redirect to a PDF — still
  * handled by `documents.ts`), and newer "born-digital" documents rendered
- * through `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...`, a 200
- * text/html editor view with no PDF at all. This slice extracts only the
- * first shape (`a[href*="idBin="]`); a row with no such anchor is a
- * born-digital document and is skipped — disclosed, out-of-scope follow-up
- * (apply-progress.md, docs/RESEARCH.md), never a crash.
+ * through `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...`, a viewer
+ * page reached through `href="#"` plus an `onclick` popup, never a real
+ * `href`. A born-digital row is now extracted with its own identifier and a
+ * distinct `documentKind` rather than dropped — until S5j exists to fetch
+ * its PDF, `binId`/`downloadUrl` stay `null` and `fetchStatus` stays
+ * `'skipped'`, but the row is never invisible (design.md D13's declared-total
+ * reconciliation depends on exactly this).
  */
 function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
   const documents: DocumentRow[] = [];
   bySuffixId($, 'processoDocumentoGridTab')
     .find('tbody[id$=":tb"] > tr.rich-table-row')
     .each((_, row) => {
-      const anchor = $(row).find('a[href*="idBin="]').first();
-      if (anchor.length === 0) return;
-      const href = anchor.attr('href') ?? '';
-      const url = new URL(href, 'stub://pjeconsulta');
+      const $row = $(row);
+      const legacyAnchor = $row.find('a[href*="idBin="]').first();
+      if (legacyAnchor.length > 0) {
+        const href = legacyAnchor.attr('href') ?? '';
+        const url = new URL(href, 'stub://pjeconsulta');
+        documents.push({
+          documentKind: 'legacy',
+          documentId: url.searchParams.get('idProcessoDocumento') ?? '',
+          binId: url.searchParams.get('idBin'),
+          documentHash: url.searchParams.get('numeroDocumento'),
+          label: legacyAnchor.text().trim(),
+          downloadUrl: href,
+          fileName: null,
+          contentType: null,
+          byteLength: null,
+          fetchStatus: 'skipped' as const,
+        });
+        return;
+      }
+
+      let bornDigital: { documentId: string; label: string } | null = null;
+      $row.find('a[onclick]').each((__, anchor) => {
+        const $anchor = $(anchor);
+        const match = BORN_DIGITAL_ONCLICK.exec($anchor.attr('onclick') ?? '');
+        if (match) bornDigital = { documentId: match[1]!, label: $anchor.text().trim() };
+      });
+      // Neither shape matched: an unrecognized third row shape — disclosed
+      // follow-up (apply-progress.md), never a crash, matching the standing
+      // precedent this file already sets for every other unmapped shape.
+      if (!bornDigital) return;
+      const found: { documentId: string; label: string } = bornDigital;
       documents.push({
-        documentId: url.searchParams.get('idProcessoDocumento') ?? '',
-        binId: url.searchParams.get('idBin') ?? '',
-        documentHash: url.searchParams.get('numeroDocumento'),
-        label: anchor.text().trim(),
-        downloadUrl: href,
+        documentKind: 'bornDigital',
+        documentId: found.documentId,
+        binId: null,
+        documentHash: null,
+        label: found.label,
+        downloadUrl: null,
         fileName: null,
         contentType: null,
         byteLength: null,
@@ -294,10 +371,130 @@ function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
   return documents;
 }
 
+/**
+ * The grid's own declared total, read from the `<span class="pull-right
+ * text-muted">N resultados encontrados</span>` sibling that immediately
+ * follows the table — matched structurally (next sibling), never by a
+ * hardcoded prefix (S5f's id-suffix discipline extended to this footer).
+ * `0` when the grid renders no rows at all (no table, no footer at all).
+ */
+function extractDeclaredDocumentTotal($: cheerio.CheerioAPI): number {
+  const table = bySuffixId($, 'processoDocumentoGridTab');
+  if (table.length === 0) return 0;
+  const footerText = table.next('span.pull-right.text-muted').text();
+  const match = /(\d+)\s*resultados encontrados/.exec(footerText);
+  return match ? Number(match[1]) : 0;
+}
+
+/**
+ * Reconciles a set of extracted document rows against the grid's own
+ * declared total (design.md D13, task 5h.7). Pure and reusable: `detail.ts`
+ * calls this again after merging every further page's rows, since a
+ * single-page parse can only ever report the gap left by pages it has not
+ * read yet.
+ */
+export function summarizeDocumentsGrid(
+  documents: readonly Pick<DocumentRow, 'documentKind'>[],
+  declaredTotal: number,
+): DocumentsGridSummary {
+  const extractedCount = documents.filter((doc) => doc.documentKind === 'legacy').length;
+  const skippedCount = documents.filter((doc) => doc.documentKind === 'bornDigital').length;
+  return {
+    declaredTotal,
+    extractedCount,
+    skippedCount,
+    reportedGap: declaredTotal - (extractedCount + skippedCount),
+  };
+}
+
+const SLIDER_ID = /new Richfaces\.Slider\("([^"]+)"/;
+const SLIDER_MAX_VALUE = /'maxValue'\s*:\s*'(\d+)'/;
+// The onchange handler is a JS string literal nested inside the slider
+// constructor's own single-quoted config, so its own quotes arrive
+// backslash-escaped in the raw markup — unlike a plain <script>-body a4j
+// submit, whose quotes are unescaped (see session.ts's trigger harvest).
+const ESCAPED_SUBMIT_FORM_ID = /A4J\.AJAX\.Submit\(\\'([^\\]+)\\'/;
+const ESCAPED_PARAMETERS_BLOCK = /\\'parameters\\'\s*:\s*\{([^}]*)\}/;
+const ESCAPED_SELF_REF_PAIR = /\\'([^\\]+)\\'\s*:\s*\\'([^\\']*)\\'/g;
+
+function findDocumentGridPagerScript($: cheerio.CheerioAPI): string | null {
+  const table = bySuffixId($, 'processoDocumentoGridTab');
+  if (table.length === 0) return null;
+  const panel = table.closest('.rich-panel');
+  const scope = panel.length > 0 ? panel : table;
+
+  let scriptText: string | null = null;
+  scope.find('script').each((_, el) => {
+    if (scriptText) return;
+    const text = $(el).text();
+    if (text.includes('new Richfaces.Slider(')) scriptText = text;
+  });
+  return scriptText;
+}
+
+/**
+ * Harvests the documents grid's own pager contract from an already-parsed
+ * DOM (task 5h.5). Returns `null` when the grid has no pager at all — a
+ * single-page grid must issue zero extra requests (task 5h.8).
+ */
+function extractDocumentGridPagerFromDom($: cheerio.CheerioAPI): DocumentGridPager | null {
+  const scriptText = findDocumentGridPagerScript($);
+  if (!scriptText) return null;
+
+  const sliderId = SLIDER_ID.exec(scriptText)?.[1];
+  const maxValue = SLIDER_MAX_VALUE.exec(scriptText)?.[1];
+  const formId = ESCAPED_SUBMIT_FORM_ID.exec(scriptText)?.[1];
+  const parametersBlock = ESCAPED_PARAMETERS_BLOCK.exec(scriptText)?.[1];
+  if (!sliderId || !maxValue || !formId || !parametersBlock) return null;
+
+  let triggerParam: string | null = null;
+  for (const [, key, value] of parametersBlock.matchAll(ESCAPED_SELF_REF_PAIR)) {
+    if (key !== undefined && key === value) triggerParam = key;
+  }
+  if (!triggerParam) return null;
+
+  const form = $(`form[id="${formId}"]`).first();
+  if (form.length === 0) return null;
+  const hiddenFields = new Map<string, string>();
+  form.find('input[name]').each((_, el) => {
+    const $el = $(el);
+    const name = $el.attr('name');
+    if (name) hiddenFields.set(name, $el.attr('value') ?? '');
+  });
+
+  return {
+    formId,
+    triggerParam,
+    pageFieldName: sliderId,
+    hiddenFields,
+    totalPages: Number(maxValue),
+  };
+}
+
+/** Same as {@link extractDocumentGridPagerFromDom}, from raw page bytes (task 5h.5). */
+export function extractDocumentGridPager(body: Uint8Array): DocumentGridPager | null {
+  return extractDocumentGridPagerFromDom(cheerio.load(decodeLatin1(body)));
+}
+
+/**
+ * Parses a further documents-grid page's own AJAX response into its rows
+ * only (task 5h.6) — `detail.ts` fetches the bytes and merges the result
+ * into the page-1 `DetailPage.documents`; this stays a pure parse, exactly
+ * like `parseDetailPage` itself.
+ */
+export function parseDocumentGridPage(
+  body: Uint8Array,
+  contentType: string | null,
+): readonly DocumentRow[] {
+  const $ = cheerio.load(decodeByContentType(body, contentType));
+  return extractDocuments($);
+}
+
 export function parseDetailPage(body: Uint8Array): DetailPage {
   const $ = cheerio.load(decodeLatin1(body));
   const fields = extractPropertyFields($);
   const boldFields = extractBoldLabeledFields($);
+  const documents = extractDocuments($);
 
   return {
     processNumber: fields.get('Número Processo')?.trim() ?? '',
@@ -317,6 +514,7 @@ export function parseDetailPage(body: Uint8Array): DetailPage {
       others: extractParties($, 'processoParteOutrosInteressadosResumidoList'),
     },
     movements: extractMovements($),
-    documents: extractDocuments($),
+    documents,
+    documentsGrid: summarizeDocumentsGrid(documents, extractDeclaredDocumentTotal($)),
   };
 }

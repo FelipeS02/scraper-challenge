@@ -61,9 +61,9 @@ export function buildDocumentPath(
  * "Document Byte-Level ISO-8859-1 Decoding"). Never the sole uniqueness key,
  * which `buildDocumentPath` derives from `processNumber` + `documentId` alone.
  */
-function decodedLabel(doc: DocumentRow): string {
-  const match = /[?&]nomeArqProcDocBin=([^&]*)/.exec(doc.downloadUrl);
-  return match ? decodePercentEncodedLatin1(match[1]!) : doc.label;
+function decodedLabel(downloadUrl: string, label: string): string {
+  const match = /[?&]nomeArqProcDocBin=([^&]*)/.exec(downloadUrl);
+  return match ? decodePercentEncodedLatin1(match[1]!) : label;
 }
 
 /**
@@ -80,7 +80,19 @@ export async function fetchDocument(
   processNumber: string,
   doc: DocumentRow,
 ): Promise<FetchOutcome<StoredDocument>> {
-  const label = decodedLabel(doc);
+  // A born-digital row (design.md D14) has no legacy download path at all --
+  // fetching it is S5j's two-step viewer-then-PDF flow, not this one. Never
+  // reached in production today (site.ts filters these out of the TDoc list
+  // it hands the engine), but guarded here defensively rather than trusting
+  // that filter silently: a null downloadUrl must never reach `transport.send`.
+  if (doc.downloadUrl === null) {
+    return {
+      kind: 'permanentError',
+      reason: 'invalidReference',
+      detail: `bornDigital document ${doc.documentId} has no legacy download path (S5j)`,
+    };
+  }
+  const label = decodedLabel(doc.downloadUrl, doc.label);
   const initial = await transport.send({ method: 'GET', url: doc.downloadUrl });
 
   // Transport-boundary precedence (design.md "Validity chain", case 6): a

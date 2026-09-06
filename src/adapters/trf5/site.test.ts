@@ -22,6 +22,7 @@ function unit(overrides: Partial<WorkUnit<TraversalCursor>> = {}): WorkUnit<Trav
 
 function documentRow(overrides: Partial<DocumentRow> = {}): DocumentRow {
   return {
+    documentKind: 'legacy',
     documentId: '12452668',
     binId: '12196568',
     documentHash: 'sha1hash0002',
@@ -116,7 +117,12 @@ describe('TRF5Site.discover — composes session priming, search, row parsing an
     expect(outcome.value.items).toHaveLength(3);
     const item = outcome.value.items[0]!;
     expect(item.processNumber).toBe('0123456-78.2026.4.05.8100');
-    expect(outcome.value.documentsByItemId.get(item.processNumber)).toEqual(item.documents);
+    // Born-digital rows stay in the payload's own `documents` for
+    // reconciliation but are filtered out of what the engine's fetch loop
+    // receives (S5h) -- they have no legacy download path yet (S5j).
+    expect(outcome.value.documentsByItemId.get(item.processNumber)).toEqual(
+      item.documents.filter((doc) => doc.documentKind === 'legacy'),
+    );
     // Detail fetches reuse the already-primed session -- no extra priming GET per row.
     expect(transport.requests.filter((r) => r.url === PRIMING_URL)).toHaveLength(1);
   });

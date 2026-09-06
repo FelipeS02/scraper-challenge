@@ -8,6 +8,7 @@ const PROCESS_NUMBER = '0123456-78.2026.4.05.8100';
 
 function documentRow(overrides: Partial<DocumentRow> = {}): DocumentRow {
   return {
+    documentKind: 'legacy',
     documentId: '12452668',
     binId: '12196568',
     documentHash: 'sha1hash0002',
@@ -87,6 +88,22 @@ describe('buildDocumentPath — Stable Document Filename Derivation (trf5-adapte
   it('folds Petição to peticao, matching the site’s own accented labels', () => {
     const path = buildDocumentPath(PROCESS_NUMBER, '12452668', 'Petição');
     expect(path).toBe(`${PROCESS_NUMBER}/12452668-peticao.pdf`);
+  });
+});
+
+describe('fetchDocument — born-digital rows have no legacy download path (design.md D14, S5h defensive guard)', () => {
+  it('returns a permanentError:invalidReference without ever calling the transport', async () => {
+    const transport = new StubTransport([]);
+    const doc = documentRow({
+      documentKind: 'bornDigital',
+      binId: null,
+      downloadUrl: null,
+    });
+
+    const outcome = await fetchDocument(transport, PROCESS_NUMBER, doc);
+
+    expect(outcome.kind).toBe('permanentError');
+    expect(transport.requests).toHaveLength(0);
   });
 });
 

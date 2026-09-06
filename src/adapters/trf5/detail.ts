@@ -1,7 +1,14 @@
 import { classifyHttpStatus } from '../../engine/http-status.js';
 import type { HttpTransport } from '../../engine/ports.js';
 import type { FetchOutcome } from '../../engine/types.js';
-import { parseDetailPage } from './parsing/detail-page.js';
+import {
+  extractDocumentGridPager,
+  parseDetailPage,
+  parseDocumentGridPage,
+  summarizeDocumentsGrid,
+  type DocumentGridPager,
+  type DocumentRow,
+} from './parsing/detail-page.js';
 import { assembleTrfPayload, type TrfPayload } from './schemas/payload.js';
 import { buildResponseView } from './schemas/response-view.js';
 import { classifyValidity } from './schemas/validity-chain.js';
@@ -46,7 +53,27 @@ export async function fetchDetail(
       return { kind: 'hostDefect', reason: 'unrecognized detail response' };
     case 'validData': {
       const detail = parseDetailPage(response.body);
-      const payload = assembleTrfPayload(detail, detailUrl);
+      const pager = extractDocumentGridPager(response.body);
+
+      // A single-page grid (no pager, or a pager reporting only one page)
+      // issues zero extra requests (task 5h.8) -- every extra page fetched
+      // beyond this point is one request charged to the run budget, exactly
+      // like the detail GET above (task 5h.6).
+      let finalDetail = detail;
+      if (pager && pager.totalPages > 1) {
+        const pagerUrl = detailUrl.split('?')[0]!;
+        const morePages = await fetchDocumentGridPages(transport, pagerUrl, pager);
+        if (morePages.kind !== 'ok') return morePages;
+
+        const documents = [...detail.documents, ...morePages.value];
+        finalDetail = {
+          ...detail,
+          documents,
+          documentsGrid: summarizeDocumentsGrid(documents, detail.documentsGrid.declaredTotal),
+        };
+      }
+
+      const payload = assembleTrfPayload(finalDetail, detailUrl);
       if (!payload) return { kind: 'permanentError', reason: 'schemaMismatch', detail: null };
       return { kind: 'ok', value: payload };
     }
@@ -59,4 +86,41 @@ function buildDetailUrl(session: SessionState, ca: string): string {
     '/DetalheProcessoConsultaPublica/listView.seam',
   );
   return `${base}?ca=${encodeURIComponent(ca)}`;
+}
+
+/**
+ * Fetches every further documents-grid page through its own harvested pager
+ * contract (task 5h.6) and returns their merged rows. `parsing/` stays pure
+ * — it parses a response, it never fetches one; the transport already lives
+ * here, exactly like the detail GET above.
+ */
+async function fetchDocumentGridPages(
+  transport: HttpTransport,
+  pagerUrl: string,
+  pager: DocumentGridPager,
+): Promise<FetchOutcome<readonly DocumentRow[]>> {
+  const rows: DocumentRow[] = [];
+  for (let page = 2; page <= pager.totalPages; page++) {
+    const params = new URLSearchParams();
+    for (const [name, value] of pager.hiddenFields) params.set(name, value);
+    params.set(pager.pageFieldName, String(page));
+    params.set(pager.triggerParam, pager.triggerParam);
+    params.set('AJAXREQUEST', pager.formId);
+    params.set('AJAX:EVENTS_COUNT', '1');
+
+    const response = await transport.send({
+      method: 'POST',
+      url: pagerUrl,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+
+    // Transport-boundary precedence (S5g): every real request path is
+    // classified for a 429/5xx before anything else, including this one.
+    const statusOutcome = classifyHttpStatus(response.status, response.headers);
+    if (statusOutcome) return statusOutcome;
+
+    rows.push(...parseDocumentGridPage(response.body, response.headers['content-type'] ?? null));
+  }
+  return { kind: 'ok', value: rows };
 }

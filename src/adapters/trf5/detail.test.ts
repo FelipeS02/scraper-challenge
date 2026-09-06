@@ -51,6 +51,61 @@ describe('fetchDetail — 429 precedence over content classification (S5g, core-
   });
 });
 
+describe('fetchDetail — documents-grid pagination (S5h tasks 5h.6/5h.7/5h.8, design.md D13)', () => {
+  it('a single-page grid issues zero extra requests (detail-page-valid.html has no scroller at all)', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'),
+    ]);
+
+    const outcome = await fetchDetail(transport, PRIMING_URL, null, 'stub-ca-token-0001');
+
+    expect(outcome.kind).toBe('ok');
+    // Exactly the priming GET plus the one detail GET -- no pager POST.
+    expect(transport.requests).toHaveLength(2);
+    if (outcome.kind !== 'ok') return;
+    expect(outcome.value.documentsGrid).toEqual({
+      declaredTotal: 12,
+      extractedCount: 8,
+      skippedCount: 4,
+      reportedGap: 0,
+    });
+  });
+
+  it('follows the real harvested pager contract to fetch page 2 and merges its rows, reconciling to the declared total of 24', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      fixtureResponse(200, 'text/html', 'detail-page-paginated-documents.html'),
+      fixtureResponse(200, 'text/xml', 'detail-page-paginated-documents-page2.xml', {
+        'content-type': 'text/xml;charset=UTF-8',
+      }),
+    ]);
+
+    const outcome = await fetchDetail(transport, PRIMING_URL, null, 'stub-ca-token-0002');
+
+    expect(outcome.kind).toBe('ok');
+    expect(transport.requests).toHaveLength(3);
+    if (outcome.kind !== 'ok') return;
+    // 14 legacy (page 1) + 9 legacy (page 2) = 23; 1 born-digital (page 1).
+    expect(outcome.value.documents).toHaveLength(24);
+    expect(outcome.value.documentsGrid).toEqual({
+      declaredTotal: 24,
+      extractedCount: 23,
+      skippedCount: 1,
+      reportedGap: 0,
+    });
+
+    // The pager POST is charged and shaped exactly per the harvested contract
+    // -- never a guessed parameter name.
+    const pagerRequest = transport.requests[2]!;
+    expect(pagerRequest.method).toBe('POST');
+    const body = String(pagerRequest.body);
+    expect(body).toContain('AJAXREQUEST=j_id146%3Aj_id653');
+    expect(body).toContain('j_id146%3Aj_id653%3Aj_id654=2');
+    expect(body).toContain('j_id146%3Aj_id653%3Aj_id655=j_id146%3Aj_id653%3Aj_id655');
+  });
+});
+
 describe('fetchDetail — site-agnostic failure vocabulary (design.md D12)', () => {
   it('reports an invalid-token shell as permanentError:invalidReference with the site detail preserved, never a site-specific reason literal', async () => {
     const session = parsePrimingPage(loadFixtureBytes('priming-page-1.html'));
