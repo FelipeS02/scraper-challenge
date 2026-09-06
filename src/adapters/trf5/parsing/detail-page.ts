@@ -55,11 +55,12 @@ export interface Movement {
  * The documents grid mixes two delivery shapes (design.md D14): `legacy`
  * rows carry a real `idBin=` href (302-redirects to a PDF, fetched by
  * `documents.ts`); `bornDigital` rows render through
- * `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...`, a viewer page with
- * no `idBin` at all. A `bornDigital` row is extracted with its own
- * identifier and `fetchStatus: 'skipped'` rather than dropped (S5h task
- * 5h.4) -- until S5j exists to fetch it, `binId`/`downloadUrl` are `null`
- * (D9: `null` means known absent), never a guessed or borrowed value.
+ * `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...`, a viewer page whose
+ * own `Gerar PDF` link is retrievable through a second, id-harvesting step
+ * (S5j; `documents.ts`/`parsing/document-viewer.ts`). A `bornDigital` row's
+ * `downloadUrl` carries that viewer URL (the fetch entry point), never the
+ * final PDF location; `binId` stays `null` (D9: `null` means known absent)
+ * -- there is no legacy `idBin=` for this shape at all.
  */
 export interface DocumentRow {
   readonly documentKind: 'legacy' | 'bornDigital';
@@ -303,6 +304,12 @@ function extractMovements($: cheerio.CheerioAPI): readonly Movement[] {
 }
 
 const BORN_DIGITAL_ONCLICK = /documentoSemLoginHTML\.seam\?[^']*idProcessoDoc=(\d+)/;
+// Captures the full viewer URL from `openPopUp('<name>', '<url>')` -- the
+// FIRST openPopUp argument is a plain window name (no query string of its
+// own), so scanning up to the closing `)` (never stopping at the first `'`)
+// is what reaches the second, URL-bearing argument (task 5j corrected S5h's
+// id-only capture once the viewer URL itself became fetchable).
+const BORN_DIGITAL_VIEWER_URL = /openPopUp\([^,]*,\s*'([^']+)'\)/;
 
 /**
  * The documents grid mixes TWO unrelated delivery shapes in the same table
@@ -313,11 +320,11 @@ const BORN_DIGITAL_ONCLICK = /documentoSemLoginHTML\.seam\?[^']*idProcessoDoc=(\
  * handled by `documents.ts`), and newer "born-digital" documents rendered
  * through `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...`, a viewer
  * page reached through `href="#"` plus an `onclick` popup, never a real
- * `href`. A born-digital row is now extracted with its own identifier and a
- * distinct `documentKind` rather than dropped — until S5j exists to fetch
- * its PDF, `binId`/`downloadUrl` stay `null` and `fetchStatus` stays
- * `'skipped'`, but the row is never invisible (design.md D13's declared-total
- * reconciliation depends on exactly this).
+ * `href`. **Corrected S5j (design.md D14)**: the viewer is not a dead end --
+ * it renders its own `Gerar PDF` command link, retrievable through a second,
+ * id-harvesting step (`documents.ts`). A born-digital row's `downloadUrl` is
+ * that viewer URL (the fetch entry point, never the final PDF location);
+ * `binId` stays `null` (D9) since there is no legacy `idBin=` for this shape.
  */
 function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
   const documents: DocumentRow[] = [];
@@ -344,24 +351,32 @@ function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
         return;
       }
 
-      let bornDigital: { documentId: string; label: string } | null = null;
+      let bornDigital: { documentId: string; label: string; viewerUrl: string | null } | null =
+        null;
       $row.find('a[onclick]').each((__, anchor) => {
         const $anchor = $(anchor);
-        const match = BORN_DIGITAL_ONCLICK.exec($anchor.attr('onclick') ?? '');
-        if (match) bornDigital = { documentId: match[1]!, label: $anchor.text().trim() };
+        const onclick = $anchor.attr('onclick') ?? '';
+        const match = BORN_DIGITAL_ONCLICK.exec(onclick);
+        if (match) {
+          bornDigital = {
+            documentId: match[1]!,
+            label: $anchor.text().trim(),
+            viewerUrl: BORN_DIGITAL_VIEWER_URL.exec(onclick)?.[1] ?? null,
+          };
+        }
       });
       // Neither shape matched: an unrecognized third row shape — disclosed
       // follow-up (apply-progress.md), never a crash, matching the standing
       // precedent this file already sets for every other unmapped shape.
       if (!bornDigital) return;
-      const found: { documentId: string; label: string } = bornDigital;
+      const found: { documentId: string; label: string; viewerUrl: string | null } = bornDigital;
       documents.push({
         documentKind: 'bornDigital',
         documentId: found.documentId,
         binId: null,
         documentHash: null,
         label: found.label,
-        downloadUrl: null,
+        downloadUrl: found.viewerUrl,
         fileName: null,
         contentType: null,
         byteLength: null,

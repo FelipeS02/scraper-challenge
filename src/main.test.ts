@@ -125,12 +125,11 @@ describe('runScraper — the composition root wiring (S5e)', () => {
       fixtureResponse(200, 'text/html', 'detail-page-valid.html'), // row 1 detail — 8 real documents
       fixtureResponse(200, 'text/html', 'detail-page-valid.html'), // row 2 detail (same item, skipped)
       fixtureResponse(200, 'text/html', 'detail-page-valid.html'), // row 3 detail (same item, skipped)
-      {
-        status: 302,
-        headers: { location: 'stub://pjeconsulta/bin/6799913' },
-        body: new Uint8Array(),
-      },
-      fixtureResponse(200, 'application/pdf', 'document-sample.pdf'),
+      // `detail-page-valid.html`'s first document (DOM order) is a
+      // born-digital row (S5j, design.md D14) -- the two-step viewer-then-
+      // PDF flow, not the legacy 302-follow.
+      fixtureResponse(200, 'text/html', 'document-viewer-born-digital.html'), // viewer GET
+      fixtureResponse(200, 'application/pdf', 'document-sample.pdf'), // Gerar PDF POST, no redirect
     ]);
 
     await runScraper(scrapeArgs({ documentsPerItem: 1 }), {
@@ -142,11 +141,11 @@ describe('runScraper — the composition root wiring (S5e)', () => {
       runId: 'test-run-doc',
     });
 
-    const expectedPath = join(
-      pdfsDir,
-      '0123456-78.2026.4.05.8100',
-      '6884863-despacho-inspecao---2188---inspecao-geral-ordinaria---2025.pdf',
-    );
+    // The born-digital row's own label ("Visualizar documentos24/02/2026
+    // 14:57:27 - Despacho (Despacho)") contains "/" and ":" -- outside
+    // PATH_COMPONENT_SAFE -- so it degrades to no slug at all, same as any
+    // other hostile label (documents.test.ts already proves this rule).
+    const expectedPath = join(pdfsDir, '0123456-78.2026.4.05.8100', '6884889.pdf');
     expect(readFileSync(expectedPath)).toHaveLength(135);
     // Never written under outputDir — the two roots stay separate.
     expect(() => readFileSync(join(outputDir, '0123456-78.2026.4.05.8100'))).toThrow();

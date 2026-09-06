@@ -3,6 +3,7 @@ import type { HttpTransport, StoredDocument } from '../../engine/ports.js';
 import type { FetchOutcome } from '../../engine/types.js';
 import { decodePercentEncodedLatin1 } from './encoding.js';
 import type { DocumentRow } from './parsing/detail-page.js';
+import { extractDocumentViewerPdfContract } from './parsing/document-viewer.js';
 
 /**
  * Filesystem-safe path components only (trf5-adapter spec, "Stable Document
@@ -66,30 +67,158 @@ function decodedLabel(downloadUrl: string, label: string): string {
   return match ? decodePercentEncodedLatin1(match[1]!) : label;
 }
 
+/** Real PDF content starts with this literal 5-byte header — never trusted from
+ * status/Content-Type alone (task 5j.5, docs/RESEARCH.md §5: "this host answers
+ * 200 for most failures"). */
+const PDF_MAGIC_BYTES = new TextEncoder().encode('%PDF-');
+
+function isPdfContent(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < PDF_MAGIC_BYTES.byteLength) return false;
+  return PDF_MAGIC_BYTES.every((byte, index) => bytes[index] === byte);
+}
+
 /**
- * Fetches one document by following its 302 redirect (docs/RESEARCH.md §2 Step 4).
- * Never throws on a fetch failure: returning a `FetchOutcome` failure kind is what
- * lets `engine/scraper.ts` record the failure in the ledger while still writing the
- * item S4a's `parseDetailPage`/`assembleTrfPayload` already extracted. Returns the
- * fetched bytes for the engine to persist through `DocumentSink` — this adapter
- * never touches the filesystem itself (trf5-adapter spec, "Document Persistence
- * to Disk").
+ * Fetches one document, dispatching on `documentKind` (design.md D14): a
+ * `legacy` row follows its 302 redirect directly; a `bornDigital` row goes
+ * through the two-step viewer-then-PDF flow S5j implements, since its PDF is
+ * keyed on `idProcDocBin`, an id the detail page never carries at all.
+ * Neither path ever throws on a fetch failure: returning a `FetchOutcome`
+ * failure kind is what lets `engine/scraper.ts` record the failure in the
+ * ledger while still writing the item S4a's `parseDetailPage`/
+ * `assembleTrfPayload` already extracted. Returns the fetched bytes for the
+ * engine to persist through `DocumentSink` — this adapter never touches the
+ * filesystem itself (trf5-adapter spec, "Document Persistence to Disk").
  */
 export async function fetchDocument(
   transport: HttpTransport,
   processNumber: string,
   doc: DocumentRow,
 ): Promise<FetchOutcome<StoredDocument>> {
-  // A born-digital row (design.md D14) has no legacy download path at all --
-  // fetching it is S5j's two-step viewer-then-PDF flow, not this one. Never
-  // reached in production today (site.ts filters these out of the TDoc list
-  // it hands the engine), but guarded here defensively rather than trusting
-  // that filter silently: a null downloadUrl must never reach `transport.send`.
+  if (doc.documentKind === 'bornDigital') {
+    return fetchBornDigitalDocument(transport, processNumber, doc);
+  }
+  return fetchLegacyDocument(transport, processNumber, doc);
+}
+
+/**
+ * The two-step flow design.md D14 exists to respect: GET the viewer page,
+ * harvest its own `Gerar PDF` submit contract (`parsing/document-viewer.ts`),
+ * POST it, then verify the result is actually a PDF BY CONTENT before ever
+ * treating it as one — never by status or `Content-Type` alone, since this
+ * host answers 200 for most failures (docs/RESEARCH.md §5).
+ */
+async function fetchBornDigitalDocument(
+  transport: HttpTransport,
+  processNumber: string,
+  doc: DocumentRow,
+): Promise<FetchOutcome<StoredDocument>> {
+  // Defensive: a malformed row with no viewer URL at all must never reach
+  // `transport.send` — never expected in production (every born-digital row
+  // `parsing/detail-page.ts` extracts carries one), guarded here the same
+  // way the legacy path is guarded against an unsafe path component below.
   if (doc.downloadUrl === null) {
     return {
       kind: 'permanentError',
       reason: 'invalidReference',
-      detail: `bornDigital document ${doc.documentId} has no legacy download path (S5j)`,
+      detail: `bornDigital document ${doc.documentId} has no viewer URL`,
+    };
+  }
+
+  const viewerResponse = await transport.send({ method: 'GET', url: doc.downloadUrl });
+  const viewerStatusOutcome = classifyHttpStatus(viewerResponse.status, viewerResponse.headers);
+  if (viewerStatusOutcome) return viewerStatusOutcome;
+  if (viewerResponse.status !== 200) {
+    return {
+      kind: 'hostDefect',
+      reason:
+        `expected 200 fetching the born-digital viewer for document '${doc.label}' ` +
+        `(idProcessoDoc=${doc.documentId}), got status ${viewerResponse.status}`,
+    };
+  }
+
+  const contract = extractDocumentViewerPdfContract(viewerResponse.body);
+  if (!contract) {
+    return {
+      kind: 'hostDefect',
+      reason: `born-digital viewer response missing the Gerar PDF submit contract (idProcessoDoc=${doc.documentId})`,
+    };
+  }
+
+  const actionUrl = new URL(contract.actionUrl, doc.downloadUrl).toString();
+  const body = new URLSearchParams();
+  for (const [name, value] of contract.hiddenFields) body.set(name, value);
+  body.set(contract.downloadParam, contract.downloadParam);
+  body.set('ca', contract.ca);
+  body.set('idProcDocBin', contract.idProcDocBin);
+
+  const submitResponse = await transport.send({
+    method: 'POST',
+    url: actionUrl,
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  const submitStatusOutcome = classifyHttpStatus(submitResponse.status, submitResponse.headers);
+  if (submitStatusOutcome) return submitStatusOutcome;
+
+  let finalResponse = submitResponse;
+  if (submitResponse.status === 302) {
+    const location = submitResponse.headers.location;
+    if (!location) {
+      return {
+        kind: 'hostDefect',
+        reason: `302 response missing Location header fetching born-digital PDF (idProcDocBin=${contract.idProcDocBin})`,
+      };
+    }
+    finalResponse = await transport.send({ method: 'GET', url: location });
+    const finalStatusOutcome = classifyHttpStatus(finalResponse.status, finalResponse.headers);
+    if (finalStatusOutcome) return finalStatusOutcome;
+  }
+
+  if (finalResponse.status !== 200 || !isPdfContent(finalResponse.body)) {
+    // This host answers 200 for most failures (docs/RESEARCH.md §5), so the
+    // response is trusted only after its bytes prove to be a PDF — a viewer
+    // or error page returned in place of one must never persist as a
+    // document (task 5j.5). Both branches are proven against captured
+    // fixtures, and the success branch against a live run: 2026-09-06,
+    // process 0005643-82.2001.4.05.8000, four born-digital documents
+    // fetched through this path (3444/3435/7181/5908 bytes, all %PDF-1.4).
+    return {
+      kind: 'hostDefect',
+      reason:
+        `born-digital PDF response for document '${doc.label}' ` +
+        `(idProcDocBin=${contract.idProcDocBin}) is not a PDF by content`,
+    };
+  }
+
+  let fileName: string;
+  try {
+    fileName = buildDocumentPath(processNumber, doc.documentId, doc.label);
+  } catch {
+    return { kind: 'permanentError', reason: 'schemaMismatch', detail: null };
+  }
+
+  return {
+    kind: 'ok',
+    value: {
+      documentId: doc.documentId,
+      byteLength: finalResponse.body.byteLength,
+      contentType: finalResponse.headers['content-type'] ?? null,
+      fileName,
+      bytes: finalResponse.body,
+    },
+  };
+}
+
+async function fetchLegacyDocument(
+  transport: HttpTransport,
+  processNumber: string,
+  doc: DocumentRow,
+): Promise<FetchOutcome<StoredDocument>> {
+  if (doc.downloadUrl === null) {
+    return {
+      kind: 'permanentError',
+      reason: 'invalidReference',
+      detail: `legacy document ${doc.documentId} has no download URL`,
     };
   }
   const label = decodedLabel(doc.downloadUrl, doc.label);

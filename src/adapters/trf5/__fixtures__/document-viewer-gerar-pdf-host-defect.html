@@ -1,0 +1,395 @@
+<!--
+  Redacted CAPTURE of the real response the Gerar PDF postback in
+  document-viewer-born-digital.html actually returns (taken 2026-09-06,
+  process 0005643-82.2001.4.05.8000, document idProcDocBin=6799939): a 302 to
+  /pjeconsulta/errorUnexpected.seam?cid=N (this fixture is the errorUnexpected
+  page, followed), which is the site's own generic exception-page template
+  carrying a server-side java.lang.NullPointerException raised inside
+  br.jus.cnj.pje.view.VisualizarExpedienteAction.imprimirPdf() -- reproduced
+  identically for three distinct born-digital documents across two distinct
+  processes (see apply-progress.md's "S5j" section for the full account),
+  never once returning a real PDF despite the harvested request contract
+  matching the page's own markup exactly.
+
+  No redaction needed: this is a generic Java stack-trace/exception template
+  page. It carries no process number, no CPF, and no party or lawyer name --
+  verified directly (grepped for the process number and for a formatted CPF
+  pattern, zero matches either way).
+
+  This fixture is what proves parsing/document-viewer.ts's/documents.ts's
+  content-based PDF verification (task 5j.5): a 200/302-chain response that
+  is NOT a real PDF by content must classify as a failure, exactly the same
+  "this host answers 200 for most failures" discipline docs/RESEARCH.md §5
+  already documents for the legacy document path and the detail page.
+
+  Do not reformat this file.
+-->
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd" >
+<html xmlns="http://www.w3.org/1999/xhtml">      
+	<head>
+		
+	
+	<title> &middot; Tribunal Regional Federal da 5&ordf; Regi&atilde;o</title>
+	
+	
+	<script src="/pjeconsulta/a4j/g/3_3_3.Final/org/ajax4jsf/framework.pack.js" type="text/javascript"></script><script src="/pjeconsulta/a4j/g/3_3_3.Final/org/richfaces/ui.pack.js" type="text/javascript"></script><link class="component" href="/pjeconsulta/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/basic_classes.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css" /><link class="component" href="/pjeconsulta/a4j/s/3_3_3.Finalorg/richfaces/renderkit/html/css/extended_classes.xcss/DATB/eAELXT5DOhSIAQ!sA18_" media="rich-extended-skinning" rel="stylesheet" type="text/css" /><link class="component" href="/pjeconsulta/a4j/s/3_3_3.Final/org/richfaces/skin.xcss/DATB/eAELXT5DOhSIAQ!sA18_" rel="stylesheet" type="text/css" /><script id="org.ajax4jsf.queue_script" type="text/javascript">if (typeof A4J != 'undefined') { if (A4J.AJAX) { with (A4J.AJAX) {if (!EventQueue.getQueue('j_id129:org.richfaces.queue.global')) { EventQueue.addQueue(new EventQueue('j_id129:org.richfaces.queue.global',{'size':2,'sizeExceededBehavior':'dropNew'} ,{'ignoreDupResponses':true,'requestDelay':100} )) };if (!EventQueue.getQueue('org.richfaces.queue.global')) { EventQueue.addQueue(new EventQueue('org.richfaces.queue.global',null,null)) };}}};</script><script type="text/javascript">window.RICH_FACES_EXTENDED_SKINNING_ON=true;</script><link class="user" href="/pjeconsulta/stylesheet/estilos/bootstrap/bootstrap.min.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/dropzone/dropzone.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/estilos/richfaces/tema.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/padrao.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/autos-digitais.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/estilos/select2/select2.min.css" rel="stylesheet" type="text/css" /><script src="/pjeconsulta/js/modernizr.custom.js" type="text/javascript"></script><script src="/pjeconsulta/js/jquery-ui-1.8.1.min.custom.js" type="text/javascript"></script><script src="/pjeconsulta/js/jquery-2.1.4.min.js" type="text/javascript"></script><script src="/pjeconsulta/js/select2/select2.min.js" type="text/javascript"></script><script src="/pjeconsulta/js/fuse.min.js" type="text/javascript"></script><script src="/pjeconsulta/js/bootstrap/bootstrap.min.js" type="text/javascript"></script><script src="/pjeconsulta/js/jquery.maskedinput.min.js" type="text/javascript"></script><script src="/pjeconsulta/js/mousetrap/mousetrap.min.js" type="text/javascript"></script><script src="/pjeconsulta/js/mousetrap/plugins/global-bind/mousetrap-global-bind.js" type="text/javascript"></script><script src="/pjeconsulta/js/pje/menu.js" type="text/javascript"></script><script src="/pjeconsulta/js/global.js?v=20220316" type="text/javascript"></script><link rel="apple-touch-icon" sizes="57x57" href="/pjeconsulta/img/favicon/apple-touch-icon-57x57.png" />
+	<link rel="apple-touch-icon" sizes="60x60" href="/pjeconsulta/img/favicon/apple-touch-icon-60x60.png" />
+	<link rel="apple-touch-icon" sizes="72x72" href="/pjeconsulta/img/favicon/apple-touch-icon-72x72.png" />
+	<link rel="apple-touch-icon" sizes="76x76" href="/pjeconsulta/img/favicon/apple-touch-icon-76x76.png" />
+	<link rel="apple-touch-icon" sizes="114x114" href="/pjeconsulta/img/favicon/apple-touch-icon-114x114.png" />
+	<link rel="apple-touch-icon" sizes="120x120" href="/pjeconsulta/img/favicon/apple-touch-icon-120x120.png" />
+	<link rel="apple-touch-icon" sizes="144x144" href="/pjeconsulta/img/favicon/apple-touch-icon-144x144.png" />
+	<link rel="apple-touch-icon" sizes="152x152" href="/pjeconsulta/img/favicon/apple-touch-icon-152x152.png" />
+	<link rel="apple-touch-icon" sizes="180x180" href="/pjeconsulta/img/favicon/apple-touch-icon-180x180.png" />
+	<link rel="icon" type="image/png" href="/pjeconsulta/img/favicon/favicon-32x32.png" sizes="32x32" />
+	<link rel="icon" type="image/png" href="/pjeconsulta/img/favicon/favicon-194x194.png" sizes="194x194" />
+	<link rel="icon" type="image/png" href="/pjeconsulta/img/favicon/favicon-96x96.png" sizes="96x96" />
+	<link rel="icon" type="image/png" href="/pjeconsulta/img/favicon/android-chrome-192x192.png" sizes="192x192" />
+	<link rel="icon" type="image/png" href="/pjeconsulta/img/favicon/favicon-16x16.png" sizes="16x16" />
+	<link rel="manifest" href="/pjeconsulta/img/favicon/manifest.json" />
+	<link rel="mask-icon" href="/pjeconsulta/img/favicon/safari-pinned-tab.svg" color="#0078aa" />
+	<link rel="stylesheet" href="/pjeconsulta/stylesheet/estilos/font-awesome/v5.11.2/css/all.min.css" />
+	<link rel="stylesheet" href="/pjeconsulta/stylesheet/estilos/font-awesome/v5.11.2/css/v4-shims.min.css" />
+	<meta name="msapplication-TileColor" content="#0078aa" />
+	<meta name="msapplication-TileImage" content="/pjeconsulta/img/favicon/mstile-144x144.png" />
+	<meta name="theme-color" content="#0078AA" />
+	
+				        
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="keywords" content="processo judicial, processo, audi&ecirc;ncias, sess&atilde;o, peticionar, expedientes, magistrado, procurador, oficial de justi&ccedil;a, advogado, perito, retificar autua&ccedil;&atilde;o, OAB" />
+    <meta name="description" content="Processo Judicial Eletr&ocirc;nico - Acompanhe processos judiciais independentemente de tramita&ccedil;&otilde;es" />
+    <meta property="og:title" content="PJe - Processo Judicial Eletr&ocirc;nico" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="/pjeconsulta" />
+	<meta property="og:image" itemprop="image" content="/pjeconsulta/img/pjeMini.png" />
+	<meta property="og:site_name" content="PJe - Processo Judicial Eletr&ocirc;nico" />
+	<meta property="og:description" content="Acompanhe processos judiciais independentemente de tramita&ccedil;&otilde;es" />
+	<meta property="og:locale" content="pt_BR" />
+	
+	<meta name="Robots" content="INDEX,FOLLOW" />
+    <meta name="RESOURCE-TYPE" content="DOCUMENT" />
+    <meta name="DISTRIBUTION" content="GLOBAL" />
+    <meta name="AUTHOR" content="CNJ" />
+    <meta name="COPYRIGHT" content="Copyright (c) CNJ" />
+    <meta name="language" content="pt-br" />
+    <meta name="RATING" content="GENERAL" /> 						
+	</head>
+	
+	<body>
+	
+    <script type="text/javascript">
+    	jQuery('document').ready(function(){
+			new window.Menu({"Menu":[]});
+       	});
+    </script><form id="j_id25" name="j_id25" method="post" action="/pjeconsulta/errorUnexpected.seam"><script id="j_id25:j_id26" type="text/javascript">//<![CDATA[
+		refreshPage=function(){A4J.AJAX.Submit('j_id25',null,{'similarityGroupingId':'j_id25:j_id26','parameters':{'j_id25:j_id26':'j_id25:j_id26'} ,'status':'_viewRoot:status'} )};
+		//]]></script><script id="j_id25:j_id27" type="text/javascript">//<![CDATA[
+		refreshTarefaTree=function(){A4J.AJAX.Submit('j_id25',null,{'similarityGroupingId':'j_id25:j_id27','oncomplete':function(request,event,data){document.getElementById('papeisUsuarioForm').submit();},'parameters':{'j_id25:j_id27':'j_id25:j_id27','ajaxSingle':'j_id25:j_id27'} } )};
+		//]]></script><script id="j_id25:j_id28" type="text/javascript">//<![CDATA[
+		defaultTarefa=function(){A4J.AJAX.Submit('j_id25',null,{'similarityGroupingId':'j_id25:j_id28','oncomplete':function(request,event,data){true},'parameters':{'j_id25:j_id28':'j_id25:j_id28'} } )};
+		//]]></script><script id="j_id25:j_id29" type="text/javascript">//<![CDATA[
+		fecharPopupAlertaCertificadoProximoDeExpirar=function(){A4J.AJAX.Submit('j_id25',null,{'similarityGroupingId':'j_id25:j_id29','oncomplete':function(request,event,data){Richfaces.hideModalPanel('popupAlertaCertificadoProximoDeExpirar');},'parameters':{'j_id25:j_id29':'j_id25:j_id29','ajaxSingle':'j_id25:j_id29'} } )};
+		//]]></script><input type="hidden" autocomplete="off" name="j_id25" value="j_id25" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id25:_link_hidden_" value="" /><input type="hidden" autocomplete="off" name="j_id25:j_idcl" value="" /><script type="text/javascript">function clear_j_id25() {
+_clearJSFFormParameters('j_id25','',['j_id25:_link_hidden_','j_id25:j_idcl']);
+}
+function clearFormHiddenParams_j_id25(){clear_j_id25();}
+function clearFormHiddenParams_j_id25(){clear_j_id25();}
+clear_j_id25();</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id4" autocomplete="off" /></form>
+    
+    
+	<nav id="barraSuperiorPrincipal" class="navbar navbar-default navbar-static-top navtop">
+		<div class="container-fluid">
+			<div class="navbar-header">
+				
+				<div class="navbar-brand">
+						<a class="logo"><img src="/pjeconsulta/img/pje2-branco.png" alt="Tribunal Regional Federal da 5&ordf; Regi&atilde;o" />
+						</a>
+						<span class="titulo"></span>					
+					
+				</div>
+			</div>
+		</div>
+	</nav><span id="_viewRoot:status"><span id="_viewRoot:status.start" style="display: none">
+	        <div class="ajax-loader">
+	   			<div class="rich-mpnl-mask-div-opaque rich-mpnl-mask-div"></div>
+	   			<div class="rich-mpnl-panel">
+			        <div class="rich-mp-container">
+			        	<div class="rich-mpnl-content"></div>
+			        </div>
+	   			</div>
+	   		</div></span><span id="_viewRoot:status.stop"></span></span><div id="modalStatus" style="display: none;"><input autocomplete="off" id="modalStatusOpenedState" name="modalStatusOpenedState" type="hidden" /><div class="rich-modalpanel ajax-loader" id="modalStatusContainer" style="position: absolute; display: none; z-index: 100; background-color: inherit;"><div class="rich-mpnl-mask-div-opaque rich-mpnl-mask-div" id="modalStatusDiv" style="z-index: -1;"><button class="rich-mpnl-button" id="modalStatusFirstHref"></button></div><div class="rich-mpnl-panel"><div class="rich-mp-container" id="modalStatusCDiv" style="position: absolute; left: 0px; top: 0px; z-index: 9;"><div class="rich-mpnl-shadow" id="modalStatusShadowDiv" style=" opacity:0.0; filter:alpha(opacity=0);"></div><div class="rich-mpnl-ovf-hd rich-mpnl-trim rich-mpnl-content" id="modalStatusContentDiv"><table border="0" cellpadding="0" cellspacing="0" class="rich-mp-content-table" id="modalStatusContentTable" style="height: 100%; width: 100%;"><tr style="height: 99%"><td class="rich-mpnl-body" valign="top"></td></tr></table></div><div class="rich-mpnl-resizer" id="modalStatusResizerN" style="width: 40px; height: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerE" style="height: 40px; width: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerS" style="width: 40px; height: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerW" style="height: 40px; width: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerNWU" style="width: 40px; height: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerNEU" style="height: 40px; width: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerNEL" style="width: 40px; height: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerSEU" style="height: 40px; width: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerSEL" style="width: 40px; height: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerSWL" style="height: 40px; width: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerSWU" style="width: 40px; height: 4px;"></div><div class="rich-mpnl-resizer" id="modalStatusResizerNWL" style="height: 40px; width: 4px;"></div></div></div><div class="rich-mpnl-mask-div rich-mpnl-mask-div-transparent" id="modalStatusCursorDiv" style="z-index: -200;"><button class="rich-mpnl-button" id="modalStatusLastHref"></button></div><script type="text/javascript">new ModalPanel('modalStatus',
+				{
+					width: -1,
+					height: -1,
+
+					minWidth: -1,
+					minHeight: -1,
+
+					resizeable: true,
+					moveable: true,
+
+					left: "auto",
+					top: "auto",
+
+					zindex: 100,onresize: '',onmove: '',onshow: '',onhide: '',onbeforeshow: '',onbeforehide: '',
+					domElementAttachment: "",				
+					keepVisualState: false,
+					showWhenRendered: false,
+					selectBehavior: "disable",
+
+					autosized: false,
+					overlapEmbedObjects: false});</script></div><script type="text/javascript"></script></div>
+	
+	<div class="modal fade modal-atalhos" tabindex="-1" role="dialog">
+		<div class="modal-dialog">
+			<div class="modal-content">
+			<div class="modal-header">
+				<a href="#" class="btn-fechar pull-right" data-dismiss="modal" aria-label="Fechar"><i class="icon-fechar"></i></a>
+				<h4 class="modal-title">Atalhos do sistema</h4>
+			</div>
+			<div class="modal-body">
+				<ul class="list-group">
+					<li class="list-group-item"><span class="badge">alt+1</span>Menu de navega&ccedil;&atilde;o
+					</li>
+					<li class="list-group-item"><span class="badge">alt+2</span>Ir para p&aacute;gina inicial
+					</li>
+					<li class="list-group-item"><span class="badge">alt+7</span>Auto-contraste
+					</li>
+					<li class="list-group-item"><span class="badge">alt+8</span>Fale conosco
+					</li>
+					<li class="list-group-item"><span class="badge">alt+9</span>Sair
+					</li>
+				</ul>
+			</div>
+			</div>
+		</div>
+	</div>
+	
+	<div class="modal fade modal-versao" tabindex="-1" role="dialog">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<a href="#" class="btn-fechar pull-right" data-dismiss="modal" aria-label="Fechar"><i class="icon-fechar"></i></a>
+					<h4 class="modal-title">Processo Judicial Eletr&ocirc;nico</h4>
+				</div>
+				<div class="modal-body">
+					<div class="media">
+						<div class="media-left media-middle"><img src="/pjeconsulta/img/pjeMini.png" alt="Tribunal Regional Federal da 5&ordf; Regi&atilde;o" class="media-object mr-10" />
+						</div>
+						<div class="media-body">
+							<span class="media-heading mb-10 text-muted btn-block">
+		 <span class="transform-none">Versao</span> 2.11.2.0-30 <span class="transform-none">- Atualizado em </span> 04/09/2026 - 04:42
+							</span>
+							
+							<p>O Pje &eacute; um sistema de tramita&ccedil;&atilde;o de processos judiciais que busca atender &agrave;s necessidades dos diversos segmentos do Poder Judici&aacute;rio brasileiro(Justi&ccedil;a Militar da Uni&atilde;o e dos Estados, Tribunais Superiores, Justi&ccedil;a do Trabalho, Justi&ccedil;a Eleitoral e Justi&ccedil;a Comum, Federal e Estadual)<br />
+							</p>
+							<p>O PJe &eacute; desenvolvido pela comunidade dos tribunais brasileiros sob a coordena&ccedil;&atilde;o do 
+								<a class="btn-link" href="http://www.cnj.jus.br/">Conselho Nacional de Justi&ccedil;a (CNJ).</a><br />
+							</p>
+							<p>Para mais ajuda sobre o sistema acesse a 
+								<a class="btn-link" href="http://www.cnj.jus.br/wiki/index.php/P%C3%A1gina_principal">Wiki do projeto.</a><br />
+							</p>
+						</div>
+					</div>
+					<div class="modal-footer text-center pb-0">
+						<small class="text-muted">Verifique sobre as vers&otilde;es do sistema em</small><br />
+						<a class="btn btn-default" href="http://www.cnj.jus.br/wiki/index.php/Vers%C3%B5es">Mais informa&ccedil;&otilde;es</a>
+					</div>				
+				</div>
+			</div>
+		</div>
+	</div>
+	
+	<div class="modal fade modal-contato" tabindex="-1" role="dialog">
+		<div class="modal-dialog">
+			<div class="modal-content">
+			<div class="modal-header">
+				<a href="#" class="btn-fechar pull-right" data-dismiss="modal" aria-label="Fechar"><i class="icon-fechar"></i></a>
+				<h4 class="modal-title">Fale conosco</h4>
+			</div>
+			<div class="modal-body"><div style="margin-left: 25px; margin-right: 25px; font-family: Arial;">
+<p style="color: black; text-align: center; font-size: 18px;"><span style="font-family: arial, helvetica, sans-serif;"><strong>Canais de Atendimento para Suporte do PJe</strong></span></p>
+<span style="font-family: arial, helvetica, sans-serif;">&nbsp;</span></div>
+<p><span style="font-family: arial, helvetica, sans-serif;"> </span></p>
+<div style="margin-left: 25px; margin-right: 25px;">
+<hr style="width: 100%;" />
+<p style="text-align: center; font-size: 15px; color: red;"><span style="font-family: arial, helvetica, sans-serif;"><strong>N&atilde;o utilizar estes canais para esclarecer d&uacute;vidas de natureza processual, nem para enviar documentos para algum processo eletr&ocirc;nico, os quais ser&atilde;o desconsiderados.</strong></span></p>
+<hr style="width: 100%;" />
+</div>
+<p>&nbsp;</p>
+<ul>
+<li><span style="font-family: arial, helvetica, sans-serif;"><span style="font-size: small;">pelo portal TOT: <a href="https://atendimentopje.trf5.jus.br">https://atendimentopje.trf5.jus.br</a>;</span></span></li>
+<li><span style="font-family: arial, helvetica, sans-serif;"><span style="font-size: small;">para baixar o manual do TOT, <a href="https://www.trf5.jus.br/index.php/manuais/manuais-de-advogado">clique aqui;</a></span></span></li>
+<li><span style="font-family: arial, helvetica, sans-serif;"><span style="font-size: small;">ou ligue para nossa Central de Atendimento, de segunda a  sexta-feira, pelos telefones do Suporte PJe: (81) 3425-9241 ou (81) 3425-9920.</span></span></li>
+</ul>
+			</div>
+			</div>
+		</div>
+	</div><form id="j_id129" name="j_id129" method="post" action="/pjeconsulta/errorUnexpected.seam"><span style="display:none;" id="j_id129:j_id131"><script type="text/javascript">
+A4J.AJAX.Poll('j_id129',{'similarityGroupingId':'j_id129:j_id131','pollId':'j_id129:j_id131','pollinterval':90000,'containerId':'j_id128','parameters':{'ajaxSingle':'j_id129:j_id131','j_id129:j_id131':'j_id129:j_id131'} } );
+</script></span><span style="display:none;" id="j_id129:j_id132"><script type="text/javascript">
+A4J.AJAX.StopPush('qUxblR8mfA5RSM-JuDGi3320kdsS4hk2NGEs-JrF/errorUnexpected.xhtml:j_id129:j_id132');
+</script></span><input type="hidden" autocomplete="off" name="j_id129" value="j_id129" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id129:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id129:_link_hidden_" value="" /><script type="text/javascript">function clear_j_id129() {
+_clearJSFFormParameters('j_id129','',['j_id129:j_idcl','j_id129:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id129(){clear_j_id129();}
+function clearFormHiddenParams_j_id129(){clear_j_id129();}
+clear_j_id129();</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id4" autocomplete="off" /></form><div id="j_id133" class="principal">
+			
+			<div class="content"><form id="j_id135" name="j_id135" method="post" action="/pjeconsulta/errorUnexpected.seam"><script id="j_id135:j_id136" type="text/javascript">//<![CDATA[
+		pesquisaRapida=function(message){A4J.AJAX.Submit('j_id135',null,{'similarityGroupingId':'j_id135:j_id136','oncomplete':function(request,event,data){abrirPopupPesquisaRapida();},'parameters':{'j_id135:j_id136':'j_id135:j_id136','message':message} } )};
+		//]]></script><div id="j_id135:scriptAbrirPopupPesquisaRapida">
+			<script type="text/javascript">
+				function abrirPopupPesquisaRapida() {
+					var linkBuscaRapida = "https://pjett.trf5.jus.br/pjeconsulta" + "/Processo/ConsultaProcesso/pesquisaRapidaProcesso.seam?ca=";
+					window.open(linkBuscaRapida, "_blank");
+				}
+
+				function fecharPopupPesquisaRapida() {
+					  window.close();
+				}
+			</script></div><input type="hidden" autocomplete="off" name="j_id135" value="j_id135" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id135:_link_hidden_" value="" /><input type="hidden" autocomplete="off" name="j_id135:j_idcl" value="" /><script type="text/javascript">function clear_j_id135() {
+_clearJSFFormParameters('j_id135','',['j_id135:_link_hidden_','j_id135:j_idcl']);
+}
+function clearFormHiddenParams_j_id135(){clear_j_id135();}
+function clearFormHiddenParams_j_id135(){clear_j_id135();}
+clear_j_id135();</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id4" autocomplete="off" /></form><div id="pageBody" class="container-fluid scroll-y"><ul class="alert alert-danger"><li>	Erro inesperado, por favor tente novamente. </li></ul><div class="rich-stglpanel " id="j_id141"><script type="text/javascript">SimpleTogglePanelManager.add(new SimpleTogglePanel("j_id141", 
+            													"true",{onexpand: '',oncollapse: ''}
+            													
+            							 ));</script><form id="j_id141:_form" name="j_id141:_form" method="post" style="margin:0; padding:0; display: inline;" action="/pjeconsulta/errorUnexpected.seam"><div class="rich-stglpanel-header " id="j_id141_header" onclick="SimpleTogglePanelManager.toggleOnClient(event,'j_id141');"><div class="rich-stglpanel-marker"><div class="rich-stglpnl-marker" id="j_id141_switch_on">&#171;</div><div class="rich-stglpnl-marker" id="j_id141_switch_off" style="display: none">&#187;</div></div>Unhandled or Wrapper Exception&#160;</div><div style="display: none;"><input autocomplete="off" id="j_id141_input" name="j_id141" type="hidden" value="true" /></div><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id4" autocomplete="off" /></form><div class="rich-stglpanel-body " id="j_id141_body">
+			<pre>
+				
+Data/Hora: 06-09-2026 00:37:50
+ | Host: tt-consulta-231-cv7bh
+ | URL: https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam
+ | Login: Falha ao obter
+ | Nome do usurio: Falha ao obter
+ | Perfil: null
+ | 
+				<h3></h3>
+
+				<h3>Exceptions:</h3>
+				Caused by java.lang.NullPointerException with message: 
+				Caused by javax.servlet.ServletException with message: #{documentoValidacaoHashHome.imprimirPdf()}: java.lang.NullPointerException
+				
+				<h3>Stacktrace completo:</h3>
+				javax.servlet.ServletException: #{documentoValidacaoHashHome.imprimirPdf()}: java.lang.NullPointerException
+	at javax.faces.webapp.FacesServlet.service(FacesServlet.java:277)
+	at io.undertow.servlet.handlers.ServletHandler.handleRequest(ServletHandler.java:74)
+	at io.undertow.servlet.handlers.FilterHandler$FilterChainImpl.doFilter(FilterHandler.java:129)
+	at io.undertow.websockets.jsr.JsrWebSocketFilter.doFilter(JsrWebSocketFilter.java:130)
+	at io.undertow.servlet.core.ManagedFilter.doFilter(ManagedFilter.java:61)
+	at io.undertow.servlet.handlers.FilterHandler$FilterChainImpl.doFilter(FilterHandler.java:131)
+	at br.jus.cnj.pje.integracao.pje2.LogFilter.doFilter(LogFilter.java:56)
+	at io.undertow.servlet.core.ManagedFilter.doFilter(ManagedFilter.java:61)
+	at io.undertow.servlet.handlers.FilterHandler$FilterChainImpl.doFilter(FilterHandler.java:131)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:83)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.web.IdentityFilter.doFilter(IdentityFilter.java:40)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:69)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.web.LoggingFilter.doFilter(LoggingFilter.java:60)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:69)
+	at org.jboss.seam.web.MultipartFilter.doFilter(MultipartFilter.java:90)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:69)
+	at org.jboss.seam.web.ExceptionFilter.doFilter(ExceptionFilter.java:64)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:69)
+	at org.jboss.seam.web.RedirectFilter.doFilter(RedirectFilter.java:45)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:69)
+	at org.ajax4jsf.webapp.BaseXMLFilter.doXmlFilter(BaseXMLFilter.java:203)
+	at org.ajax4jsf.webapp.BaseFilter.handleRequest(BaseFilter.java:290)
+	at org.ajax4jsf.webapp.BaseFilter.processUploadsAndHandleRequest(BaseFilter.java:388)
+	at org.ajax4jsf.webapp.BaseFilter.doFilter(BaseFilter.java:515)
+	at org.jboss.seam.web.Ajax4jsfFilter.doFilter(Ajax4jsfFilter.java:56)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:69)
+	at org.jboss.seam.servlet.SeamFilter$FilterChainImpl.doFilter(SeamFilter.java:73)
+	at org.jboss.seam.servlet.SeamFilter.doFilter(SeamFilter.java:158)
+	at br.jus.cnj.pje.nucleo.PjeFilter.doFilter(PjeFilter.java:38)
+	at io.undertow.servlet.core.ManagedFilter.doFilter(ManagedFilter.java:61)
+	at io.undertow.servlet.handlers.FilterHandler$FilterChainImpl.doFilter(FilterHandler.java:131)
+	at io.undertow.servlet.handlers.FilterHandler.handleRequest(FilterHandler.java:84)
+	at io.undertow.servlet.handlers.security.ServletSecurityRoleHandler.handleRequest(ServletSecurityRoleHandler.java:62)
+	at io.undertow.servlet.handlers.ServletChain$1.handleRequest(ServletChain.java:65)
+	at io.undertow.servlet.handlers.ServletDispatchingHandler.handleRequest(ServletDispatchingHandler.java:36)
+	at org.wildfly.extension.undertow.security.SecurityContextAssociationHandler.handleRequest(SecurityContextAssociationHandler.java:78)
+	at io.undertow.server.handlers.PredicateHandler.handleRequest(PredicateHandler.java:43)
+	at io.undertow.servlet.handlers.security.SSLInformationAssociationHandler.handleRequest(SSLInformationAssociationHandler.java:131)
+	at io.undertow.servlet.handlers.security.ServletAuthenticationCallHandler.handleRequest(ServletAuthenticationCallHandler.java:57)
+	at io.undertow.server.handlers.PredicateHandler.handleRequest(PredicateHandler.java:43)
+	at io.undertow.security.handlers.AuthenticationConstraintHandler.handleRequest(AuthenticationConstraintHandler.java:53)
+	at io.undertow.security.handlers.AbstractConfidentialityHandler.handleRequest(AbstractConfidentialityHandler.java:46)
+	at io.undertow.servlet.handlers.security.ServletConfidentialityConstraintHandler.handleRequest(ServletConfidentialityConstraintHandler.java:64)
+	at io.undertow.servlet.handlers.security.ServletSecurityConstraintHandler.handleRequest(ServletSecurityConstraintHandler.java:59)
+	at io.undertow.security.handlers.AuthenticationMechanismsHandler.handleRequest(AuthenticationMechanismsHandler.java:60)
+	at io.undertow.servlet.handlers.security.CachedAuthenticatedSessionHandler.handleRequest(CachedAuthenticatedSessionHandler.java:77)
+	at io.undertow.security.handlers.NotificationReceiverHandler.handleRequest(NotificationReceiverHandler.java:50)
+	at io.undertow.security.handlers.AbstractSecurityContextAssociationHandler.handleRequest(AbstractSecurityContextAssociationHandler.java:43)
+	at io.undertow.server.handlers.PredicateHandler.handleRequest(PredicateHandler.java:43)
+	at org.wildfly.extension.undertow.security.jacc.JACCContextIdHandler.handleRequest(JACCContextIdHandler.java:61)
+	at io.undertow.server.handlers.PredicateHandler.handleRequest(PredicateHandler.java:43)
+	at org.wildfly.extension.undertow.deployment.GlobalRequestControllerHandler.handleRequest(GlobalRequestControllerHandler.java:68)
+	at io.undertow.server.handlers.PredicateHandler.handleRequest(PredicateHandler.java:43)
+	at io.undertow.server.handlers.MetricsHandler.handleRequest(MetricsHandler.java:64)
+	at io.undertow.servlet.core.MetricsChainHandler.handleRequest(MetricsChainHandler.java:59)
+	at io.undertow.servlet.handlers.ServletInitialHandler.handleFirstRequest(ServletInitialHandler.java:292)
+	at io.undertow.servlet.handlers.ServletInitialHandler.access$100(ServletInitialHandler.java:81)
+	at io.undertow.servlet.handlers.ServletInitialHandler$2.call(ServletInitialHandler.java:138)
+	at io.undertow.servlet.handlers.ServletInitialHandler$2.call(ServletInitialHandler.java:135)
+	at io.undertow.servlet.core.ServletRequestContextThreadSetupAction$1.call(ServletRequestContextThreadSetupAction.java:48)
+	at io.undertow.servlet.core.ContextClassLoaderSetupAction$1.call(ContextClassLoaderSetupAction.java:43)
+	at org.wildfly.extension.undertow.security.SecurityContextThreadSetupAction.lambda$create$0(SecurityContextThreadSetupAction.java:105)
+	at org.wildfly.extension.undertow.deployment.UndertowDeploymentInfoService$UndertowThreadSetupAction.lambda$create$0(UndertowDeploymentInfoService.java:1501)
+	at org.wildfly.extension.undertow.deployment.UndertowDeploymentInfoService$UndertowThreadSetupAction.lambda$create$0(UndertowDeploymentInfoService.java:1501)
+	at org.wildfly.extension.undertow.deployment.UndertowDeploymentInfoService$UndertowThreadSetupAction.lambda$create$0(UndertowDeploymentInfoService.java:1501)
+	at org.wildfly.extension.undertow.deployment.UndertowDeploymentInfoService$UndertowThreadSetupAction.lambda$create$0(UndertowDeploymentInfoService.java:1501)
+	at org.wildfly.extension.undertow.deployment.UndertowDeploymentInfoService$UndertowThreadSetupAction.lambda$create$0(UndertowDeploymentInfoService.java:1501)
+	at io.undertow.servlet.handlers.ServletInitialHandler.dispatchRequest(ServletInitialHandler.java:272)
+	at io.undertow.servlet.handlers.ServletInitialHandler.access$000(ServletInitialHandler.java:81)
+	at io.undertow.servlet.handlers.ServletInitialHandler$1.handleRequest(ServletInitialHandler.java:104)
+	at io.undertow.server.Connectors.executeRootHandler(Connectors.java:330)
+	at io.undertow.server.HttpServerExchange$1.run(HttpServerExchange.java:812)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:750)
+Caused by: javax.faces.FacesException: #{documentoValidacaoHashHome.imprimirPdf()}: java.lang.NullPointerException
+	at com.sun.faces.application.ActionListenerImpl.processAction(ActionListenerImpl.java:118)
+	at javax.faces.component.UICommand.broadcast(UICommand.java:387)
+	at org.ajax4jsf.component.AjaxViewRoot.processEvents(AjaxViewRoot.java:329)
+	at org.ajax4jsf.component.AjaxViewRoot.broadcastEventsForPhase(AjaxViewRoot.java:304)
+	at org.ajax4jsf.component.AjaxViewRoot.processPhase(AjaxViewRoot.java:261)
+	at org.ajax4jsf.component.AjaxViewRoot.processApplication(AjaxViewRoot.java:474)
+	at com.sun.faces.lifecycle.InvokeApplicationPhase.execute(InvokeApplicationPhase.java:82)
+	at com.sun.faces.lifecycle.Phase.doPhase(Phase.java:100)
+	at com.sun.faces.lifecycle.LifecycleImpl.execute(LifecycleImpl.java:118)
+	at javax.faces.webapp.FacesServlet.service(FacesServlet.java:265)
+	... 82 more
+Caused by: javax.faces.el.EvaluationException: java.lang.NullPointerException
+	at javax.faces.component.MethodBindingMethodExpressionAdapter.invoke(MethodBindingMethodExpressionAdapter.java:102)
+	at com.sun.faces.application.ActionListenerImpl.processAction(ActionListenerImpl.java:102)
+	... 91 more
+Caused by: java.lang.NullPointerException
+	at br.jus.cnj.pje.view.VisualizarExpedienteAction.imprimirPdf(VisualizarExpedienteAction.java:288)
+	at br.com.infox.cliente.home.DocumentoValidacaoHashHome.imprimirPdf(DocumentoValidacaoHashHome.java:229)
+	at sun.reflect.GeneratedMethodAccessor3983.invoke(Unknown Source)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.jboss.el.util.ReflectionUtil.invokeMethod(ReflectionUtil.java:335)
+	at org.jboss.el.util.ReflectionUtil.invokeMethod(ReflectionUtil.java:280)
+	at org.jboss.el.parser.AstMethodSuffix.getValue(AstMethodSuffix.java:59)
+	at org.jboss.el.parser.AstMethodSuffix.invoke(AstMethodSuffix.java:65)
+	at org.jboss.el.parser.AstValue.invoke(AstValue.java:96)
+	at org.jboss.el.MethodExpressionImpl.invoke(MethodExpressionImpl.java:276)
+	at com.sun.facelets.el.TagMethodExpression.invoke(TagMethodExpression.java:68)
+	at javax.faces.component.MethodBindingMethodExpressionAdapter.invoke(MethodBindingMethodExpressionAdapter.java:88)
+	... 92 more
+
+			</pre></div></div></div>
+			</div></div> 		
+	</body>
+</html>

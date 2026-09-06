@@ -134,13 +134,23 @@ describe('parseDetailPage — documents (legacy idBin-redirect rows, plus born-d
     for (const doc of bornDigital) {
       expect(doc.documentId.length).toBeGreaterThan(0);
       expect(doc.binId).toBeNull();
-      expect(doc.downloadUrl).toBeNull();
-      // 'skipped' is honest here: until S5j exists, the PDF itself is
-      // unreachable -- but the row is never invisible, which is the whole
-      // point (a shortfall against the declared total is now attributable).
+      // 'skipped' is honest here at parse time: the real fetch outcome is
+      // written back only from engine/scraper.ts, deferred to S5i -- but the
+      // row is never invisible, which is the whole point (a shortfall
+      // against the declared total is now attributable).
       expect(doc.fetchStatus).toBe('skipped');
     }
     expect(detail.documents).toHaveLength(12);
+  });
+
+  it("extracts the viewer URL into downloadUrl for a born-digital row, the entry point S5j's two-step fetch needs (design.md D14)", () => {
+    const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
+
+    const bornDigital = detail.documents.filter((doc) => doc.documentKind === 'bornDigital');
+    for (const doc of bornDigital) {
+      expect(doc.downloadUrl).toContain('documentoSemLoginHTML.seam');
+      expect(doc.downloadUrl).toContain(`idProcessoDoc=${doc.documentId}`);
+    }
   });
 });
 

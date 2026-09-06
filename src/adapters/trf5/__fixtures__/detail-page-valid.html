@@ -45,9 +45,18 @@
       (RESEARCH.md's originally documented shape, 302-redirect to a PDF --
       still handled by documents.ts), and newer "born-digital" documents
       rendered through documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...,
-      which returns a 200 text/html editor view with no PDF at all. This
-      slice extracts only the first shape; the second is a disclosed,
-      out-of-scope follow-up (see docs/RESEARCH.md and apply-progress.md).
+      a 200 text/html viewer. S4a extracted only the legacy shape; S5h (task
+      5h.4) started extracting born-digital rows too, with a distinct
+      documentKind. Corrected S5j (design.md D14): the viewer is not a
+      dead end -- it renders its own "Gerar PDF" command link, retrievable
+      through a second, id-harvesting step keyed on idProcDocBin (not
+      idProcessoDoc). This exact claim -- "no PDF at all" -- was asserted
+      here, in docs/RESEARCH.md, in parsing/detail-page.ts's comment, and in
+      design.md's own D14, and never re-tested until S5j read the viewer in
+      a browser. See docs/RESEARCH.md section 9.7 and apply-progress.md's
+      "S5j" section for the full account, including a disclosed host-side
+      defect found while proving this against the live pjett training
+      environment.
 
   Do not reformat this file.
 -->

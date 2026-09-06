@@ -145,15 +145,11 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
       if (detailOutcome.kind !== 'ok') return detailOutcome;
       const payload = detailOutcome.value;
       items.push(payload);
-      // Born-digital rows (design.md D14) have no legacy download path yet
-      // (that is S5j) -- they stay visible in the payload's own
-      // `documents`/`documentsGrid` for reconciliation, but are never handed
-      // to the engine's fetch loop, which would call `fetchDocument` on
-      // every row it receives.
-      documentsByItemId.set(
-        payload.processNumber,
-        payload.documents.filter((doc) => doc.documentKind === 'legacy'),
-      );
+      // Every document reaches the engine's fetch loop (design.md D14, S5j):
+      // `documents.ts`'s `fetchDocument` dispatches on `documentKind`, so a
+      // born-digital row now has a real fetch path (the two-step viewer-
+      // then-PDF flow) exactly like a legacy row's 302-follow.
+      documentsByItemId.set(payload.processNumber, payload.documents);
     }
 
     return { kind: 'ok', value: { items, documentsByItemId, count: fragment.count } };
