@@ -80,6 +80,48 @@ describe('TRF5Traversal — the class catalogue is fetched per run, never hardco
   });
 });
 
+describe('TRF5Traversal — frontier seed-cursor propagation (core-frontier-crawl, "Saturated seed search bisects")', () => {
+  it('carries seedCpf through date bisection unchanged, reusing the same split()', async () => {
+    const transport = new StubTransport([]);
+    const traversal = new TRF5Traversal({ transport, session });
+    await traversal.seed({ dateFrom: '2026-01-01', dateTo: '2026-01-04', maxFacetValues: 10 });
+
+    const seedUnit: WorkUnit<TraversalCursor> = {
+      unitKey: 'frontier|partyCpf|000.000.000-00|2026-01-01..2026-01-04',
+      windowKey: '2026-01-01..2026-01-04',
+      facetValue: null,
+      label: 'partyCpf:000.000.000-00',
+      cursor: { dateFrom: '2026-01-01', dateTo: '2026-01-04', seedCpf: '000.000.000-00' },
+    };
+
+    const children = await traversal.split(seedUnit, saturated);
+
+    expect(children).toHaveLength(2);
+    for (const child of children ?? []) {
+      expect(child.cursor.seedCpf).toBe('000.000.000-00');
+    }
+  });
+
+  it('returns null for a saturated single-day seed search rather than expanding into judicial classes', async () => {
+    const transport = new StubTransport([]); // no request issued — proves facet expansion never runs
+    const traversal = new TRF5Traversal({ transport, session });
+    await traversal.seed({ dateFrom: '2026-01-01', dateTo: '2026-01-01', maxFacetValues: 10 });
+
+    const seedUnit: WorkUnit<TraversalCursor> = {
+      unitKey: 'frontier|partyCpf|000.000.000-00|2026-01-01..2026-01-01',
+      windowKey: '2026-01-01..2026-01-01',
+      facetValue: null,
+      label: 'partyCpf:000.000.000-00',
+      cursor: { dateFrom: '2026-01-01', dateTo: '2026-01-01', seedCpf: '000.000.000-00' },
+    };
+
+    const result = await traversal.split(seedUnit, saturated);
+
+    expect(result).toBeNull();
+    expect(transport.requests).toHaveLength(0);
+  });
+});
+
 describe('TRF5Traversal — date bisection boundary contract', () => {
   it('splits an even-length window at mid/mid+1 with no gap or overlap', async () => {
     const transport = new StubTransport([]);

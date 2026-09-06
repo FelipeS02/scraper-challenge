@@ -11,6 +11,14 @@ import type { SessionState } from './session.js';
 export interface TraversalCursor {
   readonly dateFrom: string;
   readonly dateTo: string;
+  /**
+   * Present only for a frontier seed search (core-frontier-crawl, "Seed
+   * Harvesting and Prioritization") — an exact-match CPF harvested from a
+   * prior detail page, carried through so `TRF5Site.discover()` can search
+   * by it. Absent (`undefined`) for every phase-1 unit `TRF5Traversal.seed()`
+   * produces, so phase-1 behavior is unchanged by this addition.
+   */
+  readonly seedCpf?: string | undefined;
 }
 
 export interface TraversalConfig {
@@ -34,14 +42,16 @@ function windowUnit(
   dateFrom: string,
   dateTo: string,
   facetValue: string | null,
+  seedCpf?: string,
 ): WorkUnit<TraversalCursor> {
   const windowKey = `${dateFrom}..${dateTo}`;
+  const seedSuffix = seedCpf === undefined ? '' : `|seed:${seedCpf}`;
   return {
-    unitKey: facetValue ? `${windowKey}|${facetValue}` : windowKey,
+    unitKey: facetValue ? `${windowKey}|${facetValue}${seedSuffix}` : `${windowKey}${seedSuffix}`,
     windowKey,
     facetValue,
     label: windowKey,
-    cursor: { dateFrom, dateTo },
+    cursor: seedCpf === undefined ? { dateFrom, dateTo } : { dateFrom, dateTo, seedCpf },
   };
 }
 
@@ -66,18 +76,25 @@ export class TRF5Traversal implements TraversalPort<TraversalCursor> {
     unit: WorkUnit<TraversalCursor>,
     _saturated: SaturationInfo,
   ): Promise<readonly WorkUnit<TraversalCursor>[] | null> {
-    const { dateFrom, dateTo } = unit.cursor;
+    const { dateFrom, dateTo, seedCpf } = unit.cursor;
 
     if (dateFrom !== dateTo) {
       const mid = addDays(dateFrom, Math.floor(daysBetween(dateFrom, dateTo) / 2));
       const nextDay = addDays(mid, 1);
       return [
-        windowUnit(dateFrom, mid, unit.facetValue),
-        windowUnit(nextDay, dateTo, unit.facetValue),
+        windowUnit(dateFrom, mid, unit.facetValue, seedCpf),
+        windowUnit(nextDay, dateTo, unit.facetValue, seedCpf),
       ];
     }
 
     if (unit.facetValue !== null) return null; // already expanded once — cannot subdivide further
+
+    // A frontier seed search has no judicial class to expand into (core-frontier-crawl,
+    // "Mandatory Date Range on Seed Searches": the same recursive bisection is reused,
+    // never the facet-expansion branch, which would silently drop the seed filter —
+    // every child windowUnit below carries no seedCpf field at all). A single day still
+    // saturated by a seed search cannot be subdivided further on this axis.
+    if (seedCpf !== undefined) return null;
 
     const classes = await fetchClassCatalogue(this.config.transport, this.config.session);
     const bounded = classes.slice(0, this.maxFacetValues);

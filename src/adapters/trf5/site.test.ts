@@ -211,6 +211,38 @@ describe('TRF5Site.discover — 429 precedence over content classification (S5g,
   });
 });
 
+describe('TRF5Site.discover — frontier seed search (core-frontier-crawl, "Seed Harvesting and Prioritization")', () => {
+  it('sends the seed CPF as documentoParte when the cursor carries one, alongside the mandatory date range', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      searchFragment(0),
+    ]);
+    const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+    await site.discover(
+      unit({ cursor: { dateFrom: '2026-09-01', dateTo: '2026-09-01', seedCpf: '000.000.000-00' } }),
+    );
+
+    const searchRequest = transport.requests[1];
+    expect(searchRequest?.body).toContain(encodeURIComponent('000.000.000-00'));
+  });
+
+  it('omits documentoParte entirely for an ordinary phase-1 unit (no seedCpf on the cursor)', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      searchFragment(0),
+    ]);
+    const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+    await site.discover(unit());
+
+    const searchRequest = transport.requests[1];
+    // documentoParte is still present, as every documented field must be on
+    // every POST (S3, "Complete Search Form Field Set") — just empty.
+    expect(searchRequest?.body).not.toContain(encodeURIComponent('000.000.000-00'));
+  });
+});
+
 describe('TRF5Site.fetchDocument — composes the existing documents.ts fetch/decode path', () => {
   it('follows the 302 redirect and returns the fetched bytes', async () => {
     const transport = new StubTransport([

@@ -91,6 +91,11 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
       // exactOptionalPropertyTypes forbids writing an explicit `undefined`
       // onto an optional field, so a null facetValue omits the key entirely.
       ...(unit.facetValue !== null ? { classeJudicial: unit.facetValue } : {}),
+      // Present only for a frontier seed search (core-frontier-crawl, "Seed
+      // Harvesting and Prioritization") — the same exact-match documentoParte
+      // field the Complete Search Form Field Set already declares (S3), never
+      // a new field this run adds to the request.
+      ...(cursor.seedCpf !== undefined ? { documentoParte: cursor.seedCpf } : {}),
       dataAutuacaoInicio: toBrDate(cursor.dateFrom),
       dataAutuacaoFim: toBrDate(cursor.dateTo),
     };
