@@ -2,13 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { primeSession } from './adapters/trf5/session.js';
+import { TRF5Seeds } from './adapters/trf5/seeds.js';
 import { resultPageCap, TRF5Site } from './adapters/trf5/site.js';
 import { TRF5Traversal } from './adapters/trf5/traversal.js';
 import { parseArgs, type ParsedArgs } from './cli/args.js';
 import { forecastRun, printDryRunForecast } from './cli/dry-run.js';
-import { printRunSummary } from './cli/summary.js';
+import { printFrontierRunSummary, printRunSummary } from './cli/summary.js';
 import { exponential, withCap, withJitter } from './engine/backoff.js';
 import { Budget, clampDateRange, unboundedBudget } from './engine/budget.js';
+import { runFrontierCrawl } from './engine/frontier.js';
 import { Pool } from './engine/pool.js';
 import type { Clock, CoverageRecord, HttpTransport, Logger, RunBounds } from './engine/ports.js';
 import { DEFAULT_REQUEST_SPACING_MS, RateLimiter } from './engine/rate-limiter.js';
@@ -21,6 +23,7 @@ import { JsonlLogger } from './infra/logging/jsonl-logger.js';
 import { withRedaction } from './infra/logging/redacting-logger.js';
 import { FsDocumentSink } from './infra/storage/fs-document-sink.js';
 import { readJsonlFile } from './infra/storage/jsonl.js';
+import { JsonlAdapterStateStore } from './infra/storage/jsonl-adapter-state-store.js';
 import { JsonlCheckpointStore } from './infra/storage/jsonl-checkpoint-store.js';
 import { JsonlCoverageSink } from './infra/storage/jsonl-coverage-sink.js';
 import { JsonlFailureLedger } from './infra/storage/jsonl-failure-ledger.js';
@@ -94,6 +97,12 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
   const session = await primeSession(deps.transport, PRIMING_URL);
   const site = new TRF5Site({ transport: deps.transport, primingUrl: PRIMING_URL });
   const traversal = new TRF5Traversal({ transport: deps.transport, session });
+  // Harvesting is unconditional across every `scrape`, on or off `--frontier`
+  // (core-frontier-crawl, "Plain scrape does not run frontier crawl": seeds
+  // are persisted regardless; only *searching* them is deferred). This same
+  // store is what `scrape --frontier` reads from in a later, separate process.
+  const seedStateStore = new JsonlAdapterStateStore(join(deps.outputDir, 'state'));
+  const frontierCapable = new TRF5Seeds();
 
   const budget =
     args.command === 'scrape'
@@ -104,6 +113,32 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
           maxRequests: args.maxRequests,
         })
       : unboundedBudget();
+
+  // core-frontier-crawl, "Deferred Phase-2 Invocation": a `--frontier` run
+  // replaces the phase-1 sweep entirely for this invocation — it never runs
+  // both in the same process.
+  if (args.command === 'scrape' && args.frontier) {
+    const bounds: RunBounds = {
+      ...clampDateRange(args.dateFrom, args.dateTo, args.maxDays),
+      maxFacetValues: args.maxFacetValues,
+    };
+    const result = await runFrontierCrawl({
+      site,
+      frontierCapable,
+      traversal,
+      stateStore: seedStateStore,
+      itemSink: new JsonlItemSink(join(deps.outputDir, 'items.jsonl')),
+      rateLimiter: new RateLimiter(args.requestSpacingMs),
+      budget,
+      clock: deps.clock,
+      logger,
+      bounds,
+      runId: deps.runId,
+      schemaVersion: SCHEMA_VERSION,
+    });
+    printFrontierRunSummary(result);
+    return;
+  }
 
   const scraper = new Scraper({
     site,
@@ -124,6 +159,9 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
     runId: deps.runId,
     schemaVersion: SCHEMA_VERSION,
     maxSplitDepth: MAX_SPLIT_DEPTH,
+    ...(args.command === 'scrape'
+      ? { frontierSeedHarvest: { frontierCapable, stateStore: seedStateStore } }
+      : {}),
   });
 
   if (args.command === 'retry-failed') {

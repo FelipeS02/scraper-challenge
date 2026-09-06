@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -37,6 +37,7 @@ function scrapeArgs(overrides: Partial<ScrapeArgs> = {}): ScrapeArgs {
     logLevel: 'error',
     logFormat: 'console',
     dryRun: false,
+    frontier: false,
     ...overrides,
   };
 }
@@ -157,5 +158,79 @@ describe('runScraper — the composition root wiring (S5e)', () => {
     expect(readFileSync(expectedPath)).toHaveLength(135);
     // Never written under outputDir — the two roots stay separate.
     expect(() => readFileSync(join(outputDir, '0123456-78.2026.4.05.8100'))).toThrow();
+  });
+});
+
+describe('runScraper — frontier seed harvesting and crawl (S6, core-frontier-crawl)', () => {
+  it('a plain scrape (no --frontier) persists harvested seeds to output/state/seeds.jsonl', async () => {
+    outputDir = mkdtempSync(join(tmpdir(), 'pje-main-frontier-harvest-'));
+    pdfsDir = mkdtempSync(join(tmpdir(), 'pje-main-frontier-harvest-pdfs-'));
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      fixtureResponse(200, 'text/xml', 'search-ok.xml'), // 3 rows, same processNumber
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'), // real parties/CPFs
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'),
+      fixtureResponse(200, 'text/html', 'detail-page-valid.html'),
+    ]);
+
+    await runScraper(scrapeArgs({ maxDocuments: 0 }), {
+      transport,
+      clock: FAKE_CLOCK,
+      outputDir,
+      logsDir: join(outputDir, 'logs'),
+      pdfsDir,
+      runId: 'test-run-harvest',
+    });
+
+    const seedLines = readFileSync(join(outputDir, 'state', 'seeds.jsonl'), 'utf-8')
+      .trim()
+      .split('\n');
+    expect(seedLines.length).toBeGreaterThan(0);
+    const seeds = seedLines.map((line) => JSON.parse(line) as { seed: { kind: string } });
+    expect(seeds.some((s) => s.seed.kind === 'partyCpf' || s.seed.kind === 'lawyerCpf')).toBe(true);
+  });
+
+  it('scrape --frontier reads seeds a prior process persisted and searches them, writing any new item found', async () => {
+    outputDir = mkdtempSync(join(tmpdir(), 'pje-main-frontier-crawl-'));
+    pdfsDir = mkdtempSync(join(tmpdir(), 'pje-main-frontier-crawl-pdfs-'));
+    // Simulates a prior process's own output — this test never runs a sweep first.
+    mkdirSync(join(outputDir, 'state'), { recursive: true });
+    writeFileSync(
+      join(outputDir, 'state', 'seeds.jsonl'),
+      `${JSON.stringify({
+        seed: { kind: 'partyCpf', value: '000.000.000-00' },
+        cellState: 'truncated',
+      })}\n`,
+    );
+
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'), // TRF5Traversal's own explicit prime
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'), // TRF5Site.discover()'s lazy internal prime
+      fixtureResponse(200, 'text/xml', 'search-ok.xml'), // 3 rows, same processNumber -> dedups to 1
+      fixtureResponse(200, 'text/html', 'detail-page-valid-no-documents.html'),
+      fixtureResponse(200, 'text/html', 'detail-page-valid-no-documents.html'),
+      fixtureResponse(200, 'text/html', 'detail-page-valid-no-documents.html'),
+    ]);
+
+    await runScraper(scrapeArgs({ frontier: true }), {
+      transport,
+      clock: FAKE_CLOCK,
+      outputDir,
+      logsDir: join(outputDir, 'logs'),
+      pdfsDir,
+      runId: 'test-run-frontier',
+    });
+
+    const itemLines = readFileSync(join(outputDir, 'items.jsonl'), 'utf-8').trim().split('\n');
+    expect(itemLines).toHaveLength(1);
+    // Exactly the seed's own search + its 3 detail fetches (plus the two
+    // priming GETs) were issued — never a second seed search.
+    expect(transport.requests).toHaveLength(6);
+    // The distinguishing proof this actually ran the FRONTIER path, not a
+    // plain sweep that happened to produce the same shape: the search POST
+    // carries the persisted seed's own CPF as documentoParte.
+    const searchRequest = transport.requests[2];
+    expect(searchRequest?.body).toContain(encodeURIComponent('000.000.000-00'));
   });
 });

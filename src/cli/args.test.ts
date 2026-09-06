@@ -130,6 +130,27 @@ describe('parseArgs — scrape command', () => {
     expect(args.dryRun).toBe(true);
   });
 
+  it('defaults frontier to false, and sets it when --frontier is present (core-frontier-crawl, "Deferred Phase-2 Invocation")', () => {
+    const withoutFlag = parseArgs([
+      'scrape',
+      '--from',
+      '2026-01-01',
+      '--to',
+      '2026-01-01',
+    ]) as ScrapeArgs;
+    expect(withoutFlag.frontier).toBe(false);
+
+    const withFlag = parseArgs([
+      'scrape',
+      '--from',
+      '2026-01-01',
+      '--to',
+      '2026-01-01',
+      '--frontier',
+    ]) as ScrapeArgs;
+    expect(withFlag.frontier).toBe(true);
+  });
+
   it('rejects an unrecognized --log-level', () => {
     expect(() =>
       parseArgs(['scrape', '--from', '2026-01-01', '--to', '2026-01-01', '--log-level', 'loud']),

@@ -29,6 +29,11 @@ export interface ScrapeArgs {
   readonly logLevel: LogLevel;
   readonly logFormat: LogFormat;
   readonly dryRun: boolean;
+  /**
+   * Runs the phase-2 frontier crawl instead of the phase-1 sweep (core-frontier-crawl,
+   * "Deferred Phase-2 Invocation"): off by default, never implied by omission.
+   */
+  readonly frontier: boolean;
 }
 
 export interface RetryFailedArgs {
@@ -155,5 +160,6 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     logLevel: parseLogLevel(flags),
     logFormat: parseLogFormat(flags),
     dryRun: flags.get('dry-run') === true,
+    frontier: flags.get('frontier') === true,
   };
 }

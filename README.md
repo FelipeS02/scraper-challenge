@@ -37,7 +37,7 @@ Every bound stops its own axis without erroring the rest of the run
 | `--log-level <debug\|info\|warn\|error>` | `info` | Minimum level emitted |
 | `--log-format <console\|jsonl>` | `console` | `console` writes to stderr; `jsonl` appends to `logs/run-<runId>.jsonl` |
 | `--dry-run` | off | Forecasts the request count and duration; issues zero requests |
-| `--frontier` | off | Reserved for the optional phase-2 frontier crawl (not yet implemented — S6) |
+| `--frontier` | off | Runs the phase-2 frontier crawl instead of the phase-1 sweep — see "Frontier" below |
 
 ## Running from source
 
@@ -83,6 +83,33 @@ observed — cell state, result counts, the partition invariant — never a clai
 completeness the site itself cannot back. A `--dry-run` forecast is a disclosed
 heuristic (one search request per day, the optimistic non-saturated case), not a
 certified prediction: a saturated day always issues more requests than forecast.
+
+## Frontier
+
+`--frontier` runs a second, separate, off-by-default pass over seeds a prior `scrape`
+run already harvested — never as part of a plain `scrape`, and never automatically:
+
+1. Every `scrape` run — whether or not `--frontier` is set — harvests exact-match
+   identifiers (CPFs, in the current TRF5 adapter) from each extracted item's parties
+   and lawyers, and persists them to `output/state/seeds.jsonl`, tagged by whether the
+   cell they came from was `truncated` or `complete`. Harvesting issues no request of
+   its own.
+2. `scrape --frontier` — run separately, any time later, even in a new process — reads
+   that file, orders the seed queue (`truncated`-cell seeds first, then by the
+   adapter's declared kind ranking), and searches each seed by the same date-bounded,
+   saturation-bisecting mechanism phase 1 already uses.
+3. The crawl stops on whichever of two independent conditions comes first: a rolling
+   window of seed searches that stop finding new items (yield decay), or the
+   `--max-requests` ceiling.
+
+**Frontier-crawl coverage gains are UNMEASURED and self-reinforcing.** A seed is only
+ever harvested from an item the sweep already found, so every frontier search is
+biased toward data already connected to what is known — it can never discover a
+process with no link to anything the sweep already saw. Coverage can grow (more items
+in `items.jsonl`) without the unknown portion of the site shrinking measurably, and no
+number this project reports should be read as narrowing that unknown portion. This
+statement is repeated verbatim in the frontier run's own printed summary
+(`cli/summary.ts`), never softened.
 
 ## Manual smoke only — never automated
 
