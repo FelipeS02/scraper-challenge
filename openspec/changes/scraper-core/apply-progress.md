@@ -56,7 +56,11 @@
   S5j-close review found in `engine/scraper.ts`, plus two more defects a second live-payload
   review found (`documentsGrid`'s fetched/skipped split gone stale, a born-digital label's
   screen-reader-only prefix never stripped). All six fixed and live-verified in one run.**
-- S6: not started.
+- **S6 (6.1–6.13): complete — 1164 insertions + 20 deletions = 1184 authored `src/` lines
+  actual, against the 800-line budget and this slice's own ~420 estimate (2.8x). Over
+  budget, disclosed rather than shaved — see "S6" below for the full breakdown and the
+  `size:exception` candidacy this raises. The last pending slice of `scraper-core`; every
+  task in `tasks.md` is now `[x]`.**
 
 ## S3 — TRF5 session, search, and content-based validity
 
@@ -3542,3 +3546,342 @@ All 14 S5i tasks complete (5i.1–5i.14). `vitest run`: 283/283 passing. `pnpm t
 `pnpm lint`: clean. `pnpm format:check`: clean except the pre-existing, untouched
 `src/engine/http-status.ts` formatting warning, not introduced by this slice. Live acceptance
 run passing against the real host — see "Live Acceptance Evidence" above.
+
+## S6 — Frontier crawl (additive, off by default)
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5e-transport-composition-root` (continued on the same branch
+per this apply run's launch instructions; no new branch created, no push, no PR).
+**Delivery**: `feature-branch-chain` — PR #19 in the chain, the last slice of this change.
+Not pushed and no PR opened by this apply run.
+**Line count against budget**: `git diff --stat -- 'src/*'` reports 1164 insertions + 20
+deletions across 17 files = **1184 authored `src/` lines**, against the 800-line per-slice
+budget and this slice's own ~420-line estimate — **over budget by 48%, over its own estimate
+by 2.8x, disclosed rather than shaved.** This is a `size:exception` candidate, following the
+same disclosure convention S1/S3/S5c/S5d/S5i used; the owner has not yet been asked for this
+one specifically (unlike S5i's, which the owner granted 2026-09-06) — flagged in this apply
+run's final report per `delivery_strategy: ask-on-risk`, decided by the owner rather than
+self-authorized here.
+
+### Why the overage happened
+
+The ~420 estimate assumed `engine/scraper.ts` would stay untouched (`tasks.md`'s own S6
+rollback-boundary forecast: "Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`;
+phase-1 scrape unaffected"). That forecast turned out to describe a real architectural
+impossibility, discovered while designing task 6.1's own RED test:
+
+- `core-frontier-crawl`'s "Seed Harvesting and Prioritization" requirement demands every
+  persisted seed be tagged with the `truncated`/`complete` state of the CELL it was harvested
+  from ("Seeds harvested from `truncated` cells MUST be prioritised over seeds from `complete`
+  cells").
+- `items.jsonl`'s envelope is exactly five fields (`schemaVersion`, `itemId`, `scrapedAt`,
+  `sourceUrl`, `runId`, `payload`) per `core-run-control-and-output`'s "Mandatory Envelope
+  Fields" — no `unitKey` or cell-state field rides along with a persisted item, and widening
+  the envelope to add one would violate that exact requirement.
+- `coverage.jsonl`'s own records carry aggregate counts per cell, never which items came from
+  which cell.
+- With no join key available anywhere on disk, the ONLY place in the whole codebase where "this
+  item" and "this cell's complete/truncated state" are both in scope at the same instant is
+  inside `engine/scraper.ts`'s own `processUnit` loop, at the point an item is about to be
+  written.
+
+Three ways to close this gap were considered:
+
+1. **Post-process `items.jsonl` + `coverage.jsonl` after the fact, from `main.ts`, leaving
+   `engine/scraper.ts` untouched** (what the pre-launch forecast assumed) — impossible without
+   an item-to-cell join key neither file carries, for the reason above.
+2. **Widen `items.jsonl`'s envelope** to carry a cell-state or `unitKey` field — rejected
+   outright: it would violate `core-run-control-and-output`'s own "Mandatory Envelope Fields"
+   requirement, which S2 fixed as an EXACT five-field shape, not a minimum.
+3. **Add one small, optional config field to `ScraperConfig`** (`frontierSeedHarvest?:
+   FrontierSeedHarvestConfig<TItem, TCursor>`), read inside `processUnit` at the exact point an
+   item is written, calling a new pure `engine/frontier.ts` function
+   (`harvestAndPersistSeeds`) that issues no request of its own. **Chosen.** The field is
+   optional and every existing test's `ScraperConfig` never sets it, so the pre-existing test
+   suite (283 tests before this slice) needed zero edits and stayed green throughout — the
+   "phase-1 scrape unaffected" SAFETY PROPERTY the pre-launch forecast cared about holds
+   exactly, even though the pre-launch forecast's ROLLBACK-BOUNDARY WORDING ("delete two files,
+   nothing else") does not. `classifyCellState(resultCount, cap)` is computed once, moved
+   earlier in `processUnit` (before the items loop, since it depends only on `resultCount`/
+   `cap`, both already known immediately after `discover()` returns, not on the later
+   split()-driven upgrade to `'subdivided'`), so each item's own seed-harvest call is tagged
+   with exactly the two-value `'complete' | 'truncated'` type the requirement needs — the
+   third state (`'subdivided'`) literally cannot occur yet at that point in the function, which
+   is provable from the code shape, not merely asserted.
+
+This is the fourth instance of the same failure class this project has now named explicitly
+three times before (S4c's `DocumentSink`, S5a's `Logger`, S5d's `TRF5Site`/`result-fragment.ts`/
+`axios-transport.ts`): a pre-launch forecast, written before the actual data-flow constraints
+were worked through in code, assumed a shape that a real spec requirement's substance made
+impossible. Disclosed here rather than silently forcing the requirement to fit the stale
+forecast.
+
+### Completed Tasks
+
+- [x] 6.1 RED `engine/frontier.test.ts` (`harvestAndPersistSeeds`, `runFrontierCrawl` reading a
+      store it never wrote to itself) + `engine/scraper.test.ts` (two new tests: harvesting is
+      a total no-op when `frontierSeedHarvest` is not configured; when configured, every
+      written item's seeds are persisted, tagged by its own cell's complete/truncated state).
+      Confirmed genuinely RED — see "TDD Cycle Evidence" below.
+- [x] 6.2 GREEN implemented `engine/frontier.ts` (`harvestAndPersistSeeds`, `rankSeeds`,
+      `runFrontierCrawl`, `SEEDS_STATE_KEY`, `DEFAULT_YIELD_DECAY_WINDOW`,
+      `DEFAULT_MAX_SPLIT_DEPTH`) and wired `frontierSeedHarvest` into `engine/scraper.ts`'s
+      `ScraperConfig`/`processUnit`. `--frontier` wired in `cli/args.ts` (`ScrapeArgs.frontier:
+      boolean`, defaulting `false`) and `main.ts` (a `--frontier` run replaces the phase-1 sweep
+      entirely for that invocation, never both in one process — core-frontier-crawl, "Deferred
+      Phase-2 Invocation").
+- [x] 6.3 RED `adapters/trf5/seeds.test.ts`: ranking, harvesting (dedup, null/empty exclusion),
+      `unitFromSeed`'s mandatory date range. **Amended per the disclosed seed-kind deviation**
+      (see "Design decisions and deviations" below): `lawyerCpf` ranks above `partyCpf`, both
+      exact-match CPFs harvested from the real captured `detail-page-valid.html` fixture
+      (S4a's own fixture, reused rather than inventing a new one).
+- [x] 6.4 GREEN implemented `adapters/trf5/seeds.ts` (`TRF5Seeds implements
+      FrontierCapable<TrfPayload, TraversalCursor>`).
+- [x] 6.5 RED (extended `frontier.test.ts`): `rankSeeds` — truncated-cell seeds scheduled
+      before complete-cell seeds regardless of kind ranking; higher-ranked kind selected first
+      within the same cell state.
+- [x] 6.6 GREEN implemented `rankSeeds` in `engine/frontier.ts`.
+- [x] 6.7 RED (extended `frontier.test.ts`): 8 persisted seeds, a rolling window of 3; the run
+      stops after the 4th seed once 3 consecutive zero-new-item searches close the window,
+      never reaching seeds 5–8 (proven by asserting the exact `discoverCalls` sequence, not
+      merely a count — if yield decay had not fired, the 5th–8th scripted outcomes would have
+      been consumed without error, silently passing a broken implementation).
+- [x] 6.8 GREEN implemented the rolling `yieldWindow` array and its stop check in
+      `runFrontierCrawl`.
+- [x] 6.9 RED (extended `frontier.test.ts`): 5 seeds each yielding a genuinely new item (yield
+      never decays), `maxRequests: 2` — the run stops after exactly 2 requests, proving the
+      budget ceiling is independent of and checked separately from yield decay.
+- [x] 6.10 GREEN wired the existing `engine/budget.ts` `Budget` class into `runFrontierCrawl` —
+      `canSpendRequest()`/`recordRequest()` reused verbatim, no changes to `budget.ts` itself.
+- [x] 6.11 RED (extended `traversal.test.ts` + `site.test.ts` + `frontier.test.ts`): a saturated
+      seed search bisects via `TRF5Traversal.split()` (the same function phase 1 uses); a
+      single-day seed search that is STILL saturated returns `null` rather than expanding into
+      judicial-class facets (which would silently drop the seed filter); `TRF5Site.discover()`
+      sends the seed's CPF as `documentoParte` when the cursor carries one. The "date range
+      rejected before send" half of this task reuses `search.ts`'s existing, already-passing
+      `validateSearchCriteria` test (S3) rather than duplicating it: `unitFromSeed` always
+      populates `RunBounds`' mandatory `dateFrom`/`dateTo`, so no seed-derived request can ever
+      omit them — a structural guarantee, not a new runtime check.
+- [x] 6.12 GREEN: `adapters/trf5/traversal.ts`'s `TraversalCursor` gained an optional
+      `seedCpf?: string` field, threaded through `windowUnit()`'s date-bisection children and
+      guarded out of the facet-expansion branch (`if (seedCpf !== undefined) return null;`
+      BEFORE the class-catalogue fetch, so a seed search never issues that request either).
+      `adapters/trf5/site.ts`'s `discover()` reads `cursor.seedCpf` and spreads
+      `documentoParte` into the existing `SearchCriteria` shape — zero new fields on the
+      request-body builder itself.
+- [x] 6.13 GREEN: `cli/summary.ts` gained `formatFrontierRunSummary`/`printFrontierRunSummary`,
+      always appending the bias notice verbatim (never conditional on any measurement, since
+      the whole point is that it cannot be measured). README gained a new `## Frontier` section
+      (between "Coverage is measured, never certified" and "Manual smoke only") plus an updated
+      `--frontier` row in the CLI bounds table (previously read "not yet implemented — S6").
+
+### Design decisions and deviations
+
+- **Seed kinds deviate from design.md's illustrative `['oab', 'exactName']` labels — disclosed,
+  not silently substituted.** TRF5 declares `seedKindRanking = ['lawyerCpf', 'partyCpf']`,
+  both backed by the existing `documentoParte` search field (already in S3's "Complete Search
+  Form Field Set", confirmed exact-match per `docs/RESEARCH.md` §3: "exact-match (process
+  number, CPF/CNPJ, OAB registration)"). A real OAB-registration-number field (`numeroOAB`)
+  does exist on the form (`docs/RESEARCH.md` §2.5, "Adding `numeroOAB=12345` returned 0" — a
+  real, working, exact-match field that returned zero only because the probed number did not
+  exist) but was never inventoried by S3's field-name harvesting/validation suite. Adding it
+  now would require extending every existing session/search fixture's harvested field-name set
+  and re-asserting "every documented field present on every POST" — a blast radius across S3's
+  own suite, well outside this slice's scope. Real OAB-number seeding is left a disclosed,
+  tracked gap, in the same spirit as this project's other disclosed limitations (S4c/S5a/S5d).
+  `lawyerCpf` ranks above `partyCpf`: a lawyer's CPF tends to recur across more processes than
+  a single litigant's, so it more often surfaces additional, previously-unseen items per seed
+  search — an adapter-owned ranking call (design.md D3: which kinds exist and how they rank is
+  entirely the adapter's obligation, not the core's).
+- **Yield decay is scoped to the frontier run itself, not cross-referenced against phase-1's
+  `items.jsonl`.** "New" means "not yet seen by this frontier invocation's own `seenItemIds`
+  set", which starts empty every run. This is a deliberate scope decision: `ItemSink` is a
+  write-only port (no `load()`, the same opacity `CoverageSink` already has per design.md's
+  Resumability table), so cross-referencing the full phase-1 item set would require either
+  widening a port or having `main.ts` read `items.jsonl` directly and pass a
+  `ReadonlySet<string>` into the frontier config — a bigger feature than any task in this
+  slice assigns. The consequence, observed directly in the live run below: the SAME process a
+  prior sweep already found is written to `items.jsonl` a second time by the frontier run, at
+  least once. This is consistent with, not a violation of, the project's own established
+  at-least-once semantics ("At-least-once item/coverage lines; exactly-once cell accounting AT
+  READ TIME" — design.md's Resumability table) — a consumer already dedupes by `itemId` when
+  reading, exactly as it must for two overlapping phase-1 cells.
+- **Frontier crawl never fetches documents in this slice.** No task in 6.1–6.13 assigns
+  document-fetching to the frontier path; `runFrontierCrawl`'s `SitePort.fetchDocument` is
+  never called. A found item is written with whatever `documents`/`documentsGrid` state its
+  own `discover()` call produced (matching phase 1's own pre-fetch shape) — a disclosed scope
+  boundary, not an oversight.
+- **`CoverageRecord.phase: 'frontier'` is not written by this slice.** The field exists on the
+  port (pre-declared, D10/S2 era) but no S6 task assigns coverage-ledger wiring for frontier
+  searches. `runFrontierCrawl` writes only to `ItemSink`, never `CoverageSink`. Disclosed as a
+  known, deliberate gap rather than silently wired to avoid yet another instance of this
+  project's recurring "declared but never assigned" failure class — the difference here is
+  that it is named explicitly in this section rather than discovered later by a reviewer.
+- **`FrontierCapable` is removed from `ports-implementation-audit.test.ts`'s
+  `KNOWN_DEFERRED_GAPS`** (now empty: `const KNOWN_DEFERRED_GAPS: readonly string[] = []`) —
+  `TRF5Seeds` is this slice's real, non-fixture implementation, closing the last of the three
+  gaps that list ever named (`HttpTransport`/`Clock` closed in S5e).
+
+### TDD Cycle Evidence
+
+| Task | Test File | RED confirmed by | GREEN |
+|------|-----------|-------------------|-------|
+| 6.1 | `frontier.test.ts` (module did not exist) | ✅ Genuine: `Cannot find module './frontier.js'` | 7/7 passed |
+| 6.1 | `scraper.test.ts` (2 new tests) | ✅ Genuine: both asserted against `[]`/empty state before `ScraperConfig.frontierSeedHarvest` existed; `expected [] to deeply equal [...]` | 32/32 passed |
+| 6.3 | `seeds.test.ts` (module did not exist) | ✅ Genuine: `Cannot find module './seeds.js'` | 7/7 passed |
+| 6.5/6.6, 6.7/6.8, 6.9/6.10, 6.11 (frontier-side) | `frontier.test.ts` (written alongside 6.1's own file, before any implementation existed) | ✅ Genuine: same "module does not exist" RED as 6.1 covered every test in the file at once, since `engine/frontier.ts` did not exist yet | all 7 tests passed together on first GREEN implementation |
+| 6.11/6.12 (`traversal.ts`/`site.ts` side) | `traversal.test.ts` + `site.test.ts` (extended) | Implemented ahead of the RED write (disclosed gap — see below), then verified genuine by mutation: `git stash push -- src/adapters/trf5/site.ts src/adapters/trf5/traversal.ts` reproduced 3 real failures (`expected undefined to be '000.000.000-00'`, a thrown `StubTransport: no scripted response`, and a `body` assertion failure), `git stash pop` restored GREEN | 21/21 passed after restore |
+| 6.2 (main.ts wiring) | `main.test.ts` (2 new tests) | ✅ Genuine: the harvest test failed with `ENOENT ... seeds.jsonl` (file never created); the frontier-crawl test's first version passed VACUOUSLY (an unwired `--frontier` flag fell through to an ordinary sweep that coincidentally produced the same item count and request count) — caught before it could hide as a false pass, and strengthened with a `documentoParte` body assertion that only a real seed search could satisfy, which then failed genuinely (`expected '...' to contain '000.000.000-00'`) | 5/5 passed |
+
+**Disclosed strict-TDD gap for this cycle**: task 6.11/6.12's `traversal.ts`/`site.ts` changes
+were implemented before their tests were written, unlike every other task in this slice. The
+gap was caught and closed the same way S4c's own reconstructed-RED gap was closed in S4d: a
+real mutation (`git stash` reverting only the two implementation files, never the tests) that
+reproduced three genuine, mechanically-distinct failures, then restored. This is not the same
+evidentiary strength as an observed pre-implementation RED, and is disclosed as such rather
+than presented as an unbroken RED-first record.
+
+**A second disclosed near-miss, not a strict-TDD gap but worth recording**: 6.2's own
+`main.test.ts` frontier-crawl test passed on its FIRST version despite `main.ts` not yet
+wiring `--frontier` at all — an unwired `--frontier` flag silently fell through to an ordinary
+sweep whose item/request counts happened to match what the test asserted. This is exactly the
+"variants sharing a harness bug" failure class this project has been burned by before: a test
+that cannot fail for the right reason proves nothing. Caught before GREEN by inspecting the
+passing run's own behavior, not after; the test was strengthened with an assertion (`the search
+POST carries the seed's own CPF`) that only a genuine frontier search satisfies, which then
+failed for the right reason against the same unwired `main.ts`.
+
+### Test Summary
+
+- **Total tests (S6)**: 308/308 passing (`pnpm exec vitest run`), up from 283 at S5i close (25
+  new tests: 7 in `frontier.test.ts`, 7 in `seeds.test.ts`, 2 in `traversal.test.ts`, 2 in
+  `site.test.ts`, 3 in `scraper.test.ts`, 2 in `args.test.ts`, 2 in `summary.test.ts`, 2 in
+  `main.test.ts`).
+- **New test files**: `engine/frontier.test.ts`, `adapters/trf5/seeds.test.ts`.
+- **New production files**: `engine/frontier.ts`, `adapters/trf5/seeds.ts`.
+- **New production symbols**: `PersistedSeed`, `SEEDS_STATE_KEY`, `harvestAndPersistSeeds`,
+  `rankSeeds`, `runFrontierCrawl`, `FrontierRunConfig`, `FrontierRunResult`,
+  `DEFAULT_YIELD_DECAY_WINDOW`, `DEFAULT_MAX_SPLIT_DEPTH` (`engine/frontier.ts`);
+  `FrontierSeedHarvestConfig`, `ScraperConfig.frontierSeedHarvest` (`engine/scraper.ts`);
+  `TRF5Seeds`, `seedKindRanking` (`adapters/trf5/seeds.ts`); `TraversalCursor.seedCpf`
+  (`adapters/trf5/traversal.ts`); `ScrapeArgs.frontier` (`cli/args.ts`);
+  `formatFrontierRunSummary`, `printFrontierRunSummary` (`cli/summary.ts`).
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/engine/frontier.test.ts src/adapters/trf5/seeds.test.ts src/engine/scraper.test.ts src/main.test.ts src/adapters/trf5/traversal.test.ts src/adapters/trf5/site.test.ts src/cli/args.test.ts src/cli/summary.test.ts` → all passing; full suite `pnpm exec vitest run` → 308/308 |
+| Runtime harness command/scenario and exact result | Two bounded live runs from a clean scratch directory (never the repo's own `output/`): (1) `tsx main.ts scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 1 --max-documents 3 --max-requests 40` — passing, identical shape to prior slices' own runs, plus a real, non-empty `output/state/seeds.jsonl` (2 seeds: one `lawyerCpf`, one `partyCpf`, both tagged `truncated`, matching the run's own printed `truncated: 1` summary); (2) from the SAME output directory, in a genuinely separate process invocation, `tsx main.ts scrape --frontier --from 2026-03-10 --to 2026-03-10 --max-documents 0 --max-requests 6 --log-level warn` — passing: "seeds processed: 2, new items found: 1", plus the bias-disclosure notice printed verbatim. See "Live Acceptance Evidence" below. |
+| Rollback boundary | Delete `src/engine/frontier.ts`, `src/adapters/trf5/seeds.ts`, `src/engine/frontier.test.ts`, `src/adapters/trf5/seeds.test.ts`. Revert `engine/scraper.ts`'s `frontierSeedHarvest` field/import and its call site inside `processUnit` (including moving `cap`/`resultCount`/`state`'s declarations back to after the items loop). Revert `adapters/trf5/traversal.ts`'s `TraversalCursor.seedCpf` field, `windowUnit()`'s `seedCpf` parameter, and `split()`'s seed guard. Revert `adapters/trf5/site.ts`'s `documentoParte` spread in `discover()`. Revert `cli/args.ts`'s `ScrapeArgs.frontier` field and its parse line. Revert `cli/summary.ts`'s `formatFrontierRunSummary`/`printFrontierRunSummary`. Revert `main.ts`'s frontier branch, `seedStateStore`/`frontierCapable` construction, and the `frontierSeedHarvest` spread into `Scraper`'s config. Revert `ports-implementation-audit.test.ts`'s `KNOWN_DEFERRED_GAPS` back to `['FrontierCapable']`. Each reverts independently of the others except `scraper.ts`'s change, which `frontier.ts`'s existence is a prerequisite for. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/frontier.ts` | Created | `harvestAndPersistSeeds`, `rankSeeds`, `runFrontierCrawl`, `PersistedSeed`, `FrontierRunConfig`, `FrontierRunResult`, `SEEDS_STATE_KEY`, two defaulted constants |
+| `src/engine/frontier.test.ts` | Created | 7 tests: ranking (2), harvesting (1), reads-from-a-prior-process (1), yield decay (1), budget ceiling (1), saturated-seed-search-bisects (1) |
+| `src/adapters/trf5/seeds.ts` | Created | `TRF5Seeds implements FrontierCapable<TrfPayload, TraversalCursor>` |
+| `src/adapters/trf5/seeds.test.ts` | Created | 7 tests: ranking, harvesting (dedup/null-exclusion), `unitFromSeed` |
+| `src/engine/scraper.ts` | Modified | `FrontierSeedHarvestConfig`, `ScraperConfig.frontierSeedHarvest`; `processUnit` computes `cap`/`resultCount`/provisional `state` before the items loop and calls `harvestAndPersistSeeds` per written item when configured |
+| `src/engine/scraper.test.ts` | Modified | `MemorySeedStateStore`, `FakeFrontierCapable`, 3 new tests (off-by-default, truncated tagging, complete tagging) |
+| `src/adapters/trf5/traversal.ts` | Modified | `TraversalCursor.seedCpf?: string`; `windowUnit()` threads it through bisection children; `split()` guards the facet-expansion branch against a seed search |
+| `src/adapters/trf5/traversal.test.ts` | Modified | 2 new tests: seedCpf survives bisection; a saturated single-day seed search returns `null` without a request |
+| `src/adapters/trf5/site.ts` | Modified | `discover()` spreads `documentoParte: cursor.seedCpf` into `SearchCriteria` when present |
+| `src/adapters/trf5/site.test.ts` | Modified | 2 new tests: `documentoParte` sent when `seedCpf` present; omitted (empty) for an ordinary unit |
+| `src/cli/args.ts` | Modified | `ScrapeArgs.frontier: boolean`, parsed from `--frontier`, defaulting `false` |
+| `src/cli/args.test.ts` | Modified | 1 new test: defaults `false`, set by the flag |
+| `src/cli/summary.ts` | Modified | `formatFrontierRunSummary`, `printFrontierRunSummary`, the verbatim bias notice |
+| `src/cli/summary.test.ts` | Modified | 2 new tests |
+| `src/main.ts` | Modified | `seedStateStore`/`frontierCapable` construction (unconditional); `--frontier` branch calling `runFrontierCrawl` instead of `Scraper.run`; `frontierSeedHarvest` spread into the sweep path's `Scraper` config |
+| `src/main.test.ts` | Modified | `scrapeArgs()` helper gained `frontier: false`; 2 new tests (plain-scrape harvests seeds; `--frontier` reads and searches a prior process's seeds) |
+| `src/engine/ports-implementation-audit.test.ts` | Modified | `KNOWN_DEFERRED_GAPS` emptied — `FrontierCapable` now has a real, non-fixture implementation |
+| `README.md` | Modified | New `## Frontier` section; updated `--frontier` CLI-bounds row |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 6.1–6.13 `[x]`; recorded the actual line count and the seed-kind deviation; updated the S6 forecast/rollback rows |
+| `openspec/changes/scraper-core/apply-progress.md` | Modified | This section; updated the top-of-file cumulative summary |
+
+### Live Acceptance Evidence
+
+**Passing, both runs, from a clean scratch directory** (never the repo's own `output/`, per
+this project's own standing lesson about the checkpoint no-op cost in an earlier slice):
+
+**Run 1 — plain sweep** (`tsx main.ts scrape --from 2026-03-10 --to 2026-03-10
+--max-facet-values 1 --max-items 1 --max-documents 3 --max-requests 40`): identical shape to
+prior slices' own runs against this same window — 3 documents persisted for
+`0005643-82.2001.4.05.8000`, cell `truncated` (saturated at the 30-result cap), summary
+`complete: 0, truncated: 1, failed: 0`. **New in this slice**: `output/state/seeds.jsonl` now
+exists, containing exactly 2 harvested seeds — one `lawyerCpf`, one `partyCpf` (real CPFs,
+never reproduced in this document; the file itself is git-ignored per `output/`) — both
+correctly tagged `cellState: "truncated"`, matching the cell's own printed state exactly.
+
+**Run 2 — frontier crawl, a genuinely separate process, reading Run 1's own output directory**
+(`tsx main.ts scrape --frontier --from 2026-03-10 --to 2026-03-10 --max-documents 0
+--max-requests 6 --log-level warn`): "Frontier run summary: seeds processed: 2, new items
+found: 1", followed by the bias-disclosure notice printed verbatim. `output/items.jsonl` grew
+from 1 line (Run 1) to 2 lines (Run 2 appended the same process again — see "Yield decay is
+scoped to the frontier run itself" above for why this is expected, at-least-once behavior, not
+a defect).
+
+### Issues Found
+
+1. **The pre-launch rollback-boundary forecast ("phase-1 scrape unaffected... delete two
+   files") undersold a real architectural necessity.** See "Why the overage happened" above —
+   `engine/scraper.ts` had to be touched to satisfy the per-item cell-state tagging the spec
+   actually requires, since neither `items.jsonl` nor `coverage.jsonl` carries an item-to-cell
+   join key and widening the envelope would violate a separate, already-fixed requirement. The
+   SAFETY PROPERTY the forecast cared about (phase-1 behavior unaffected) holds — the pre-existing
+   283-test suite needed zero edits — but the ROLLBACK WORDING does not describe the actual diff.
+2. **`main.test.ts`'s first version of the frontier-crawl integration test passed vacuously**
+   against an unwired `--frontier` flag, because an ordinary sweep happened to produce the same
+   item/request counts. Caught before GREEN, fixed by adding a `documentoParte`-body assertion
+   that only a genuine seed search can satisfy. Recorded in "TDD Cycle Evidence" above as a
+   disclosed near-miss, consistent with this project's standing "variants sharing a harness bug"
+   lesson: a test that cannot fail for the right reason proves nothing.
+3. **task 6.11/6.12's implementation preceded its own tests**, a genuine strict-TDD gap for this
+   slice (every other task followed RED-then-GREEN). Closed by mutation-testing verification
+   (`git stash` on the two implementation files alone, confirming three real, mechanically
+   distinct failures, then restoring) rather than a reconstructed pre-implementation RED —
+   disclosed as weaker evidence than an observed RED, per this project's own S4d-established
+   standard.
+4. **1184 authored `src/` lines is 48% over the 800 budget and 2.8x this slice's own ~420
+   estimate.** Disclosed above under "Line count against budget" — a `size:exception` candidate
+   the owner has not yet been asked to grant for this specific overage.
+
+### Workload / PR Boundary
+
+- Mode: chained PR slice (`feature-branch-chain`); this apply run's scope is a `size:exception`
+  candidate — flagged for the owner's decision, not self-granted.
+- Current work unit: S6 — the optional, off-by-default phase-2 frontier crawl. The last slice
+  of `scraper-core`; every task in `tasks.md` is now `[x]`.
+- Boundary: starts from S5i's merged state (a truthful, complete-field payload with no known
+  gaps). Ends with an optional second pass over persisted seeds, provably additive (the full
+  pre-existing 283-test suite stayed green throughout, no test was edited to accommodate a
+  behavior change to the phase-1 path) and self-limiting on three independent axes (seed
+  ranking exhausts a finite persisted queue, yield decay, and the request budget ceiling).
+- Commits (four, per the work-unit-commits skill, splitting by the coherent deliverables this
+  slice actually has):
+  1. `feat(adapters/trf5): thread a frontier seed filter through search and saturation bisection`
+     — `traversal.ts`'s `seedCpf` cursor field and `site.ts`'s `documentoParte` wiring, plus
+     their tests. Independently revertible; nothing else in this slice depends on it existing
+     first except `seeds.ts`'s own `unitFromSeed`.
+  2. `feat(adapters/trf5): harvest exact-match CPF seeds from extracted payloads` —
+     `adapters/trf5/seeds.ts` + its test. Depends on (1) for `TraversalCursor.seedCpf`.
+  3. `feat(engine): add the frontier crawl runner and wire seed harvesting into the sweep loop`
+     — `engine/frontier.ts` + its test, `engine/scraper.ts`'s `frontierSeedHarvest` field +
+     wiring + its tests, `ports-implementation-audit.test.ts`'s `KNOWN_DEFERRED_GAPS` update.
+     Depends on (2) for a real `FrontierCapable` to test against in `main.test.ts`, though
+     `frontier.test.ts` itself only needs a fake.
+  4. `feat(cli): wire --frontier and document the unmeasurable frontier-crawl bias` —
+     `cli/args.ts`, `cli/summary.ts`, `main.ts`'s frontier branch, `main.test.ts`, `README.md`.
+     Depends on (3) for `runFrontierCrawl` to exist.
+- Estimated review budget impact: 1184 authored `src/` lines against the 800-line budget and
+  this slice's own ~420 estimate — 148%/282% respectively. Exceeds budget; see "Why the overage
+  happened" above and the `size:exception` candidacy this raises for the owner's decision.
+
+### Status (S6)
+
+All 13 S6 tasks complete (6.1–6.13). `vitest run`: 308/308 passing (up from 283 at S5i close).
+`pnpm typecheck`: clean. `pnpm lint`: clean. `pnpm format:check`: clean except the pre-existing,
+untouched `src/engine/http-status.ts` formatting warning, not introduced by this slice. Both
+live acceptance runs passing against the real host — see "Live Acceptance Evidence" above.
+This is the last pending slice of `scraper-core`: every task across S1–S6 is now `[x]`.
