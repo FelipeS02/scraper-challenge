@@ -252,6 +252,7 @@ audit as an executable guard rather than a convention.
 | core-run-control-and-output | English camelCase Property Naming | S2 (envelope) / S4 (payload) |
 | core-run-control-and-output | Separate Coverage Ledger File | S2 |
 | core-run-control-and-output | Structured Run Observability | S5a |
+| core-run-control-and-output | Document Fetch Outcome Written Back to the Payload | S5i |
 | core-run-control-and-output | Personal Data Handling Rules | S1 (`.gitignore` + convention) / S3+S4 (fixtures) / S5a (log redaction) |
 | core-frontier-crawl | Deferred Phase-2 Invocation | S6 |
 | core-frontier-crawl | Seed Harvesting and Prioritization | S6 |
@@ -1014,15 +1015,67 @@ against a **real captured fixture**, with `rawDate: '14/05/2026 14:20:07'` on th
 same `toEqual`. A captured fixture does not make an assertion honest. An assertion that restates
 what the implementation happens to produce proves nothing, whatever the fixture is cut from.
 
-- [ ] 5i.1 RED `engine/scraper.test.ts`: after a document fetch succeeds, the persisted item's matching document entry carries `fetchStatus: 'fetched'`, its real `byteLength` and its stored `fileName`; after a failure it carries `failed`; a document never attempted stays `skipped`. All three are indistinguishable today.
-- [ ] 5i.2 GREEN write the outcome back before the item reaches the `ItemSink`. Keep the ordering rule S4b established: a document failure must never discard the already-extracted item.
-- [ ] 5i.3 RED `parsing/detail-page.test.ts`: `occurredAt` carries the parsed timestamp for a movement whose `rawDate` is present, and stays `null` only when `rawDate` itself is absent or unparseable. **Rewrite the existing assertions that encode the hardcoded null** — they are the defect's second half, not a passing test to preserve.
-- [ ] 5i.4 GREEN parse `dd/MM/yyyy HH:mm:ss` into `occurredAt`. Decide and record the timezone handling explicitly rather than defaulting to the runner's local zone, which would make the field non-deterministic across machines. `cnjCode` stays `null` — that deferral is real and design-sanctioned; do not close it here.
-- [ ] 5i.5 RED `adapters/trf5/documents.test.ts`: a label containing `/` keeps a descriptive slug instead of collapsing to a bare id; `../../etc/passwd` still degrades to `<processNumber>/<idProcessoDocumento>.pdf`; three same-labeled documents still get three distinct paths. The existing hostile-label and collision tests must keep passing untouched — if either breaks, the sanitizer is wrong, not the test.
-- [ ] 5i.6 GREEN sanitize per character rather than rejecting the whole candidate: replace every character outside `[A-Za-z0-9._-]` after accent folding, collapse repeats, and degrade to `<idProcessoDocumento>.pdf` only when the result is empty. Uniqueness stays keyed on `processNumber` + `idProcessoDocumento` alone — the slug never participates, per the `trf5-adapter` spec and the amended `design.md`.
-- [ ] 5i.7 GREEN use the data already extracted to make the name useful: the label carries a timestamp and a type (`13/05/2025 07:29:53 - Despacho Inspeção - 2068 - INSPEÇÃO ORDINÁRIA 2025 - 2ª VARA/CE`). A date-ordered, type-bearing name is the goal; the id stays in the filename so uniqueness is structural, not hoped for.
-- [ ] 5i.8 RED then GREEN, and this is the systemic task: an audit test that fails when a field declared in the payload schema is written as a constant `null` at every production construction site. This is the assertion-side sibling of S5g's `outcome-construction-audit`, and it must genuinely RED against the pre-5i.4 tree. `cnjCode` is a legitimate, design-sanctioned exception and must be exempted **by name, with its design citation**, not by loosening the rule.
-- [ ] 5i.9 Live acceptance run recorded in `apply-progress.md`: a fetched document's payload entry shows `fetched` with a real `byteLength`, a movement carries a parsed `occurredAt`, and a document whose label contains `/` lands with a descriptive filename. Never a zero exit code.
+- [x] 5i.1 RED `engine/scraper.test.ts`: after a document fetch succeeds, the persisted item's matching document entry carries `fetchStatus: 'fetched'`, its real `byteLength` and its stored `fileName`; after a failure it carries `failed`; a document never attempted stays `skipped`. All three are indistinguishable today.
+- [x] 5i.2 GREEN write the outcome back before the item reaches the `ItemSink`. Keep the ordering rule S4b established: a document failure must never discard the already-extracted item.
+- [x] 5i.3 RED `parsing/detail-page.test.ts`: `occurredAt` carries the parsed timestamp for a movement whose `rawDate` is present, and stays `null` only when `rawDate` itself is absent or unparseable. **Rewrite the existing assertions that encode the hardcoded null** — they are the defect's second half, not a passing test to preserve.
+- [x] 5i.4 GREEN parse `dd/MM/yyyy HH:mm:ss` into `occurredAt`. Decide and record the timezone handling explicitly rather than defaulting to the runner's local zone, which would make the field non-deterministic across machines. `cnjCode` stays `null` — that deferral is real and design-sanctioned; do not close it here.
+- [x] 5i.5 RED `adapters/trf5/documents.test.ts`: a label containing `/` keeps a descriptive slug instead of collapsing to a bare id; `../../etc/passwd` still degrades to `<processNumber>/<idProcessoDocumento>.pdf`; three same-labeled documents still get three distinct paths. The existing hostile-label and collision tests must keep passing untouched — if either breaks, the sanitizer is wrong, not the test.
+- [x] 5i.6 GREEN sanitize per character rather than rejecting the whole candidate: replace every character outside `[A-Za-z0-9._-]` after accent folding, collapse repeats, and degrade to `<idProcessoDocumento>.pdf` only when the result is empty. Uniqueness stays keyed on `processNumber` + `idProcessoDocumento` alone — the slug never participates, per the `trf5-adapter` spec and the amended `design.md`.
+- [x] 5i.7 GREEN use the data already extracted to make the name useful: the label carries a timestamp and a type (`13/05/2025 07:29:53 - Despacho Inspeção - 2068 - INSPEÇÃO ORDINÁRIA 2025 - 2ª VARA/CE`). A date-ordered, type-bearing name is the goal; the id stays in the filename so uniqueness is structural, not hoped for.
+- [x] 5i.8 RED then GREEN, and this is the systemic task: an audit test that fails when a field declared in the payload schema is written as a constant `null` at every production construction site. This is the assertion-side sibling of S5g's `outcome-construction-audit`, and it must genuinely RED against the pre-5i.4 tree. `cnjCode` is a legitimate, design-sanctioned exception and must be exempted **by name, with its design citation**, not by loosening the rule.
+- [x] 5i.9 Live acceptance run recorded in `apply-progress.md`: a fetched document's payload entry shows `fetched` with a real `byteLength`, a movement carries a parsed `occurredAt`, and a document whose label contains `/` lands with a descriptive filename. Never a zero exit code.
+
+**Three more defects found reading this slice's own S5j apply run's live payload and disclosed
+findings, none visible to a green suite, added and closed in this same apply run.**
+
+4. **A 429 during document fetch silently drops the whole item.** `engine/scraper.ts:238` claims
+   the item in `seenItemIds` before the document loop; a 429 that persists past `transientCap`
+   resolved to `requeue` and `break`-ed out of the document loop *before* the failure-ledger
+   record and *before* `itemSink.write` — the unit got requeued, but the second pass skipped the
+   item as already seen. Net effect: the item never reached `items.jsonl`, its documents never
+   reached `failures.jsonl`, the budget had already counted both, and the run exited 0. The
+   global cooldown design (D6) is correct and stays exactly as it is; the fix lets `runWithRetry`
+   continue its own retry loop under the cooldown for a document-level 429 instead of returning
+   `requeue`, so `transientCap` governs attempts exactly like any other transient status, and
+   exhaustion falls through to the failure ledger like any other exhausted failure. The
+   unit-level requeue for a 429 during **discovery** is untouched — nothing is claimed yet there.
+5. **`documentsGrid`'s `extractedCount`/`skippedCount` split by `documentKind`, not by whether the
+   document was actually fetched.** S5j made every `documentKind` fetchable, so a run that
+   fetched all 12 documents of a process still reported `extractedCount: 8, skippedCount: 4` —
+   labeling 4 downloaded documents "skipped". The split is now by `fetchStatus` (fetched vs.
+   not), recomputed at the same point 5i.1/5i.2's write-back happens; `reportedGap` is unchanged,
+   an honest plain subtraction against `declaredTotal`.
+6. **A born-digital document's label carries a screen-reader-only "Visualizar documentos" prefix
+   glued onto the real descriptive text with no separator**, e.g. `"Visualizar documentos24/02/2026
+   14:57:27 - Despacho (Despacho)"`. Before 5i.6's per-character sanitizer, this collapsed to a
+   bare `<documentId>.pdf` outright (defect 3, restated for this row shape); even after 5i.6, the
+   prefix itself would survive into the slug. Fixed structurally: the anchor's own
+   `<span class="sr-only">` wrapper is stripped from a DOM clone before reading its text — a
+   standard accessibility convention, never a hardcoded Portuguese literal.
+
+- [x] 5i.10 RED `engine/scraper.test.ts`: a stubbed 429 on the first document of an item,
+      persisting past `transientCap` attempts, must leave (a) the item in the `ItemSink`, (b)
+      that document in the `FailureLedger`, and (c) the loop continuing to the item's remaining
+      documents; also assert the global cooldown is still tripped and `Retry-After` still
+      honoured. All three failed before this fix (confirmed by reverting `scraper.ts` and
+      re-running — see apply-progress.md).
+- [x] 5i.11 GREEN implement the fix in `engine/scraper.ts`'s `runWithRetry` (a
+      `requeueOnRateLimit` option, `false` for a document fetch, default `true` for discovery) —
+      `retry-policy.ts` needed no change, since `decide()`'s existing `attempt > transientCap`
+      check already runs before the 429 special-case. Proved the discovery-level 429 requeue is
+      unchanged with its own regression test.
+- [x] 5i.12 RED then GREEN: `retryFailedDocuments` gets the same `requeueOnRateLimit: false` fix
+      (there is no unit to requeue there at all — the old default silently dropped a re-failing
+      429 document as an unresolved, un-re-recorded ledger entry). Extended the existing
+      `retryFailedDocuments` coverage with one new test rather than duplicating it.
+- [x] 5i.13 RED then GREEN: `summarizeDocumentsGrid` now splits `extractedCount`/`skippedCount`
+      by `fetchStatus` (fetched vs. not) instead of `documentKind`; recomputed by
+      `TRF5Site.withDocumentOutcome` at the same point 5i.2's per-document write-back happens.
+      Rewrote the stale `documentKind`-based tests in `detail-page.test.ts` and `detail.test.ts`
+      (defect's second half, per the same discipline 5i.3 applied to `occurredAt`).
+- [x] 5i.14 RED then GREEN: `parsing/detail-page.ts`'s born-digital row extraction strips the
+      anchor's `.sr-only` child from a DOM clone before reading the label text, isolating the
+      real descriptive date/type text structurally.
 
 ## S6: Frontier crawl — additive, off by default (~420 lines)
 

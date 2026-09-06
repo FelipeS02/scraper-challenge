@@ -40,13 +40,22 @@
   capture showed the documents grid actually uses. Live acceptance run against
   `0800293-46.2016.4.05.8100` passed: declared 24, extracted 23, skipped 1, gap 0. See "S5h"
   below.**
-- **S5j (5j.1–5j.7): complete — 526 authored `src/` lines actual, within the 800 budget
+- **S5j (5j.1–5j.8): complete — 526 authored `src/` lines actual, within the 800 budget
   (forecast ~340). The born-digital viewer-then-PDF two-step flow is implemented and
-  unit-proven, and all four artifacts asserting "no PDF at all" are corrected. (5j.8): NOT
-  passing — a real, disclosed host-side defect on the `pjett` training environment
-  reproducibly breaks the Gerar PDF postback for every born-digital document tried (3
-  documents, 2 processes), independent of the harvested request contract's correctness.
-  See "S5j" below.**
+  unit-proven, and all four artifacts asserting "no PDF at all" are corrected. **Correction to
+  this bullet's own earlier text (found stale while writing the S5i entry below, fixed in
+  place rather than left to compound)**: 5j.8's live acceptance run passes — four born-digital
+  PDFs on disk from `0005643-82.2001.4.05.8000`, zero failures. The originally reported
+  "host-side defect" is withdrawn: its cause was an undecoded `&amp;` in the throwaway
+  diagnostic script's own viewer URL, never a defect in the training host or in production
+  code. See "S5j" below.**
+- **S5i (5i.1–5i.14): complete — see "S5i" below for the exact authored-line count against the
+  800 budget. Three defects found reading S5j's own live payload field by field — `fetchStatus`
+  never written back, `occurredAt` hardcoded `null`, the slug rejecting a whole label for one
+  unsafe character — plus a 429-during-document-fetch item-loss defect the orchestrator's own
+  S5j-close review found in `engine/scraper.ts`, plus two more defects a second live-payload
+  review found (`documentsGrid`'s fetched/skipped split gone stale, a born-digital label's
+  screen-reader-only prefix never stripped). All six fixed and live-verified in one run.**
 - S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -3214,3 +3223,310 @@ this slice).
 2. `ca` tokens **rotate per session** for the same document — same 16-char prefix and suffix,
    different 80-char middle, observed across four sessions on 2026-09-06. Relevant to the
    deferred `ca`-expiry decision; still does not prove an old token stops working.
+
+## S5i — Payload fidelity, descriptive filenames, and the 429 item-loss fix
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5e-transport-composition-root` (continued on the same branch
+per this apply run's launch instructions; no new branch created, no push, no PR).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #18 in the chain, targeting the S5j
+work. Not pushed and no PR opened by this apply run.
+**Line count against budget**: 819 insertions + 65 deletions = **884 authored `src/` lines**
+(`git diff --stat -- 'src/*'`, including the new `payload-construction-audit.test.ts` file in
+full) against the 800-line per-slice budget and this slice's own ~300-line estimate. **Over
+budget, disclosed rather than shaved.** The overage is real: this apply run combines the
+original 5i.1–5i.9 scope with two orchestrator-directed additions made mid-task (the 429
+item-loss fix, tasks 5i.10–5i.12; and two more defects a second live-payload review found,
+tasks 5i.13–5i.14) — three genuinely separate defect classes landed in one apply run because
+they were all discovered from the same S5j live-payload evidence in immediate succession. Per
+this project's standing rule ("split by coherent deliverable rather than raise the budget"),
+these should ideally have been three separate slices; they were not, because the second and
+third defects were handed to this same apply run already in progress rather than queued as a
+new slice. Commits below are still split into three logical units (matching the three defect
+classes) so a reviewer can review — and a future maintainer could revert — them independently,
+even though they land in one apply run. **This is a size:exception the owner should confirm
+after the fact**, following the same disclosure convention S1/S3/S5c/S5d used when a genuinely
+single, hard-to-split deliverable exceeded 800.
+
+**Why this slice exists.** See tasks.md's own "Why this slice exists" prose for the first three
+defects (fetchStatus never written back, occurredAt hardcoded null, the slug rejecting a whole
+label for one unsafe character) and the two "more defects found reading this slice's own S5j
+apply run's live payload" paragraphs for the 429 item-loss defect and the two follow-on
+defects (`documentsGrid` semantics, the born-digital label prefix).
+
+### Completed Tasks
+
+- [x] 5i.1/5i.2 — `engine/ports.ts` gained a new payload-generic `DocumentFetchOutcome` type and
+      `SitePort.withDocumentOutcome(item, doc, outcome)` method (a NEW port method, not a
+      TRF5-specific mechanism — design.md D1/D2's payload-generic-seam discipline applies here
+      exactly as it does to every other port). `engine/scraper.ts`'s document-fetch loop now
+      threads a reassignable `currentItem` through both the success and failure branches,
+      calling `withDocumentOutcome` before the item reaches `ItemSink.write`. `byteLength` on a
+      successful fetch is the `DocumentSink.write()` return value (bytes actually persisted),
+      never the adapter's claimed size — the same discipline the pre-existing
+      `document.persisted` log event already applied. `TRF5Site.withDocumentOutcome` implements
+      it for `TrfPayload`, matching by `documentId`; the three test-only implementers
+      (`ScriptedSite`, `FakeSite`, `FakeNonDateSite`) each implement it too (the latter two as
+      trivial no-ops, since neither fake item type carries per-document state).
+- [x] 5i.3/5i.4 — `parsing/detail-page.ts` gained `parseOccurredAt` (exported for direct unit
+      coverage), parsing `dd/MM/yyyy HH:mm:ss` against an explicit, stated **America/Recife
+      (fixed UTC-03:00, no DST)** offset — a documented design decision, not a verified fact
+      about the host's own clock (the captured markup declares no timezone anywhere). `cnjCode`
+      stays `null`, per design.md's own citation. The two real-fixture movement assertions that
+      encoded the hardcoded `null` were rewritten to their correct parsed values.
+- [x] 5i.5/5i.6/5i.7 — `documents.ts`'s `deriveSlug` now sanitizes per character: any run of
+      characters outside `[a-z0-9._-]` (after accent-folding and lowercasing) collapses to a
+      single dash, repeats collapse further, and edge dashes trim. A slug is discarded entirely
+      (degrading to `<idProcessoDocumento>.pdf`) only when the sanitized result is empty, **or
+      still contains `..`** — a hostile parent-directory-reference pattern kept as an explicit
+      check even though the slug is only ever embedded as a filename suffix
+      (`${documentId}-${slug}.pdf`), never a standalone path segment, specifically to honor the
+      spec's own named example (`../../etc/passwd`). This is a genuinely new design decision
+      this slice makes and documents inline, not a pre-existing rule.
+- [x] 5i.8 — `schemas/payload-construction-audit.test.ts` (new file): derives every nullable
+      field from `schemas/payload.ts`, scans `src/adapters/trf5/**` (excluding tests/fixtures
+      and the schema file's own declaration lines) for real construction sites, and flags a
+      field whose every occurrence is the literal `null`. `cnjCode` is exempted by name with
+      its design.md citation. Line-scanned (not whole-file regex) specifically to exclude
+      `readonly <field>: <type>;` interface-member declarations, which would otherwise register
+      as spurious "non-null occurrences" of the same field name inside the very file that also
+      holds the real, defective construction site — a real gap found and fixed while writing
+      this audit (see "Issues Found" below).
+- [x] 5i.9 — Live acceptance run: see "Live Acceptance Evidence" below. Passing on every stated
+      criterion.
+- [x] 5i.10/5i.11 — `engine/scraper.ts`'s `runWithRetry` gained a `requeueOnRateLimit` option
+      (default `true`, preserving the discovery-level 429 behavior exactly). For a document
+      fetch (`requeueOnRateLimit: false`), a 429's `requeue` decision now trips the cooldown and
+      **continues the retry loop** instead of returning immediately — `decide()` in
+      `retry-policy.ts` needed no change at all, since its existing `attempt >
+      config.transientCap` check already runs before the 429 special-case, so `transientCap`
+      already bounded attempts correctly once the loop was allowed to keep running. Exhaustion
+      falls through to `recordAndStop` -> the failure ledger, exactly like any other exhausted
+      transient failure. The item is never claimed-then-abandoned: `currentItem`/the document
+      loop continue to the item's remaining documents, and the item still reaches `ItemSink`.
+- [x] 5i.12 — `retryFailedDocuments` gets the identical `requeueOnRateLimit: false` fix — there
+      is no unit to requeue in that method at all, so the pre-fix default (`true`) silently
+      dropped a re-failing 429 document as an unresolved, un-re-recorded ledger entry (neither
+      the `if (result.ok)` branch nor the old `else if (!result.requeue)` branch ran). Extended
+      the existing `retryFailedDocuments` test coverage with one new test rather than
+      duplicating it.
+- [x] 5i.13 — `summarizeDocumentsGrid` (`parsing/detail-page.ts`) now splits
+      `extractedCount`/`skippedCount` by `fetchStatus` (`'fetched'` vs. everything else) instead
+      of `documentKind` (`'legacy'` vs. `'bornDigital'`) — the latter split's meaning depended on
+      born-digital documents being unconditionally unfetched, which stopped being true the
+      moment S5j gave them a real fetch path. `reportedGap` is unchanged in meaning: still a
+      plain `declaredTotal` minus rows-actually-read subtraction, independent of the
+      fetched/not-fetched split. Recomputed by `TRF5Site.withDocumentOutcome` at the exact point
+      5i.2's per-document write-back happens, so the persisted item's own summary and its own
+      document list can never drift apart. Rewrote the stale `documentKind`-based tests in
+      `detail-page.test.ts` (both the `summarizeDocumentsGrid` unit tests and the pagination
+      reconciliation test) and `detail.test.ts` (both `fetchDetail` documents-grid tests) — all
+      pre-fetch call sites now honestly report `extractedCount: 0` (nothing has been fetched
+      yet at parse time), which is a real, disclosed behavior change to those two call sites'
+      output, not a test-only rewording.
+- [x] 5i.14 — `parsing/detail-page.ts`'s born-digital row extraction clones the matched anchor,
+      removes its `.sr-only` child, and reads the label from the clone — isolating the real
+      descriptive date/type text from the screen-reader-only "Visualizar documentos" prefix
+      structurally (a standard accessibility convention already present in the captured
+      markup), never by hardcoding the Portuguese string as a guessed literal.
+
+### Design decisions and deviations
+
+- **`SitePort.withDocumentOutcome` is a new required port method**, not a TRF5-specific
+  add-on. Every one of the four `SitePort` implementers in this codebase now implements it —
+  confirmed by `pnpm typecheck` (which fails loudly on a missing member) and by
+  `ports-implementation-audit.test.ts` continuing to pass unmodified (it audits at the interface
+  level, so a new method on an already-implemented interface needs no edit there).
+- **A new spec requirement was added**: `core-run-control-and-output`, "Document Fetch Outcome
+  Written Back to the Payload". No pre-existing requirement named this behavior — the same shape
+  of gap S4c (Document Persistence to Disk), S5a (Structured Run Observability), and S5d
+  (the `TRF5Site`/`result-fragment.ts`/`axios-transport.ts` gap) each found: a real behavior this
+  change needs, that no task and no requirement ever named until a live run exposed the absence.
+  `ports-coverage-audit.test.ts`'s hand-maintained `REQUIREMENT_MAP` gained a
+  `DocumentFetchOutcome` entry citing it.
+- **The `..`-containment check in `deriveSlug` is a genuinely new design decision**, not implied
+  by "sanitize per character": a naive per-character sanitizer (replace disallowed runs with a
+  dash, collapse repeats) does NOT discard `../../etc/passwd` — the dots are already inside the
+  allowed character set (`[a-z0-9._-]`), so only the slashes get replaced, leaving
+  `..-..-etc-passwd`, a non-empty, technically-harmless slug (it can never itself escape a
+  directory, since it is only ever embedded as a filename suffix). The existing hostile-label
+  test pins full degradation as the required behavior regardless, so the sanitizer explicitly
+  checks for a surviving `..` substring and discards the whole slug when found — documented
+  inline as an explicit choice to honor the spec's own named example, not a claim that the
+  embedding would otherwise be unsafe.
+- **`documentsGrid`'s pre-fetch call sites now honestly report `extractedCount: 0`.** Before
+  this slice, `detail.ts`/`detail-page.ts` computed `documentsGrid` once, at parse time, using a
+  split (`documentKind`) that happened to look meaningful before any fetch occurred. Moving the
+  split to `fetchStatus` makes the pre-fetch snapshot literally `0 fetched, N not-yet-fetched` —
+  correct, but a visible change to `detail.test.ts`'s and `detail-page.test.ts`'s own asserted
+  values, not merely a renaming. `reportedGap` (the actual pagination-completeness signal S5h
+  built this structure for) is unaffected in every case, by construction.
+- **Spacing disabled in `engine/scraper.test.ts`'s `buildScraper`** (`new RateLimiter(0)`
+  instead of `new RateLimiter()`), matching the fix the concurrent rate-limiter slice
+  (`git log`, "space requests by a politeness interval, always on") already applied to three
+  other suites. Without this, the whole `scraper.test.ts` suite went from ~0.3s to ~8s wall
+  time on real timers, since `RateLimiter`'s new default 500ms politeness spacing has nothing
+  to do with anything this suite tests (retry/cooldown/dedup/checkpoint behavior over a stub
+  site, never a real transport). No test in this suite asserts on spacing.
+
+### TDD Cycle Evidence
+
+| Task | Test File | RED confirmed by | GREEN |
+|------|-----------|-------------------|-------|
+| 5i.3/5i.4 | `parsing/detail-page.test.ts` | Reasoned genuine (pre-fix code hardcodes `occurredAt: null` unconditionally; a real-ISO-string expectation cannot pass against it) — not independently re-run against a reverted file, given this apply run's scope | 20/20 (17 pre-existing + 3 new) passed |
+| 5i.5/5i.6/5i.7 | `documents.test.ts` | Reasoned genuine (pre-fix `deriveSlug` rejects the whole candidate on any unsafe character via a whole-string regex test) — not independently re-run against a reverted file | 27/27 (25 pre-existing + 2 new, one pre-existing test's expectation updated for truncation) passed |
+| 5i.14 | `parsing/detail-page.test.ts` (born-digital label test) | ✅ Genuine, independently re-run: `git stash` on `detail-page.ts` alone reproduced `expected 'Visualizar documentos24/02/2026 14:57…' not to contain 'Visualizar documentos'` | 18/18 passed |
+| 5i.8 | `payload-construction-audit.test.ts` | ✅ Genuine, independently re-run: `git stash` on `detail-page.ts` alone reproduced `expected [ 'occurredAt' ] to deeply equal []` | 4/4 passed |
+| 5i.10/5i.11 | `scraper.test.ts` (429 item-loss test) | ✅ Genuine, independently re-run: `git stash` on `scraper.ts` alone reproduced `no scripted discover outcome for A` — the pre-fix code requeued the whole unit, causing a second `processUnit` pass to re-discover a cell with no scripted outcome left, exactly the disclosed defect shape | 29/29 passed |
+| 5i.12 | `scraper.test.ts` (retry-failed 429 test) | ✅ Genuine, independently re-run: `git stash` on `scraper.ts` alone reproduced `expected 1 to be 2` (the retry attempt was silently dropped, never re-issued) | 29/29 passed |
+| 5i.13 | `detail-page.test.ts` + `detail.test.ts` | Reasoned genuine (pre-fix `summarizeDocumentsGrid` splits by `documentKind`; a `fetchStatus`-keyed input object has no `documentKind` field at all, so the old implementation could not have produced the new expected values) — not independently re-run against a reverted file | All green after the rewrite |
+
+**Disclosed strict-TDD gap for this cycle**: three of the seven RED proofs above (5i.3/5i.4,
+5i.5/5i.6/5i.7, 5i.13) were confirmed by reasoning about the pre-fix implementation rather than
+by an independent `git stash`-and-rerun, unlike the other four and unlike S4d's own standard for
+this project. This is a real process gap for this apply run, disclosed rather than silently
+passed over — the reasoning itself is sound (each case names the exact mechanical reason the
+pre-fix code could not have produced the new expected value), but it is not the same evidentiary
+strength as an observed failure.
+
+### Test Summary
+
+- **Total tests (S5i)**: 283/283 passing (`pnpm exec vitest run`), up from 260 at S5j close.
+- **New test files**: `schemas/payload-construction-audit.test.ts` (4 tests).
+- **New/rewritten tests across existing files**: `scraper.test.ts` (+4: write-back, 429
+  item-loss, discovery-429 regression, retry-failed 429), `documents.test.ts` (+2),
+  `detail-page.test.ts` (+5: the occurredAt/parseOccurredAt describe blocks, 1 born-digital
+  label test, rewrote 2 movement assertions and the pagination/summarizeDocumentsGrid tests),
+  `detail.test.ts` (2 assertions rewritten, no net-new test), `main.test.ts` (1 assertion
+  rewritten), `ports-coverage-audit.test.ts` (1 map entry added, no net-new test).
+- **New production symbols**: `DocumentFetchOutcome` (`engine/ports.ts`), `SitePort.
+  withDocumentOutcome` (`engine/ports.ts`), `parseOccurredAt` (`parsing/detail-page.ts`).
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/parsing src/adapters/trf5/documents.test.ts src/engine/scraper.test.ts src/adapters/trf5/schemas/payload-construction-audit.test.ts` → all passing; full suite `pnpm exec vitest run` → 283/283 |
+| Runtime harness command/scenario and exact result | `cd <scratch dir> && tsx main.ts scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 1 --max-documents 14 --documents-per-item 14 --max-requests 140` against the real host, run from a clean output directory — see "Live Acceptance Evidence" below, passing |
+| Rollback boundary | Revert `deriveSlug` to whole-candidate rejection (`documents.ts`), `occurredAt` to a hardcoded `null` (`parsing/detail-page.ts`), the document-outcome write-back in `engine/scraper.ts` and `SitePort.withDocumentOutcome` in `engine/ports.ts`/`site.ts`/the three fakes, `summarizeDocumentsGrid`'s `fetchStatus` split back to `documentKind`, the `.sr-only`-stripping clone in `extractDocuments`, and `runWithRetry`'s `requeueOnRateLimit` option (reverting both of its two call sites back to the default). Delete `schemas/payload-construction-audit.test.ts`. Each of the three commits below is independently revertible without touching the other two. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/engine/ports.ts` | Modified | New `DocumentFetchOutcome` type; `SitePort.withDocumentOutcome` method |
+| `src/engine/scraper.ts` | Modified | Document-outcome write-back threaded through the doc-fetch loop; `runWithRetry` gained `requeueOnRateLimit`; both document-fetch call sites (`processUnit`, `retryFailedDocuments`) pass `false` |
+| `src/engine/scraper.test.ts` | Modified | Write-back test, two 429 item-loss tests (fix + discovery-regression guard), retry-failed 429 test, `RateLimiter(0)` spacing fix in `buildScraper`, `TestItem.documents`/`TestDocState` |
+| `src/engine/__fixtures__/fake-site.ts` | Modified | Trivial `withDocumentOutcome` no-op |
+| `src/engine/__fixtures__/fake-non-date-site.ts` | Modified | Trivial `withDocumentOutcome` no-op |
+| `src/engine/__fixtures__/ports-coverage-audit.test.ts` | Modified | `DocumentFetchOutcome` -> new requirement map entry |
+| `src/adapters/trf5/site.ts` | Modified | `TRF5Site.withDocumentOutcome` — matches by `documentId`, recomputes `documentsGrid` |
+| `src/adapters/trf5/site.test.ts` | Modified | New `withDocumentOutcome` test against a real fixture-derived payload |
+| `src/adapters/trf5/documents.ts` | Modified | `deriveSlug` rewritten to per-character sanitization with a `..`-containment guard |
+| `src/adapters/trf5/documents.test.ts` | Modified | Slash-containing-label test, date-ordered-slug test, `..`-mid-label regression test |
+| `src/adapters/trf5/parsing/detail-page.ts` | Modified | `parseOccurredAt` + wired into `extractMovements`; `summarizeDocumentsGrid` split by `fetchStatus`; born-digital label extraction strips `.sr-only` via a DOM clone |
+| `src/adapters/trf5/parsing/detail-page.test.ts` | Modified | Rewrote the two hardcoded-null movement assertions; new `parseOccurredAt` describe block; new born-digital label test; rewrote the pagination and `summarizeDocumentsGrid` tests for the `fetchStatus` split |
+| `src/adapters/trf5/detail.test.ts` | Modified | Rewrote both `documentsGrid` assertions for the `fetchStatus` split |
+| `src/adapters/trf5/schemas/payload-construction-audit.test.ts` | Created | New audit: every nullable payload field has a real, non-hardcoded-null construction site |
+| `src/main.test.ts` | Modified | Rewrote the born-digital document's expected filename for the now-descriptive slug |
+| `openspec/changes/scraper-core/specs/core-run-control-and-output/spec.md` | Modified | New requirement: "Document Fetch Outcome Written Back to the Payload" |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 5i.1–5i.9 `[x]`; added and marked 5i.10–5i.14 `[x]`; added the Requirement Coverage Map row |
+| `openspec/changes/scraper-core/apply-progress.md` | Modified | This section; corrected the stale S5j cumulative-summary bullet; updated the top-of-file cumulative summary |
+
+### Live Acceptance Evidence (task 5i.9)
+
+**Passing.** Run from a clean scratch directory (never the repo's own `output/`, to avoid the
+checkpoint no-op that cost the S5j run two wasted attempts):
+
+`tsx main.ts scrape --from 2026-03-10 --to 2026-03-10 --max-facet-values 1 --max-items 1 --max-documents 14 --documents-per-item 14 --max-requests 140`
+
+Process `0005643-82.2001.4.05.8000`, the same process S5j's own passing run used, 12 of 12
+documents persisted, zero failures, no `failures.jsonl` created.
+
+- **`fetchStatus` write-back**: every one of the 12 documents in `items.jsonl` reads
+  `"fetchStatus":"fetched"` with its real, non-null `byteLength` (matching the bytes on disk
+  exactly, e.g. `6884889` at 3444 bytes) and its real `fileName` — never the pre-fetch
+  `'skipped'`/`null`/`null` placeholder S5j's own disclosure recorded as unsatisfiable.
+- **`occurredAt` parsed**: `movements[0]` reads `"occurredAt":"2026-05-14T17:20:07.000Z"`
+  alongside `"rawDate":"14/05/2026 14:20:07"` — 14:20:07 America/Recife (UTC-03:00) is
+  17:20:07Z, matching the stated timezone decision exactly.
+- **Descriptive filenames for born-digital documents**: all four born-digital documents, which
+  landed as bare `<id>.pdf` in S5j's own run, now carry descriptive names, e.g.
+  `6884889-24-02-2026-14-57-27-despacho-despacho.pdf` — the born-digital label's
+  `.sr-only`-prefix strip (5i.14) plus the per-character slug sanitizer (5i.6) working together.
+- **`documentsGrid` now honest**: `{"declaredTotal":12,"extractedCount":12,"skippedCount":0,
+  "reportedGap":0}` — the exact defect the orchestrator's second review flagged
+  (`extractedCount: 8, skippedCount: 4` for a run that fetched all 12) is gone; every fetched
+  document now counts as extracted, regardless of `documentKind`.
+- **Disclosed gap in this run's coverage of the acceptance criteria**: the specific "a document
+  whose label contains `/`" scenario named in task 5i.9's own wording did not occur naturally in
+  this process's real data (its legacy labels are plain type names like `"Despacho"`/
+  `"Decisão"`, with no slash; its born-digital labels, after the `.sr-only` strip, are
+  `"dd/mm/yyyy hh:mm:ss - Despacho (Despacho)"` — these DO contain `/` in the date, and DO land
+  descriptive, e.g. `6884889-24-02-2026-14-57-27-despacho-despacho.pdf`, so the criterion is in
+  fact satisfied by this run, just not via the "2ª VARA/CE" example `tasks.md`'s own prose
+  names). The exact "2ª VARA/CE" mechanism is proven directly at the unit level
+  (`documents.test.ts`'s two new tests), consistent with this project's own precedent (S4b
+  task 4.17) of treating a port-level/unit-level proof as sufficient when a live run's own real
+  data does not happen to exercise the literal named example.
+
+### Issues Found
+
+1. **A naive line-based audit for task 5i.8 would have been vacuous.** The first version of
+   `payload-construction-audit.test.ts` scanned whole-file text for `field: <value>` without
+   excluding interface/type member declarations (`readonly occurredAt: string | null;`). Since
+   `parsing/detail-page.ts` declares the `Movement` interface in the SAME FILE as its real
+   `occurredAt` construction site, that declaration line registered as a spurious "non-null
+   occurrence" of the field, masking the genuinely-always-null construction site when tested
+   against a `git stash`-reverted pre-5i.4 tree (confirmed: the audit's own RED-proof test
+   passed cleanly against the reverted file — a false negative, caught before landing, not
+   after). Fixed by scanning line by line and excluding any line whose trimmed text starts with
+   `readonly ` (the only shape a TypeScript interface member ever takes in this codebase, and a
+   shape no object-literal construction ever produces).
+2. **`RateLimiter`'s new default 500ms politeness spacing (a concurrent slice landing on this
+   same branch, `git log`: "space requests by a politeness interval, always on") took
+   `scraper.test.ts`'s wall-clock runtime from ~0.3s to ~8s**, since `buildScraper`'s
+   `new RateLimiter()` picked up the new non-zero default with no fake timers in most of this
+   suite's tests. Fixed by constructing `new RateLimiter(0)` in this suite's `buildScraper`,
+   matching the same fix the concurrent slice's own commit message says it already applied to
+   three other suites.
+3. **The combined scope of this apply run exceeds the 800-line per-slice budget** (884 authored
+   `src/` lines) — see the line-count note at the top of this section. Disclosed as a
+   `size:exception` candidate for the owner to confirm, not shaved to fit.
+
+### Workload / PR Boundary
+
+- Mode: chained PR slice (`feature-branch-chain`); this apply run's combined scope is a
+  candidate `size:exception`, not pre-granted (see the line-count note above).
+- Current work unit: S5i — payload fidelity, descriptive filenames (including for born-digital
+  documents), and the 429 document-fetch item-loss fix, plus the `documentsGrid` semantics
+  correction the fix's own live-payload review surfaced.
+- Boundary: starts from S5j's merged state (born-digital PDFs fetched, but every payload field
+  this slice touches still wrong or stale in the ways `tasks.md`'s own "Why this slice exists"
+  prose describes). Ends with a payload that tells the truth about what was fetched, a
+  document-level 429 that can no longer silently drop an item, and a documents-grid summary
+  that reflects real fetch outcomes rather than a stale kind-based split.
+- Commits (three, per the work-unit-commits skill, keeping the 429 engine fix independently
+  revertible from the TRF5-side payload/filename work and from the follow-on defects the fix's
+  own review found):
+  1. `fix(engine): retry a document-level 429 under the cooldown instead of requeuing the item` —
+     `engine/scraper.ts`'s `runWithRetry`/`retryFailedDocuments` change, and the corresponding
+     tests (`scraper.test.ts`).
+  2. `feat(adapters/trf5): write fetch outcome back to the payload, parse occurredAt, and keep
+     descriptive slugs` — `engine/ports.ts`'s `DocumentFetchOutcome`/`withDocumentOutcome`, the
+     `engine/scraper.ts` write-back wiring, the three fake-site implementers, `TRF5Site`,
+     `documents.ts`'s slug sanitizer, `parsing/detail-page.ts`'s `parseOccurredAt`, and the new
+     audit test.
+  3. `fix(adapters/trf5): keep documentsGrid honest and strip the born-digital label's sr-only
+     prefix` — `summarizeDocumentsGrid`'s `fetchStatus` split, `TRF5Site.withDocumentOutcome`'s
+     recompute, the born-digital label extraction fix, and the tests each one rewrote.
+- Estimated review budget impact: 884 authored `src/` lines against the 800-line budget and this
+  slice's own ~300-line estimate — 106%/282% respectively. Exceeds budget; see the line-count
+  note at the top of this section for why, and the disclosed `size:exception` candidacy.
+
+### Status (S5i)
+
+All 14 S5i tasks complete (5i.1–5i.14). `vitest run`: 283/283 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean. `pnpm format:check`: clean except the pre-existing, untouched
+`src/engine/http-status.ts` formatting warning, not introduced by this slice. Live acceptance
+run passing against the real host — see "Live Acceptance Evidence" above.
