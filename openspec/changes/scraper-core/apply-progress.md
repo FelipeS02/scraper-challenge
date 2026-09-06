@@ -3244,9 +3244,12 @@ these should ideally have been three separate slices; they were not, because the
 third defects were handed to this same apply run already in progress rather than queued as a
 new slice. Commits below are still split into three logical units (matching the three defect
 classes) so a reviewer can review — and a future maintainer could revert — them independently,
-even though they land in one apply run. **This is a size:exception the owner should confirm
-after the fact**, following the same disclosure convention S1/S3/S5c/S5d used when a genuinely
-single, hard-to-split deliverable exceeded 800.
+even though they land in one apply run. **`size:exception` GRANTED by the owner (2026-09-06,
+felipesaracho02)**, following the same disclosure convention S1/S3/S5c/S5d used when a genuinely
+single, hard-to-split deliverable exceeded 800. The overrun is an orchestration call, not a
+scope creep by this apply run: it was told to absorb the 429 defect and the two mid-run
+findings into the attempt already open rather than open new slices. Splitting after the fact
+would mean re-cutting commits that are already separated by defect class.
 
 **Why this slice exists.** See tasks.md's own "Why this slice exists" prose for the first three
 defects (fetchStatus never written back, occurredAt hardcoded null, the slug rejecting a whole
@@ -3492,12 +3495,21 @@ documents persisted, zero failures, no `failures.jsonl` created.
    three other suites.
 3. **The combined scope of this apply run exceeds the 800-line per-slice budget** (884 authored
    `src/` lines) — see the line-count note at the top of this section. Disclosed as a
-   `size:exception` candidate for the owner to confirm, not shaved to fit.
+   `size:exception` candidate, not shaved to fit; **granted by the owner 2026-09-06**.
+4. **`contentType` never reached the payload, and task 5i.8's audit could not have caught it.**
+   Found in review after this apply run reported done, and fixed in a follow-up commit.
+   `documents.ts:231/300` did capture the header onto the returned `StoredDocument`, but
+   `DocumentFetchOutcome` carried only `fetchStatus`/`byteLength`/`fileName`, so the value was
+   dropped at the port boundary and every document — fetched ones included — reported
+   `contentType: null`. The limitation this exposes in 5i.8 is worth keeping: that audit scans
+   *construction sites* for a nullable schema field hardcoded null at every one of them, and
+   `documents.ts` writes a non-null value at a construction site, so the field passed. An audit
+   over construction sites does not prove a field's value survives to the output it protects.
 
 ### Workload / PR Boundary
 
 - Mode: chained PR slice (`feature-branch-chain`); this apply run's combined scope is a
-  candidate `size:exception`, not pre-granted (see the line-count note above).
+  `size:exception` **granted by the owner** (see the line-count note above).
 - Current work unit: S5i — payload fidelity, descriptive filenames (including for born-digital
   documents), and the 429 document-fetch item-loss fix, plus the `documentsGrid` semantics
   correction the fix's own live-payload review surfaced.

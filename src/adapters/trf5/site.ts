@@ -181,6 +181,7 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
             fetchStatus: outcome.fetchStatus,
             byteLength: outcome.byteLength,
             fileName: outcome.fileName,
+            contentType: outcome.contentType,
           }
         : row,
     );

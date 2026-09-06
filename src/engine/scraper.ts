@@ -295,6 +295,7 @@ export class Scraper<TItem, TDoc, TCursor> {
             fetchStatus: 'fetched',
             byteLength: bytesWritten,
             fileName: docResult.value.fileName,
+            contentType: docResult.value.contentType,
           });
           continue;
         }
@@ -319,6 +320,7 @@ export class Scraper<TItem, TDoc, TCursor> {
             fetchStatus: 'failed',
             byteLength: null,
             fileName: null,
+            contentType: null,
           });
         }
       }

@@ -60,6 +60,15 @@ export interface DocumentFetchOutcome {
   readonly fetchStatus: 'fetched' | 'failed';
   readonly byteLength: number | null;
   readonly fileName: string | null;
+  /**
+   * What the host DECLARED it was sending, as captured on the adapter's
+   * `StoredDocument`. It is a record of the claim, never the evidence: the
+   * adapter already decided the fetch succeeded by inspecting the bytes
+   * themselves, because this host answers 200 with the wrong body for most
+   * failures (docs/RESEARCH.md §5). Carried through so the payload states
+   * what actually happened rather than dropping the value at this boundary.
+   */
+  readonly contentType: string | null;
 }
 
 export interface SitePort<TItem, TDoc> {

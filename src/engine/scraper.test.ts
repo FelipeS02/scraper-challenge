@@ -41,6 +41,7 @@ interface TestDocState {
   readonly fetchStatus: 'fetched' | 'skipped' | 'failed';
   readonly byteLength: number | null;
   readonly fileName: string | null;
+  readonly contentType: string | null;
 }
 
 /**
@@ -125,6 +126,7 @@ class ScriptedSite implements SitePort<TestItem, TestDoc> {
               fetchStatus: outcome.fetchStatus,
               byteLength: outcome.byteLength,
               fileName: outcome.fileName,
+              contentType: outcome.contentType,
             }
           : row,
       ),
@@ -907,7 +909,10 @@ describe('Scraper — document-outcome write-back (task 5i.1/5i.2: the payload t
         value: {
           documentId: 'doc-1',
           byteLength: 999, // deliberately wrong — the write-back must use the sink's real size
-          contentType: null,
+          // Unlike byteLength, contentType is carried through verbatim: it is a
+          // record of what the host declared, and the engine has nothing truer
+          // to replace it with.
+          contentType: 'text/plain',
           fileName: 'item-A/doc-1.pdf',
           bytes,
         },
@@ -920,9 +925,28 @@ describe('Scraper — document-outcome write-back (task 5i.1/5i.2: the payload t
     const itemWithDocs: TestItem = {
       id: 'item-A',
       documents: [
-        { id: 'doc-1', fetchStatus: 'skipped', byteLength: null, fileName: null },
-        { id: 'doc-2', fetchStatus: 'skipped', byteLength: null, fileName: null },
-        { id: 'doc-3', fetchStatus: 'skipped', byteLength: null, fileName: null }, // never attempted
+        {
+          id: 'doc-1',
+          fetchStatus: 'skipped',
+          byteLength: null,
+          fileName: null,
+          contentType: null,
+        },
+        {
+          id: 'doc-2',
+          fetchStatus: 'skipped',
+          byteLength: null,
+          fileName: null,
+          contentType: null,
+        },
+        // never attempted
+        {
+          id: 'doc-3',
+          fetchStatus: 'skipped',
+          byteLength: null,
+          fileName: null,
+          contentType: null,
+        },
       ],
     };
     site.scriptDiscover('A', [
@@ -941,11 +965,19 @@ describe('Scraper — document-outcome write-back (task 5i.1/5i.2: the payload t
     expect(itemSink.records).toHaveLength(1);
     const persistedDocs = itemSink.records[0]!.payload.documents;
     expect(persistedDocs).toEqual([
-      { id: 'doc-1', fetchStatus: 'fetched', byteLength: 3, fileName: 'item-A/doc-1.pdf' },
-      { id: 'doc-2', fetchStatus: 'failed', byteLength: null, fileName: null },
+      {
+        id: 'doc-1',
+        fetchStatus: 'fetched',
+        byteLength: 3,
+        fileName: 'item-A/doc-1.pdf',
+        // Carried from the adapter's StoredDocument: the fetch captured what
+        // the host declared it was sending, so the payload records it too.
+        contentType: 'text/plain',
+      },
+      { id: 'doc-2', fetchStatus: 'failed', byteLength: null, fileName: null, contentType: null },
       // Never attempted — untouched, still 'skipped', proving the engine only
       // calls withDocumentOutcome for a document it actually tried.
-      { id: 'doc-3', fetchStatus: 'skipped', byteLength: null, fileName: null },
+      { id: 'doc-3', fetchStatus: 'skipped', byteLength: null, fileName: null, contentType: null },
     ]);
   });
 });

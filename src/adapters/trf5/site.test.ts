@@ -245,6 +245,7 @@ describe('TRF5Site.withDocumentOutcome — writes the real fetch outcome back on
       fetchStatus: 'fetched',
       byteLength: 4321,
       fileName: `${payload.processNumber}/${target.documentId}.pdf`,
+      contentType: 'application/pdf',
     });
 
     const updatedDoc = updated.documents.find((d) => d.documentId === target.documentId);
@@ -252,6 +253,11 @@ describe('TRF5Site.withDocumentOutcome — writes the real fetch outcome back on
       fetchStatus: 'fetched',
       byteLength: 4321,
       fileName: `${payload.processNumber}/${target.documentId}.pdf`,
+      // The server's own declared Content-Type, captured by `documents.ts` and
+      // carried through to the payload — never a substitute for the magic-byte
+      // check that decided the fetch succeeded, only a record of what the host
+      // claimed it was sending.
+      contentType: 'application/pdf',
     });
     // Every other document is untouched.
     const others = updated.documents.filter((d) => d.documentId !== target.documentId);
