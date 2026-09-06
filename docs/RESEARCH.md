@@ -181,10 +181,19 @@ at the byte level — decoding as UTF-8, or letting the HTTP layer guess, corrup
 
 ---
 
-## 3. Pagination: there is none, and the cap cannot be escaped
+## 3. Pagination on the search response: there is none, and the cap cannot be escaped
 
-This is the part of the challenge phrased as "discover how pagination works". The honest
-answer is that it does not exist.
+**Corrected 2026-09-06 (S5h): this section's title and every finding below are scoped to
+the search response specifically, not to every response this site returns.** The original
+title read "Pagination: there is none, and the cap cannot be escaped" — a true finding about
+the search response, generalized past its own scope. Nobody re-ran the same search against
+the *detail* page, which is a different response and does paginate. See "The detail page is
+a different response, and it does paginate" at the end of this section. Every finding below
+about the search response was never wrong and stands unchanged.
+
+This is the part of the challenge phrased as "discover how pagination works", for the search
+results list specifically. The honest answer, for that one response, is that it does not
+exist.
 
 When a query matches more than 30 processes the server returns:
 
@@ -294,6 +303,46 @@ The `from == to` branch matters: a single day can hold more than 30 filings, and
 further subdivision is possible on this axis. That case must be recorded as a known
 coverage gap rather than silently treated as complete. Secondary axes (judicial class,
 OAB state) exist if it ever needs to be narrowed further.
+
+### The detail page is a different response, and it does paginate
+
+Measured 2026-09-06, against a real process (`0800293-46.2016.4.05.8100`, 24 documents) that
+a live-scraped run had already shown extracting only 14 rows from page 1. The documents grid
+on the *detail* page — never searched by the check above, which only ever looked at the
+search response — carries its own footer, its own row count, and its own pagination widget.
+
+**Two different pagination widgets exist on the same detail page, not one.** The two
+parties-list tables each render a `rich:datascroller`
+(`new Richfaces.Datascroller('<tableId>:<footerFormId>:<scrollerId>', ...)`) in their
+`<tfoot>`, `display: none` because each fits on one page — present in every detail-page
+fixture this repository already carries. **The documents grid uses a different widget
+entirely: a `rich:inputNumberSlider`** (`new Richfaces.Slider('<sliderId>', {'minValue':
+'1', 'maxValue':'<pageCount>', ...})`), declared in its own `<form>` sibling to the grid's
+table, not nested inside it. Design decision D13, written before this measurement, assumed
+every scroller on the page shared the Datascroller shape; that assumption was an inference
+from the parties-list markup, never re-verified against an actually-paginated grid until
+this capture corrected it.
+
+The slider's `onchange` handler embeds its own `A4J.AJAX.Submit(<formId>, event, {...})`
+call as a JS string literal (its quotes arrive backslash-escaped in the raw markup, since it
+nests inside the slider constructor's own single-quoted config — a different escaping shape
+than the parties-list scrollers' plain `<script>`-body submits). Requesting page N means
+POSTing the pager's own `<form>`'s complete hidden-field set (harvested verbatim, never
+hand-picked) with the slider's own value field set to N and the submit's self-referential
+trigger parameter added — the same "harvest, don't guess" discipline this document already
+applies to the search trigger (§2 Step 2) and the class-suggestion box (below).
+
+The grid's own footer (`<span class="pull-right text-muted">N resultados
+encontrados</span>`, the table's immediate next sibling) reports the true total regardless
+of how many pages have been read — 24 on both page 1 and page 2 of this capture — so a
+shortfall between rows read and total declared is always measurable, never inferred.
+
+**The consequence.** A scraper that reads only page 1 of the documents grid silently drops
+every document past the page-size boundary — exactly the defect a live run exposed. Every
+grid on the detail page (parties, movements, documents) can in principle paginate; only the
+documents grid's pagination is fixed here (S5h), because it is the one a live process was
+observed to actually need. Whether the parties/movements grids ever exceed one page in
+practice is unmeasured.
 
 ---
 

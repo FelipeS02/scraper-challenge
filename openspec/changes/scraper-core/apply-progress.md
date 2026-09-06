@@ -32,6 +32,14 @@
   by classifying 429/5xx at the transport boundary before content classification runs on all
   three TRF5 request paths; added a guard against this exact class of gap recurring; corrected
   the 4.17/4.18 tasks.md bookkeeping defect. See "S5g" below.**
+- **S5h: complete — 577 authored `src/` lines actual, within the 800 budget (forecast ~330).
+  The documents grid is now read whole: every page fetched through its own harvested pager
+  contract, born-digital rows extracted with a distinct outcome instead of dropped, and the
+  grid's declared total reconciled against what was actually read. Corrected design.md D13's
+  assumed `Richfaces.Datascroller` pager shape to the real `rich:inputNumberSlider` a live
+  capture showed the documents grid actually uses. Live acceptance run against
+  `0800293-46.2016.4.05.8100` passed: declared 24, extracted 23, skipped 1, gap 0. See "S5h"
+  below.**
 - S6: not started.
 
 ## S3 — TRF5 session, search, and content-based validity
@@ -2571,3 +2579,276 @@ first-use. Flagged here for awareness, not silently absorbed.
 9/9 S5g tasks complete (5g.1–5g.9). `vitest run`: 238/238 passing. `pnpm typecheck`: clean.
 `pnpm lint`: clean. `pnpm format:check`: clean. Ready for `sdd-verify`, or `sdd-apply` again
 for S6.
+
+## S5h — Document-grid pagination: reading the grid whole
+
+**Mode**: Strict TDD
+**Branch**: `feat/scraper-core-s5e-transport-composition-root` (continued on the same branch
+per this apply run's launch instructions; no new branch created).
+**Delivery**: `auto-chain` / `feature-branch-chain` — PR #16 in the chain, targeting the S5g
+work. Not pushed and no PR opened by this apply run.
+**No `size:exception` needed**: estimated ~330 authored `src/` lines against the 800-line
+budget; landed at 577 (72% of budget, 75% over its own estimate).
+**Why this slice exists**: reviewing a live-scraped process against the portal UI showed the
+documents grid reporting `24 resultados encontrados` across two pages while the scraper
+extracted 14 rows, all from page 1. `docs/RESEARCH.md` §3 ("Pagination: there is none")
+correctly found no pagination component in the **search response** — that finding was never
+wrong. Nobody had re-run the same search against the **detail page**, a different response
+that does paginate.
+**Live network required and used**: task 5h.1's capture, and task 5h.10's acceptance run,
+both needed the real host — no fixture in this repository could otherwise prove a genuinely
+paginated documents grid exists at all (`detail-page-valid.html`'s own grid fits on one page).
+
+### Completed Tasks
+
+- [x] 5h.1 Captured and redacted `detail-page-paginated-documents.html` (page 1) and
+      `detail-page-paginated-documents-page2.xml` (the pager's own a4j response, page 2) from
+      the real process `0800293-46.2016.4.05.8100`. See "Capture method" below.
+- [x] 5h.2 RED `parsing/detail-page.test.ts` — `DetailPage.documentsGrid.declaredTotal` read
+      from the grid's own footer; nothing read this number before this task.
+- [x] 5h.3 GREEN `extractDeclaredDocumentTotal` — the table's immediate next sibling
+      `<span class="pull-right text-muted">N resultados encontrados</span>`, matched
+      structurally, never by a hardcoded prefix.
+- [x] 5h.4 RED then GREEN — born-digital rows (`documentoSemLoginHTML.seam`, no `idBin=`
+      anchor) are now extracted into `DocumentRow` with `documentKind: 'bornDigital'`,
+      `binId`/`downloadUrl` both `null` (D9), `fetchStatus: 'skipped'`, instead of being
+      silently skipped by the row loop. Proved against both the existing
+      `detail-page-valid.html` (4 born-digital rows) and the new paginated fixture (1 on
+      page 1).
+- [x] 5h.5 RED then GREEN — `extractDocumentGridPager` harvests the documents grid's own
+      pager contract. **Correction found while writing this task's RED test**: the real
+      widget is a `rich:inputNumberSlider` (`Richfaces.Slider`), not the
+      `Richfaces.Datascroller` the two parties-list scrollers use and design.md D13's prose
+      assumed every scroller on the page shared. See "Design decisions and deviations" below.
+- [x] 5h.6 GREEN `fetchDocumentGridPages` in `detail.ts` — fetches each further page through
+      the harvested contract (POSTing the pager form's own harvested hidden fields, with the
+      slider's value field set to the target page and the self-referential trigger param
+      added) and merges the rows. `parsing/detail-page.ts` stays pure: `parseDocumentGridPage`
+      parses a page-N response's bytes into rows, it never sends a request.
+- [x] 5h.7 RED then GREEN — `summarizeDocumentsGrid(documents, declaredTotal)` reconciles
+      `extractedCount` (legacy)/`skippedCount` (bornDigital) against `declaredTotal`, reporting
+      `reportedGap` as a plain subtraction — never clamped, never inferred away. `detail.ts`
+      recomputes it after merging every page; `parseDetailPage` also computes it per-page for
+      its own single-page callers, which is deliberately incomplete for a paginated grid (a
+      dedicated test proves this: page 1 alone reports a `reportedGap` of 9 against the real
+      paginated fixture, closed only once `detail.ts` merges page 2).
+- [x] 5h.8 RED then GREEN — a pager-less grid (`detail-page-valid.html`, 12 documents, no
+      scroller) issues exactly 2 requests total (priming + the one detail GET), never a third.
+      `extractDocumentGridPager` returns `null` and `detail.ts`'s `pager.totalPages > 1` guard
+      also protects a single-page slider, defensively, even though no fixture exercises that
+      exact shape.
+- [x] 5h.9 GREEN reconciled `docs/RESEARCH.md` §3 — retitled to scope it to the search
+      response explicitly, and a new "The detail page is a different response, and it does
+      paginate" subsection records the real `rich:inputNumberSlider` mechanism, the two-widget
+      discovery (Datascroller on parties lists, Slider on the documents grid), and the date
+      measured (2026-09-06). §3's original search-response findings are unchanged.
+- [x] 5h.10 Live acceptance run against `0800293-46.2016.4.05.8100` — passed. See "Live
+      Acceptance Evidence" below.
+
+### Capture method
+
+One throwaway `tsx` script in the scratchpad directory (never committed) drove `curl`-style
+requests by hand rather than reusing production modules, because task 5h.1 needed the search
+form's `numProcesso` exact-match field (not yet exercised by any production code path, which
+only ever searches by date/facet) to locate this specific process directly: primed a session,
+POSTed the search with `numProcesso: '0800293-46.2016.4.05.8100'` and a wide
+`dataAutuacaoInicio`/`dataAutuacaoFim` window, took the one matching row's `ca`, GETed the
+detail page, then inspected its markup by hand (via `cheerio`, in an ad hoc Node REPL script)
+to find which pagination widget actually renders on the documents grid and how its `onchange`
+handler is shaped — this is what found the Slider-not-Datascroller correction below. A second
+request replayed the harvested slider contract (`AJAXREQUEST`, the form's own hidden fields,
+the slider's value field set to `2`, the self-referential trigger param) to capture the page-2
+a4j response.
+
+Redaction (`redact.cjs`, scratchpad-only): targeted string replacement on the raw latin1
+(page 1) / UTF-8 (page 2) decoded byte strings — the process number (2 occurrences, both the
+header field and its own self-referential "Processo referência"), one CNPJ-identified active
+party (name + CNPJ), five lawyers' names/OAB/CPF on the active pole, one CNPJ-identified
+passive party (name + CNPJ, a federal agency), and the one `ca` token on the page's single
+born-digital document link (6 occurrences of the same token). Document ids/bin ids/hashes,
+movement text, and legacy document labels are kept verbatim (S4b/S5f precedent). Verified
+afterward by grepping the redacted output for every original value (zero matches) — the same
+verification discipline S5f established. Page 2's own response was independently checked and
+carries no personal data at all (no process number, no party/lawyer name, no `ca` token), so
+it needed no redaction, only the disclosure header.
+
+The `pjett.trf5.jus.br` absolute-URL literal remains inside the born-digital viewer link, same
+as the existing `detail-page-valid.html` fixture already committed at S5f — inert captured
+data, not a live-host literal driving a test request (task 3.14's rule).
+
+### Design decisions and deviations
+
+- **Design.md D13 assumed the wrong pagination widget for the documents grid, corrected by
+  this slice's own live capture.** D13's prose describes the pager contract as
+  `A4J.AJAX.Submit(<formId>, {parameters: {<scrollerId>: <page>, ajaxSingle: <scrollerId>}})`
+  — the exact shape of the two parties-list `Richfaces.Datascroller` scrollers already
+  committed in `detail-page-valid.html`. That was an inference from the only scroller markup
+  on hand at design time, never re-verified against an actually-paginated documents grid. The
+  real widget, measured live 2026-09-06, is a `rich:inputNumberSlider`
+  (`new Richfaces.Slider('<sliderId>', {'minValue':'1','maxValue':'<n>', ...})`), declared in
+  its own `<form>` sibling to the grid's table rather than nested in the table's own `<tfoot>`,
+  with its `onchange` handler's `A4J.AJAX.Submit(...)` call embedded as a backslash-escaped JS
+  string literal (a different escaping shape than the parties-list scrollers' plain
+  `<script>`-body submits `session.ts`'s existing trigger-harvest regex already handles).
+  `extractDocumentGridPager` is implemented and tested against this real Slider shape, not
+  D13's assumed Datascroller shape; `docs/RESEARCH.md` §3 records the correction with the
+  harvested contract shown in full. This is not a redesign — D13's actual DECISION (follow the
+  grid's own harvested pager, reconcile against the declared total, never guess a request
+  parameter) is implemented exactly; only its illustrative markup shape was wrong.
+- **`DocumentRow` became a shape that always carries `documentKind`, with `binId`/
+  `downloadUrl` now `string | null`** rather than a discriminated union keyed on `documentKind`.
+  A discriminated union would have been the more type-precise choice (TypeScript could then
+  reject a `bornDigital` row constructed with a non-null `downloadUrl` at compile time), but it
+  would have forced every existing consumer (`documents.ts`, `payload.ts`'s zod schema, three
+  test files' `documentRow()` helpers) to narrow on `documentKind` before touching any legacy
+  field, for a change already touching nine files. The nullable-fields shape follows D9
+  directly (`null` means known absent) and is the same pattern `StoredDocument`/`CoverageRecord`
+  already use elsewhere in this codebase. `fetchDocument`'s own defensive guard
+  (`doc.downloadUrl === null` before ever touching the transport) is what actually protects
+  against a born-digital row reaching a real HTTP call, not the type system.
+- **`site.ts` filters `documentsByItemId` to `documentKind === 'legacy'` before handing it to
+  the engine.** Born-digital rows stay fully visible in the payload's own `documents`/
+  `documentsGrid` for reconciliation (that is the entire point of task 5h.4), but the engine's
+  fetch loop (`engine/scraper.ts`) calls `site.fetchDocument(item, doc)` for every entry in the
+  `TDoc[]` list `discover()` returns, with no way to skip one mid-loop without ledgering a
+  failure for a document nobody should have tried yet. Filtering at the `site.ts` boundary — the
+  one place that already knows the adapter's own document-kind distinction — is what keeps
+  S5j's future PDF-fetch wiring additive (drop the filter, or split it in two) rather than a
+  rewrite of the engine loop.
+- **A single-page pager (`totalPages <= 1`) is guarded defensively in `detail.ts`, even though
+  no fixture exercises that exact shape.** Every real Slider observed so far reports `minValue:
+  '1'`; a slider rendered with `maxValue: '1'` too would be a legitimate but pointless render
+  (RichFaces might do this for a grid that used to paginate and no longer does). The guard costs
+  one integer comparison and closes the same class of gap task 5h.8 exists to prevent, so it is
+  included rather than left as an unproven assumption.
+- **The pager POST targets `detailUrl.split('?')[0]`** (the same absolute URL the detail GET
+  used, minus its `?ca=` query string) rather than the harvested `actionUrl` field inside the
+  slider's own `onchange` handler. The harvested `actionUrl` is a bare relative path
+  (`/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam`) with no
+  jsessionid; `detailUrl` already carries it, exactly matching what a working live request
+  needs (confirmed against the real host during capture — the server binds the "current
+  process" to session-scoped conversation state set up by the original `?ca=` GET, so the AJAX
+  postback never needs to re-pass `ca`). This is a derived value, not a new harvested field.
+- **`documentsGrid` is an additional top-level payload field, beyond the trf5-adapter spec's
+  documented property list** — the same disclosed pattern S4a used for `sourceUrl`. No spec
+  requirement text exists yet for this reconciliation surface (editing specs is out of
+  `sdd-apply`'s role); `tasks.md`'s own S5h task descriptions are this slice's acceptance
+  criteria in the interim.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 5h.2/5h.3 | `parsing/detail-page.test.ts` | Unit (real fixtures) | ✅ 16/16 (existing) | ✅ Confirmed via `git stash` on `detail-page.ts`/`decode.ts`: `documentsGrid` undefined, `summarizeDocumentsGrid`/`extractDocumentGridPager`/`parseDocumentGridPage` all `is not a function` | ✅ 16/16 passed | ✅ 3 cases: 12 (single-page real fixture), 24-from-page-1-alone with a real reported gap, 0-for-no-grid-at-all | ✅ Clean |
+| 5h.4 | `parsing/detail-page.test.ts` | Unit (real fixtures) | (same batch as 5h.2/5h.3 — one combined RED/GREEN cycle; see note below) | ✅ (same stash) | ✅ | ✅ 2 fixtures: 4 born-digital rows (`detail-page-valid.html`), 1 born-digital row (new paginated fixture) | ✅ Clean |
+| 5h.5 | `parsing/detail-page.test.ts` | Unit (real fixtures) | (same batch) | ✅ (same stash) | ✅ | ✅ 2 cases: `null` for a pager-less grid, the full harvested contract for the real Slider | ✅ Clean |
+| 5h.6/5h.7/5h.8 | `detail.test.ts` | Unit + `StubTransport` | ✅ 5/5 (existing `fetchDetail` tests) | ✅ Genuine RED, no stash needed: the multi-page merge test failed on `transport.requests` length (2 actual vs 3 expected) against the unmodified `detail.ts` | ✅ 2/2 new tests passed | ✅ 2 cases: zero-extra-request single page, full multi-page merge with exact POST-body assertions | ✅ Clean |
+
+**Note on 5h.2–5h.5's combined RED/GREEN cycle**: all four tasks' tests were written together
+in `parsing/detail-page.test.ts` before any of the four corresponding implementation pieces
+existed, because they share one file and one fixture set. Confirmed genuinely RED by
+`git stash push -- src/adapters/trf5/decode.ts src/adapters/trf5/parsing/detail-page.ts`
+(keeping every test file at its final form), re-running the suite (10 of 16 tests failed —
+`documentsGrid` undefined, three functions `is not a function`), then `git stash pop` and
+confirming all 16 green. This is the same disclosed pattern S4a's parties/movements/documents
+blocks and S5g's `http-status.test.ts` batch used: one file, one fixture, tightly coupled
+pieces, one combined cycle rather than four artificial ones that would not have produced
+independent RED evidence beyond what the combined failure already gave.
+
+### Test Summary
+
+- **Total tests added (S5h)**: 15 — 10 new (`parsing/detail-page.test.ts`: 2 documents/
+  born-digital, 3 declared-total/reconciliation, 2 `summarizeDocumentsGrid`, 2
+  `extractDocumentGridPager`, 1 `parseDocumentGridPage`) + 2 new (`detail.test.ts`: single-page
+  guard, multi-page merge) + 1 new (`documents.test.ts`: born-digital guard) + 2 existing
+  documents-block tests in `parsing/detail-page.test.ts` restructured into 2 (legacy-only,
+  born-digital) without a net test-count change there
+- **Total tests passing (S5h)**: 250/250 full suite (`vitest run`), up from 238 at S5g
+- **Layers used**: Unit against real captured fixtures (13), Unit + `StubTransport` (2),
+  Integration/E2E: live-host diagnostic script for task 5h.10 (never committed, per this
+  slice's own capture/acceptance discipline)
+- **Pure functions created**: `extractDeclaredDocumentTotal`, `summarizeDocumentsGrid`,
+  `extractDocumentGridPagerFromDom`/`extractDocumentGridPager`, `parseDocumentGridPage`,
+  `decodeByContentType`
+- **Downstream tests updated (not new coverage, real-shape corrections)**: `site.test.ts` (1
+  assertion filtered to `documentKind === 'legacy'`, 1 helper gained `documentKind: 'legacy'`),
+  `documents.test.ts` (1 helper gained `documentKind: 'legacy'`)
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command and exact result | `pnpm exec vitest run src/adapters/trf5/parsing src/adapters/trf5/detail.test.ts` → 3 files, 30 tests, all passed |
+| Runtime harness command/scenario and exact result | Bounded live diagnostic script (never committed) reusing production `primeSession`/`search`/`parseResultFragment`/`fetchDetail` against the real host for `0800293-46.2016.4.05.8100` — see "Live Acceptance Evidence" below for the full observed result |
+| Rollback boundary | Revert `parsing/detail-page.ts`'s `extractDocuments`/`parseDetailPage` to single-page extraction, drop `documentsGrid`/`DocumentGridPager`/`summarizeDocumentsGrid`/`extractDocumentGridPager`/`parseDocumentGridPage`; revert `detail.ts`'s pager-following block; revert `documents.ts`'s born-digital guard and `decodedLabel`'s signature change; revert `site.ts`'s `documentsByItemId` filter; revert `schemas/payload.ts`'s `documentSchema`/`documentsGridSchema`; revert `decode.ts`'s `decodeByContentType`. The two captured fixtures stay — they are evidence, not code, matching the S5f/S5g rollback convention. |
+
+### Files Changed
+
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/adapters/trf5/__fixtures__/detail-page-paginated-documents.html` | Created | Real captured, redacted 130330-byte page-1 detail page for a documents grid that actually paginates (24 declared, 15 rows: 14 legacy + 1 born-digital) |
+| `src/adapters/trf5/__fixtures__/detail-page-paginated-documents-page2.xml` | Created | Real captured page-2 a4j pager response (UTF-8-declared, 9 legacy rows), no redaction needed |
+| `src/adapters/trf5/decode.ts` | Modified | Added `decodeByContentType` — decides latin1 vs UTF-8 from the response's own declared charset, for the pager's differently-encoded AJAX response |
+| `src/adapters/trf5/parsing/detail-page.ts` | Modified | `DocumentRow` gained `documentKind`/nullable `binId`/`downloadUrl`; `extractDocuments` now extracts born-digital rows too; added `DocumentsGridSummary`, `summarizeDocumentsGrid`, `DocumentGridPager`, `extractDocumentGridPager`, `parseDocumentGridPage`, `extractDeclaredDocumentTotal`; `DetailPage` gained `documentsGrid` |
+| `src/adapters/trf5/parsing/detail-page.test.ts` | Modified | Documents block split into legacy/born-digital; added declared-total, `summarizeDocumentsGrid`, `extractDocumentGridPager`, `parseDocumentGridPage` test blocks |
+| `src/adapters/trf5/detail.ts` | Modified | `fetchDetail`'s `validData` branch now fetches further pages through `fetchDocumentGridPages` when a pager reports more than one page, merges rows, and recomputes `documentsGrid` |
+| `src/adapters/trf5/detail.test.ts` | Modified | Added the single-page zero-extra-request test and the multi-page merge test with exact harvested-contract POST-body assertions |
+| `src/adapters/trf5/documents.ts` | Modified | `fetchDocument` gains a born-digital guard (`downloadUrl === null` → `permanentError` before touching the transport); `decodedLabel` takes explicit `downloadUrl`/`label` instead of a whole `DocumentRow` |
+| `src/adapters/trf5/documents.test.ts` | Modified | `documentRow()` helper gained `documentKind: 'legacy'`; added the born-digital guard test |
+| `src/adapters/trf5/site.ts` | Modified | `documentsByItemId` filtered to `documentKind === 'legacy'` before reaching the engine |
+| `src/adapters/trf5/site.test.ts` | Modified | `documentRow()` helper gained `documentKind: 'legacy'`; the `documentsByItemId` assertion filters to legacy |
+| `src/adapters/trf5/schemas/payload.ts` | Modified | `documentSchema` gained `documentKind`/nullable `binId`/`downloadUrl`; added `documentsGridSchema`; `payloadSchema` gained `documentsGrid` |
+| `docs/RESEARCH.md` | Modified | §3 retitled and scoped to the search response; new subsection records the detail page's documents-grid `rich:inputNumberSlider` pagination, corrected from the assumed `Richfaces.Datascroller` |
+| `openspec/changes/scraper-core/tasks.md` | Modified | Marked 5h.1–5h.10 `[x]` with result/correction notes; updated the S5h header and the running-estimate line |
+| `openspec/changes/scraper-core/apply-progress.md` | Modified | This section; updated the top-of-file cumulative summary |
+
+### Live Acceptance Evidence (task 5h.10)
+
+Bounded, read-only diagnostic script (never committed) against the real host, reusing
+production `AxiosTransport`/`primeSession`/`search`/`parseResultFragment`/`fetchDetail`
+exactly as the real scraper composes them — 4 requests total: 1 priming GET, 1 search POST
+(`numProcesso` exact match), 1 detail GET, 1 pager POST for page 2.
+
+| Evidence | Value |
+|---|---|
+| `outcome.kind` | `'ok'` |
+| `processNumber` | `0800293-46.2016.4.05.8100` |
+| `documentsGrid.declaredTotal` | `24` |
+| `documentsGrid.extractedCount` | `23` |
+| `documentsGrid.skippedCount` | `1` |
+| `documentsGrid.reportedGap` | `0` |
+| `documents.length` | `24` (23 legacy + 1 born-digital) |
+| Total requests issued | `4` |
+
+Acceptance criterion met: extracted + skipped counts reconcile exactly to the grid's own
+declared total — never inferred from a zero exit code, which this host does not distinguish
+between a working and a broken request (task 5h.10's own explicit warning).
+
+## Issues Found (S5h)
+
+None blocking. Two disclosed judgment calls: the D13 pager-shape correction and the
+`DocumentRow` nullable-fields-over-discriminated-union choice — both under "Design decisions
+and deviations" above.
+
+## Workload / PR Boundary (S5h)
+
+- Mode: chained PR slice (`feature-branch-chain`), no `size:exception` needed
+- Current work unit: S5h — document-grid pagination, reading the grid whole (tasks
+  5h.1–5h.10)
+- Boundary: starts from S5g's merged state (documents grid read single-page-only, born-digital
+  rows silently dropped); ends with every documents-grid page read through its own harvested
+  pager, born-digital rows visible and distinct, and the grid's declared total reconciled
+  against what was actually read — proven against both redacted fixtures and a live host run.
+  S5j (born-digital PDF fetch) and S5i (payload fidelity) intentionally not started.
+- Estimated review budget impact: 577 authored `src/` lines (`git diff --numstat` against the
+  S5g tip, excluding the two new fixtures, `tasks.md`, `apply-progress.md`, and
+  `docs/RESEARCH.md`) against the 800-line budget and the ~330 estimate — 72%/175%
+  respectively. No exception needed.
+
+### Status (S5h)
+
+10/10 S5h tasks complete (5h.1–5h.10). `vitest run`: 250/250 passing. `pnpm typecheck`: clean.
+`pnpm lint`: clean. `pnpm format:check`: clean (except the pre-existing, untouched
+`src/engine/http-status.ts` formatting warning, not introduced by this slice). Live acceptance
+run against the real TRF5 host passed with full observed evidence (see above). Ready for
+`sdd-verify`, or `sdd-apply` again for S5j.
