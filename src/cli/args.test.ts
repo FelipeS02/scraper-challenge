@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MAX_DOCUMENTS, DEFAULT_MAX_REQUESTS } from '../engine/budget.js';
+import { DEFAULT_REQUEST_SPACING_MS } from '../engine/rate-limiter.js';
 import { parseArgs, type ScrapeArgs } from './args.js';
 
 describe('parseArgs — scrape command', () => {
@@ -22,6 +23,8 @@ describe('parseArgs — scrape command', () => {
       '3',
       '--max-requests',
       '1000',
+      '--request-spacing',
+      '1200',
       '--log-level',
       'debug',
       '--log-format',
@@ -38,10 +41,42 @@ describe('parseArgs — scrape command', () => {
       maxDocuments: 15,
       documentsPerItem: 3,
       maxRequests: 1000,
+      requestSpacingMs: 1200,
       logLevel: 'debug',
       logFormat: 'jsonl',
       dryRun: false,
     });
+  });
+
+  it('defaults request spacing to the documented politeness interval', () => {
+    const args = parseArgs(['scrape', '--from', '2026-01-01', '--to', '2026-01-01']) as ScrapeArgs;
+
+    expect(args.requestSpacingMs).toBe(DEFAULT_REQUEST_SPACING_MS);
+  });
+
+  it('accepts zero spacing but rejects a negative interval', () => {
+    const zeroed = parseArgs([
+      'scrape',
+      '--from',
+      '2026-01-01',
+      '--to',
+      '2026-01-01',
+      '--request-spacing',
+      '0',
+    ]) as ScrapeArgs;
+    expect(zeroed.requestSpacingMs).toBe(0);
+
+    expect(() =>
+      parseArgs([
+        'scrape',
+        '--from',
+        '2026-01-01',
+        '--to',
+        '2026-01-01',
+        '--request-spacing',
+        '-1',
+      ]),
+    ).toThrow(/--request-spacing/);
   });
 
   it('applies documented defaults when optional flags are omitted', () => {

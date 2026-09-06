@@ -188,7 +188,7 @@ describe('Scraper + TRF5Site — a real 429 response trips the global cooldown (
       site,
       traversal: new StubTraversal(units),
       pool: new Pool(2),
-      rateLimiter: new RateLimiter(),
+      rateLimiter: new RateLimiter(0), // politeness spacing off: this suite drives a stub transport on real timers
       retryPolicy,
       clock: FAKE_CLOCK,
       itemSink: new MemoryItemSink(),

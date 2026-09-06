@@ -1,5 +1,6 @@
 import { DEFAULT_MAX_DOCUMENTS, DEFAULT_MAX_REQUESTS } from '../engine/budget.js';
 import type { LogLevel } from '../engine/ports.js';
+import { DEFAULT_REQUEST_SPACING_MS } from '../engine/rate-limiter.js';
 
 /**
  * Parses and validates the documented CLI bound flags (core-run-control-and-output,
@@ -24,6 +25,7 @@ export interface ScrapeArgs {
   readonly maxDocuments: number;
   readonly documentsPerItem: number | null;
   readonly maxRequests: number | null;
+  readonly requestSpacingMs: number;
   readonly logLevel: LogLevel;
   readonly logFormat: LogFormat;
   readonly dryRun: boolean;
@@ -95,6 +97,23 @@ function parseMaxRequests(flags: FlagMap): number | null {
   return parsed;
 }
 
+/**
+ * Minimum gap between two requests, always applied (design.md's resilience
+ * defaults: "politeness spacing ~500ms"). `0` is accepted and disables it —
+ * a deliberate, explicit choice, never the value you get by forgetting the
+ * flag. A negative interval is rejected rather than clamped, so a typo cannot
+ * silently turn courtesy off.
+ */
+function parseRequestSpacing(flags: FlagMap): number {
+  const value = flags.get('request-spacing');
+  if (value === undefined) return DEFAULT_REQUEST_SPACING_MS;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    throw new Error('--request-spacing must be a non-negative integer number of milliseconds');
+  }
+  return parsed;
+}
+
 function parseLogLevel(flags: FlagMap): LogLevel {
   const value = flags.get('log-level');
   if (value === undefined) return 'info';
@@ -132,6 +151,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     maxDocuments: intWithDefault(flags, 'max-documents', DEFAULT_MAX_DOCUMENTS),
     documentsPerItem: optionalInt(flags, 'documents-per-item'),
     maxRequests: parseMaxRequests(flags),
+    requestSpacingMs: parseRequestSpacing(flags),
     logLevel: parseLogLevel(flags),
     logFormat: parseLogFormat(flags),
     dryRun: flags.get('dry-run') === true,

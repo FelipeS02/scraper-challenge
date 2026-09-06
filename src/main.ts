@@ -11,7 +11,7 @@ import { exponential, withCap, withJitter } from './engine/backoff.js';
 import { Budget, clampDateRange, unboundedBudget } from './engine/budget.js';
 import { Pool } from './engine/pool.js';
 import type { Clock, CoverageRecord, HttpTransport, Logger, RunBounds } from './engine/ports.js';
-import { RateLimiter } from './engine/rate-limiter.js';
+import { DEFAULT_REQUEST_SPACING_MS, RateLimiter } from './engine/rate-limiter.js';
 import type { RetryPolicyConfig } from './engine/retry-policy.js';
 import { Scraper } from './engine/scraper.js';
 import { SystemClock } from './infra/clock.js';
@@ -109,7 +109,9 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
     site,
     traversal,
     pool: new Pool(POOL_CONCURRENCY),
-    rateLimiter: new RateLimiter(),
+    rateLimiter: new RateLimiter(
+      args.command === 'scrape' ? args.requestSpacingMs : DEFAULT_REQUEST_SPACING_MS,
+    ),
     retryPolicy: RETRY_POLICY,
     clock: deps.clock,
     itemSink: new JsonlItemSink(join(deps.outputDir, 'items.jsonl')),

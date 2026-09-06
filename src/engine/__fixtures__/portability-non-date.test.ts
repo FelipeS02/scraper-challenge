@@ -117,7 +117,7 @@ describe('engine portability against a non-date-partitioning fake adapter', () =
       site,
       traversal,
       pool: new Pool(1),
-      rateLimiter: new RateLimiter(),
+      rateLimiter: new RateLimiter(0), // politeness spacing off: this suite drives a stub transport on real timers
       retryPolicy,
       clock: new FakeClock(),
       itemSink,
@@ -169,7 +169,7 @@ describe('engine portability against a non-date-partitioning fake adapter', () =
       site,
       traversal,
       pool: new Pool(1),
-      rateLimiter: new RateLimiter(),
+      rateLimiter: new RateLimiter(0), // politeness spacing off: this suite drives a stub transport on real timers
       retryPolicy,
       clock: new FakeClock(),
       itemSink: new MemoryItemSink(),

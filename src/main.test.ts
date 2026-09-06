@@ -33,6 +33,7 @@ function scrapeArgs(overrides: Partial<ScrapeArgs> = {}): ScrapeArgs {
     maxDocuments: 10,
     documentsPerItem: null,
     maxRequests: null,
+    requestSpacingMs: 0, // wiring test on real timers: politeness spacing would only add wall time
     logLevel: 'error',
     logFormat: 'console',
     dryRun: false,
