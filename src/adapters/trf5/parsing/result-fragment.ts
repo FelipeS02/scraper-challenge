@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { isTag, isText } from 'domhandler';
 import { decodeLatin1 } from '../decode.js';
 
 /**
@@ -11,6 +12,15 @@ import { decodeLatin1 } from '../decode.js';
 export interface SearchResultRow {
   readonly processNumber: string;
   readonly ca: string;
+  /**
+   * The raw parties-column text, e.g. `<PARTE A> e outros (N) X <PARTE B>`
+   * (docs/RESEARCH.md §3, "Measured partition yield"). Kept as the verbatim
+   * captured text — name-probes.ts's `extractPartyNames` is what splits it
+   * into individual party names for the adaptive name-probe harvester
+   * (trf5-adapter spec, "Adaptive Name-Probe Extension"). No extra request:
+   * this column is already present on every search-response row.
+   */
+  readonly parties: string;
 }
 
 /**
@@ -64,7 +74,28 @@ export function parseResultFragment(body: Uint8Array): SearchResultFragment {
     });
 
     const processNumber = PROCESS_NUMBER.exec(row.text())?.[0];
-    if (ca !== null && processNumber !== undefined) rows.push({ processNumber, ca });
+
+    // The parties text is whatever text node(s) trail the anchor that wraps
+    // the process-number `<b class="btn-block">` inside the row's second
+    // cell — everything before that anchor is the class-abbreviation label,
+    // never a party name (see this file's own header comment / search-ok.xml).
+    let parties = '';
+    let sawAnchor = false;
+    row
+      .find('td.rich-table-cell')
+      .eq(1)
+      .contents()
+      .each((___, node) => {
+        if (isTag(node) && node.name === 'a') {
+          sawAnchor = true;
+          return;
+        }
+        if (sawAnchor && isText(node)) parties += $(node).text();
+      });
+
+    if (ca !== null && processNumber !== undefined) {
+      rows.push({ processNumber, ca, parties: parties.trim() });
+    }
   });
 
   return { rows, count: rows.length };
