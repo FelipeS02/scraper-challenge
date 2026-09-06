@@ -82,19 +82,17 @@ const behavioralPorts = deriveBehavioralPorts(readFileSync(portsFilePath, 'utf-8
 /**
  * Interfaces this repository has already decided to leave without a
  * production implementation for the DURATION of this slice, each tracked by
- * a real, named follow-up task rather than silently ignored:
- *
- * - `FrontierCapable` — phase-2 only (design.md D3), S6, entirely unstarted.
- *   No implementation exists anywhere yet, fixture or production.
+ * a real, named follow-up task rather than silently ignored.
  *
  * `HttpTransport` (`infra/http/axios-transport.ts`) and `Clock`
- * (`infra/clock.ts`) closed in S5e (tasks 9.1/9.2) and were removed from
- * this list — it is designed to only ever get smaller, never to grow back
- * once a gap is closed.
+ * (`infra/clock.ts`) closed in S5e (tasks 9.1/9.2); `FrontierCapable`
+ * (`adapters/trf5/seeds.ts`, `TRF5Seeds`) closed in S6 (task 6.4) — all three
+ * removed from this list. It is designed to only ever get smaller, never to
+ * grow back once a gap is closed.
  *
  * A symbol here is a disclosed, tracked gap, not a silently invented pass.
  */
-const KNOWN_DEFERRED_GAPS = ['FrontierCapable'] as const;
+const KNOWN_DEFERRED_GAPS: readonly string[] = [];
 
 interface ImplementationMatch {
   readonly port: string;

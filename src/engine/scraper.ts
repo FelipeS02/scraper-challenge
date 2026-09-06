@@ -1,7 +1,9 @@
 import type { Budget } from './budget.js';
 import { classifyCellState, computeSetHash, pendingDocumentFailures } from './coverage.js';
+import { harvestAndPersistSeeds } from './frontier.js';
 import type { Pool } from './pool.js';
 import type {
+  AdapterStateStore,
   CheckpointStore,
   Clock,
   CoverageRecord,
@@ -9,6 +11,7 @@ import type {
   DiscoverResult,
   DocumentSink,
   FailureLedger,
+  FrontierCapable,
   ItemSink,
   LogLevel,
   Logger,
@@ -53,6 +56,23 @@ export interface ScraperConfig<TItem, TDoc, TCursor> {
    * forever (core-scraping-engine, "Saturation-Driven Subdivision").
    */
   readonly maxSplitDepth: number;
+  /**
+   * When present, every item this run writes also has its seeds harvested and
+   * persisted for a later `scrape --frontier` invocation (core-frontier-crawl,
+   * "Deferred Phase-2 Invocation"). Absent by default, so a caller that never
+   * sets this field — every existing test, and `retryFailedDocuments`, which
+   * never reaches this code path at all — gets exactly today's behavior
+   * (core-frontier-crawl, "Plain scrape does not run frontier crawl": harvesting
+   * is unconditional across every `scrape`, on or off `--frontier` — only
+   * *searching* the harvested seeds is deferred, and this field never issues a
+   * request of its own).
+   */
+  readonly frontierSeedHarvest?: FrontierSeedHarvestConfig<TItem, TCursor> | undefined;
+}
+
+export interface FrontierSeedHarvestConfig<TItem, TCursor> {
+  readonly frontierCapable: FrontierCapable<TItem, TCursor>;
+  readonly stateStore: AdapterStateStore;
 }
 
 type RetryOutcome<T> =
@@ -234,6 +254,17 @@ export class Scraper<TItem, TDoc, TCursor> {
     }
 
     const { items, documentsByItemId } = discoverResult.value;
+    const cap = this.config.site.resultPageCap;
+    const resultCount = discoverResult.value.count;
+    // Computed here, BEFORE the items loop, so each item's own seed harvest
+    // below can be tagged by its cell's complete/truncated state at the
+    // moment it is written — the only value `state` can hold before the
+    // saturation/split logic further down may upgrade it to 'subdivided'
+    // (core-frontier-crawl, "Seed Harvesting and Prioritization").
+    let state: 'complete' | 'truncated' | 'subdivided' = classifyCellState(resultCount, cap);
+    const seedHarvestCellState: 'complete' | 'truncated' =
+      state === 'truncated' ? 'truncated' : 'complete';
+
     for (const item of items) {
       // Stops collecting further items once --max-items is reached; the cell
       // still proceeds to its coverage/checkpoint record below, never erroring
@@ -326,11 +357,20 @@ export class Scraper<TItem, TDoc, TCursor> {
       }
 
       await this.config.itemSink.write(this.buildEnvelope(currentItem, itemId));
-    }
 
-    const cap = this.config.site.resultPageCap;
-    const resultCount = discoverResult.value.count;
-    let state: 'complete' | 'truncated' | 'subdivided' = classifyCellState(resultCount, cap);
+      // Harvesting issues no request of its own (core-frontier-crawl,
+      // "Deferred Phase-2 Invocation"): it only reads fields already present
+      // on `currentItem`, which is why this can run unconditionally on every
+      // `scrape`, on or off `--frontier`.
+      if (this.config.frontierSeedHarvest) {
+        await harvestAndPersistSeeds(
+          this.config.frontierSeedHarvest.frontierCapable,
+          this.config.frontierSeedHarvest.stateStore,
+          currentItem,
+          seedHarvestCellState,
+        );
+      }
+    }
 
     if (state === 'truncated' && cap !== null) {
       // classifyCellState only returns 'truncated' when a cap is declared, so

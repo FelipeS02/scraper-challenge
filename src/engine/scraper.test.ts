@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Budget, unboundedBudget } from './budget.js';
+import { SEEDS_STATE_KEY } from './frontier.js';
 import type {
+  AdapterStateStore,
   CheckpointRecord,
   CheckpointStore,
   Clock,
@@ -10,6 +12,7 @@ import type {
   DocumentFetchOutcome,
   DocumentSink,
   FailureLedger,
+  FrontierCapable,
   ItemSink,
   LedgerEntry,
   LogEvent,
@@ -17,6 +20,7 @@ import type {
   OutputRecord,
   RunBounds,
   SaturationInfo,
+  Seed,
   SitePort,
   StoredDocument,
   TraversalPort,
@@ -230,6 +234,30 @@ class MemoryFailureLedger implements FailureLedger {
   }
 }
 
+class MemorySeedStateStore implements AdapterStateStore {
+  private readonly data = new Map<string, unknown[]>();
+  read(key: string): Promise<readonly unknown[]> {
+    return Promise.resolve(this.data.get(key) ?? []);
+  }
+  append(key: string, value: unknown): Promise<void> {
+    const existing = this.data.get(key) ?? [];
+    existing.push(value);
+    this.data.set(key, existing);
+    return Promise.resolve();
+  }
+}
+
+/** One `low`-kind seed per item id — pairs with the frontier seed-harvest tests below. */
+class FakeFrontierCapable implements FrontierCapable<TestItem, { readonly day: string }> {
+  readonly seedKindRanking = ['low'];
+  harvestSeeds(item: TestItem): readonly Seed[] {
+    return [{ kind: 'low', value: item.id }];
+  }
+  unitFromSeed(): WorkUnit<{ readonly day: string }> {
+    throw new Error('not exercised by this suite — engine/frontier.test.ts owns unitFromSeed use');
+  }
+}
+
 class FakeClock implements Clock {
   private current = new Date('2026-01-01T00:00:00.000Z');
   now(): Date {
@@ -279,6 +307,10 @@ function buildScraper(overrides: {
   budget?: Budget;
   concurrency?: number;
   maxSplitDepth?: number;
+  frontierSeedHarvest?: {
+    readonly frontierCapable: FrontierCapable<TestItem, { readonly day: string }>;
+    readonly stateStore: AdapterStateStore;
+  };
 }): {
   scraper: Scraper<TestItem, TestDoc, { readonly day: string }>;
   itemSink: MemoryItemSink;
@@ -318,6 +350,9 @@ function buildScraper(overrides: {
     maxSplitDepth: overrides.maxSplitDepth ?? 3,
     runId: 'run-1',
     schemaVersion: 1,
+    ...(overrides.frontierSeedHarvest
+      ? { frontierSeedHarvest: overrides.frontierSeedHarvest }
+      : {}),
   });
 
   return { scraper, itemSink, documentSink, coverageSink, checkpointStore, failureLedger, logger };
@@ -1198,6 +1233,70 @@ describe('Scraper — site-agnostic failure vocabulary (Site-Agnostic Failure Vo
     await scraper.run(bounds);
 
     expect(failureLedger.entries[0]?.reason).toBe('invalidReference:invalidTokenShell');
+  });
+});
+
+describe('Scraper — frontier seed harvesting (core-frontier-crawl, "Deferred Phase-2 Invocation")', () => {
+  it('persists no seeds at all when frontierSeedHarvest is not configured — plain scrape unaffected', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-A' }], new Map())]);
+
+    const { scraper, itemSink } = buildScraper({ site, traversal: new StubTraversal([unit('A')]) });
+
+    await scraper.run(bounds);
+
+    expect(itemSink.records).toHaveLength(1); // the run itself is unaffected either way
+  });
+
+  it("harvests and persists every written item's seeds, tagged by the cell's own complete/truncated state", async () => {
+    const site = new ScriptedSite(1); // resultPageCap 1 — 'A' (2 items) saturates
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-A' }, { id: 'item-B' }], new Map())]);
+    site.scriptDiscover('B', [okDiscover([{ id: 'item-C' }], new Map())]); // 1 item, cap 1 — B is also saturated
+
+    const traversal = new StubTraversal([unit('A'), unit('B')]);
+    // Neither cell is scripted to split — both fall through to 'truncated',
+    // exactly the state this test needs (task 6.1's own scenario cares about
+    // truncated vs. complete tagging, not subdivision).
+
+    const stateStore = new MemorySeedStateStore();
+    const { scraper } = buildScraper({
+      site,
+      traversal,
+      frontierSeedHarvest: { frontierCapable: new FakeFrontierCapable(), stateStore },
+    });
+
+    await scraper.run(bounds);
+
+    const persisted = await stateStore.read(SEEDS_STATE_KEY);
+    expect(persisted).toEqual(
+      expect.arrayContaining([
+        { seed: { kind: 'low', value: 'item-A' }, cellState: 'truncated' },
+        { seed: { kind: 'low', value: 'item-B' }, cellState: 'truncated' },
+        { seed: { kind: 'low', value: 'item-C' }, cellState: 'truncated' },
+      ]),
+    );
+    expect(persisted).toHaveLength(3);
+    // Harvesting issues zero requests of its own — discover() was called
+    // exactly once per unit, nothing more (core-frontier-crawl, "Plain scrape
+    // does not run frontier crawl": no frontier searches, ever, from this path).
+    expect(site.discoverCalls).toBe(2);
+  });
+
+  it("tags a non-saturated cell's seeds as complete, never truncated", async () => {
+    const site = new ScriptedSite(5); // resultPageCap 5 — 1 item never saturates
+    site.scriptDiscover('A', [okDiscover([{ id: 'item-A' }], new Map())]);
+
+    const stateStore = new MemorySeedStateStore();
+    const { scraper } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+      frontierSeedHarvest: { frontierCapable: new FakeFrontierCapable(), stateStore },
+    });
+
+    await scraper.run(bounds);
+
+    const persisted = await stateStore.read(SEEDS_STATE_KEY);
+    expect(persisted).toEqual([{ seed: { kind: 'low', value: 'item-A' }, cellState: 'complete' }]);
   });
 });
 
