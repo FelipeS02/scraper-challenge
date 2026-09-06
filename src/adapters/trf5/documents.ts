@@ -29,15 +29,41 @@ function foldAccents(text: string): string {
   return text.normalize('NFD').replace(NON_PRINTABLE_ASCII, '');
 }
 
+// Any RUN of one-or-more characters outside the path-safe set collapses to a
+// single dash — this is what lets a label like "2ª VARA/CE" keep a
+// descriptive slug ("2-vara-ce") instead of the whole candidate being
+// discarded for one unsafe character (task 5i.5/5i.6, trf5-adapter spec:
+// degradation is for a hostile, empty, or unrepresentable label, not for an
+// ordinary one that happens to contain a slash).
+const UNSAFE_RUN = /[^a-z0-9._-]+/g;
+const REPEATED_SEPARATOR = /-{2,}/g;
+const EDGE_DASHES = /^-+|-+$/g;
+/**
+ * A slug that still contains ".." after per-character sanitization is
+ * treated as hostile and discarded entirely, even though a bare "." is an
+ * allowed path character on its own. The slug is only ever embedded as a
+ * filename SUFFIX (`${documentId}-${slug}.pdf}`), never a standalone path
+ * segment, so it cannot itself escape the output directory — this check
+ * exists to honor the spec's own named example (`../../etc/passwd`) rather
+ * than because the current embedding would otherwise be unsafe.
+ */
+const PARENT_DIR_REFERENCE = '..';
+
 /**
  * The slug is decorative only — it never participates in uniqueness. A
- * hostile, empty, or unrepresentable label degrades to `null` (no slug),
- * never a collision and never a path-escaping component.
+ * hostile (parent-directory-referencing), empty, or unrepresentable label
+ * degrades to `null` (no slug), never a collision and never a path-escaping
+ * component. Sanitizes per character rather than rejecting the whole
+ * candidate for one unsafe character (task 5i.6).
  */
 function deriveSlug(label: string): string | null {
-  const candidate = foldAccents(label).toLowerCase().replace(/\s+/g, '-');
-  if (candidate.length === 0 || !PATH_COMPONENT_SAFE.test(candidate)) return null;
-  return candidate.slice(0, MAX_SLUG_LENGTH);
+  const folded = foldAccents(label).toLowerCase();
+  const sanitized = folded
+    .replace(UNSAFE_RUN, '-')
+    .replace(REPEATED_SEPARATOR, '-')
+    .replace(EDGE_DASHES, '');
+  if (sanitized.length === 0 || sanitized.includes(PARENT_DIR_REFERENCE)) return null;
+  return sanitized.slice(0, MAX_SLUG_LENGTH);
 }
 
 export function buildDocumentPath(

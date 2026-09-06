@@ -89,6 +89,33 @@ describe('buildDocumentPath — Stable Document Filename Derivation (trf5-adapte
     const path = buildDocumentPath(PROCESS_NUMBER, '12452668', 'Petição');
     expect(path).toBe(`${PROCESS_NUMBER}/12452668-peticao.pdf`);
   });
+
+  it('keeps a descriptive slug for a label containing a slash, instead of collapsing to a bare id (task 5i.5/5i.6)', () => {
+    // A real observed judging-body label shape ("2ª VARA/CE") — an ordinary
+    // label, not a hostile one, per the trf5-adapter spec's own distinction.
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', '2ª VARA/CE');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668-2-vara-ce.pdf`);
+  });
+
+  it('produces a date-ordered, type-bearing slug from a real document-list label shape, truncated to MAX_SLUG_LENGTH', () => {
+    const label =
+      '13/05/2025 07:29:53 - Despacho Inspeção - 2068 - INSPEÇÃO ORDINÁRIA 2025 - 2ª VARA/CE';
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', label);
+    // The date, time, and document type ("despacho") all survive within the
+    // first 60 characters — the tail (the judging-body detail) is truncated,
+    // never the identifying id, which is prepended separately.
+    expect(path).toBe(
+      `${PROCESS_NUMBER}/12452668-13-05-2025-07-29-53-despacho-inspecao-2068-inspecao-ordinari.pdf`,
+    );
+  });
+
+  it('still discards a hostile label containing ".." even after per-character sanitization (task 5i.5 regression guard)', () => {
+    // The existing "../../etc/passwd" test above already proves this via
+    // buildDocumentPath; this one proves the same for a label whose hostile
+    // segment is not at the very start, so a naive edge-trim could not mask it.
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', 'foo/../../bar');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668.pdf`);
+  });
 });
 
 function bornDigitalRow(overrides: Partial<DocumentRow> = {}): DocumentRow {

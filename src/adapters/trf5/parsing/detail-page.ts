@@ -51,6 +51,36 @@ export interface Movement {
   readonly rawCells: readonly string[];
 }
 
+const RAW_DATE = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/;
+
+/**
+ * TRF5 is a Northeastern Brazilian regional court seated in Recife, PE. Its
+ * rendered movement timestamps carry no explicit timezone anywhere in the
+ * captured markup (docs/RESEARCH.md discloses none), so this is a stated
+ * design decision — America/Recife's fixed UTC-03:00 offset (Brazil abolished
+ * DST in 2019, so there is no seasonal ambiguity to resolve) — not a verified
+ * fact about the host's own clock. Recorded explicitly rather than defaulting
+ * to the runner's local zone, which would make the field non-deterministic
+ * across machines (design.md's amended `occurredAt` paragraph, task 5i.4).
+ */
+const RAW_DATE_OFFSET = '-03:00';
+
+/**
+ * Parses `dd/MM/yyyy HH:mm:ss` into an ISO-8601 instant, or `null` when
+ * `rawDate` is absent or does not match that exact shape — never a silently
+ * wrong guess. Exported for direct unit coverage of the "absent or
+ * unparseable" branch, without needing an invented HTML fixture for it
+ * (trf5-adapter spec; design.md's amended `occurredAt` paragraph).
+ */
+export function parseOccurredAt(rawDate: string | null): string | null {
+  if (rawDate === null) return null;
+  const match = RAW_DATE.exec(rawDate);
+  if (!match) return null;
+  const [, day, month, year, hour, minute, second] = match;
+  const parsed = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}${RAW_DATE_OFFSET}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 /**
  * The documents grid mixes two delivery shapes (design.md D14): `legacy`
  * rows carry a real `idBin=` href (302-redirects to a PDF, fetched by
@@ -77,11 +107,29 @@ export interface DocumentRow {
 }
 
 /**
- * Reconciliation of the documents grid's own declared total against what
- * was actually read across every page (design.md D13, task 5h.7). A
- * shortfall is reported, never inferred away or silently tolerated -- the
- * same "measured, never certified" discipline core-coverage-accounting
- * already applies to cell counts.
+ * Reconciliation of the documents grid's own declared total against what was
+ * actually read across every page (design.md D13, task 5h.7), plus a fetch-
+ * outcome split (task 5i.13). `reportedGap` is always `declaredTotal` minus
+ * the number of rows actually read (an honest plain subtraction, unaffected
+ * by fetch outcome) -- a shortfall is reported, never inferred away or
+ * silently tolerated, the same "measured, never certified" discipline
+ * core-coverage-accounting already applies to cell counts.
+ *
+ * **Corrected in task 5i.13.** Before this slice, `extractedCount`/
+ * `skippedCount` split by `documentKind` (`legacy` vs `bornDigital`) -- a
+ * meaning that was true only while born-digital documents genuinely had no
+ * fetch path (pre-S5j). Once S5j gave every kind a real fetch path, that
+ * split silently mislabeled a downloaded born-digital document as "skipped"
+ * (S5j's own live payload: `declaredTotal: 12, extractedCount: 8,
+ * skippedCount: 4` for a run that fetched all 12). The split is now by
+ * `fetchStatus` instead: `extractedCount` counts documents actually fetched,
+ * `skippedCount` counts documents not fetched (skipped or failed),
+ * regardless of kind. This function is called twice in this codebase: once
+ * at PARSE time (`extractDocuments`/pagination reconciliation, before any
+ * fetch has happened -- every row is still `'skipped'`, so `extractedCount`
+ * is honestly `0` there), and once more by `TRF5Site.withDocumentOutcome`
+ * after each real fetch outcome is written back, which is what keeps the
+ * persisted item's own summary telling the truth.
  */
 export interface DocumentsGridSummary {
   readonly declaredTotal: number;
@@ -292,10 +340,11 @@ function extractMovements($: cheerio.CheerioAPI): readonly Movement[] {
         .map((td) => $(td).text().trim());
       const first = cells[0] ?? '';
       const match = MOVEMENT_CELL.exec(first);
+      const rawDate = match ? match[1]! : null;
       return {
         sequence: index + 1,
-        occurredAt: null,
-        rawDate: match ? match[1]! : null,
+        occurredAt: parseOccurredAt(rawDate),
+        rawDate,
         description: match ? match[2]!.trim() : first,
         cnjCode: null,
         rawCells: cells,
@@ -358,9 +407,18 @@ function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
         const onclick = $anchor.attr('onclick') ?? '';
         const match = BORN_DIGITAL_ONCLICK.exec(onclick);
         if (match) {
+          // The anchor's own visible text is a screen-reader-only link label
+          // ("Visualizar documentos", `<span class="sr-only">`) glued directly
+          // onto the real descriptive text (date/type) with no separator
+          // (task 5i.14). `.sr-only` is a standard accessibility convention,
+          // not a guessed/hardcoded Portuguese literal — stripping it from a
+          // CLONE (never the live tree the loop is still iterating) is what
+          // isolates the descriptive part structurally.
+          const $clone = $anchor.clone();
+          $clone.find('.sr-only').remove();
           bornDigital = {
             documentId: match[1]!,
-            label: $anchor.text().trim(),
+            label: $clone.text().trim(),
             viewerUrl: BORN_DIGITAL_VIEWER_URL.exec(onclick)?.[1] ?? null,
           };
         }
@@ -409,16 +467,16 @@ function extractDeclaredDocumentTotal($: cheerio.CheerioAPI): number {
  * read yet.
  */
 export function summarizeDocumentsGrid(
-  documents: readonly Pick<DocumentRow, 'documentKind'>[],
+  documents: readonly Pick<DocumentRow, 'fetchStatus'>[],
   declaredTotal: number,
 ): DocumentsGridSummary {
-  const extractedCount = documents.filter((doc) => doc.documentKind === 'legacy').length;
-  const skippedCount = documents.filter((doc) => doc.documentKind === 'bornDigital').length;
+  const extractedCount = documents.filter((doc) => doc.fetchStatus === 'fetched').length;
+  const skippedCount = documents.length - extractedCount;
   return {
     declaredTotal,
     extractedCount,
     skippedCount,
-    reportedGap: declaredTotal - (extractedCount + skippedCount),
+    reportedGap: declaredTotal - documents.length,
   };
 }
 

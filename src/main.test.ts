@@ -142,11 +142,18 @@ describe('runScraper — the composition root wiring (S5e)', () => {
       runId: 'test-run-doc',
     });
 
-    // The born-digital row's own label ("Visualizar documentos24/02/2026
-    // 14:57:27 - Despacho (Despacho)") contains "/" and ":" -- outside
-    // PATH_COMPONENT_SAFE -- so it degrades to no slug at all, same as any
-    // other hostile label (documents.test.ts already proves this rule).
-    const expectedPath = join(pdfsDir, '0123456-78.2026.4.05.8100', '6884889.pdf');
+    // The born-digital row's own anchor text is a screen-reader-only
+    // "Visualizar documentos" prefix glued onto the real descriptive label
+    // ("24/02/2026 14:57:27 - Despacho (Despacho)"); task 5i.14 strips that
+    // prefix structurally, and task 5i.6's per-character slug sanitization
+    // keeps the rest descriptive instead of collapsing the whole label to a
+    // bare id for containing "/"/":" (documents.test.ts proves the mechanism
+    // directly; this is the end-to-end proof through the real composition).
+    const expectedPath = join(
+      pdfsDir,
+      '0123456-78.2026.4.05.8100',
+      '6884889-24-02-2026-14-57-27-despacho-despacho.pdf',
+    );
     expect(readFileSync(expectedPath)).toHaveLength(135);
     // Never written under outputDir — the two roots stay separate.
     expect(() => readFileSync(join(outputDir, '0123456-78.2026.4.05.8100'))).toThrow();

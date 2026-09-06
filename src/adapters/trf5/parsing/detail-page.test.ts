@@ -4,6 +4,7 @@ import {
   extractDocumentGridPager,
   parseDetailPage,
   parseDocumentGridPage,
+  parseOccurredAt,
   summarizeDocumentsGrid,
 } from './detail-page.js';
 
@@ -79,14 +80,15 @@ describe('parseDetailPage — parties (trf5-adapter spec, party + nested ADVOGAD
   });
 });
 
-describe('parseDetailPage — movements (rawCells preserved verbatim, cnjCode null)', () => {
-  it('splits the real single-cell "date - description" text and preserves both cells verbatim into rawCells', () => {
+describe('parseDetailPage — movements (rawCells preserved verbatim, cnjCode null, occurredAt parsed)', () => {
+  it('splits the real single-cell "date - description" text, preserves both cells verbatim into rawCells, and parses occurredAt from rawDate (task 5i.3/5i.4 — these two assertions previously encoded the hardcoded-null defect)', () => {
     const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
 
     expect(detail.movements).toHaveLength(7);
     expect(detail.movements[0]).toEqual({
       sequence: 1,
-      occurredAt: null,
+      // 14:20:07 America/Recife (UTC-03:00, design.md's amended paragraph) -> 17:20:07Z.
+      occurredAt: '2026-05-14T17:20:07.000Z',
       rawDate: '14/05/2026 14:20:07',
       description: 'Juntada de Petição de petição (outras)',
       cnjCode: null,
@@ -94,12 +96,28 @@ describe('parseDetailPage — movements (rawCells preserved verbatim, cnjCode nu
     });
     expect(detail.movements[6]).toEqual({
       sequence: 7,
-      occurredAt: null,
+      // 19:13:13 America/Recife (UTC-03:00) -> 22:13:13Z.
+      occurredAt: '2026-03-10T22:13:13.000Z',
       rawDate: '10/03/2026 19:13:13',
       description: 'Distribuído por sorteio',
       cnjCode: null,
       rawCells: ['10/03/2026 19:13:13 - Distribuído por sorteio', ''],
     });
+  });
+});
+
+describe('parseOccurredAt — timezone handling is explicit, never the runner local zone (design.md, task 5i.4)', () => {
+  it('parses dd/MM/yyyy HH:mm:ss as America/Recife (fixed UTC-03:00, no DST) into a UTC ISO instant', () => {
+    expect(parseOccurredAt('14/05/2026 14:20:07')).toBe('2026-05-14T17:20:07.000Z');
+  });
+
+  it('stays null when rawDate itself is absent', () => {
+    expect(parseOccurredAt(null)).toBeNull();
+  });
+
+  it('stays null when rawDate does not match the exact dd/MM/yyyy HH:mm:ss shape, rather than guessing', () => {
+    expect(parseOccurredAt('not a date')).toBeNull();
+    expect(parseOccurredAt('14/05/2026')).toBeNull();
   });
 });
 
@@ -152,6 +170,19 @@ describe('parseDetailPage — documents (legacy idBin-redirect rows, plus born-d
       expect(doc.downloadUrl).toContain(`idProcessoDoc=${doc.documentId}`);
     }
   });
+
+  it('strips the anchor’s screen-reader-only "Visualizar documentos" prefix from a born-digital label, structurally (task 5i.14) — leaving the real descriptive date/type text a slug can use', () => {
+    const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
+
+    const bornDigital = detail.documents.filter((doc) => doc.documentKind === 'bornDigital');
+    for (const doc of bornDigital) {
+      expect(doc.label).not.toContain('Visualizar documentos');
+      // Every real captured born-digital label in this fixture has the same
+      // "dd/mm/yyyy hh:mm:ss - Despacho (Despacho)" shape once the sr-only
+      // prefix is gone.
+      expect(doc.label).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2} - Despacho \(Despacho\)$/);
+    }
+  });
 });
 
 describe('parseDetailPage — documents grid declared total (task 5h.2/5h.3, design.md D13)', () => {
@@ -163,11 +194,16 @@ describe('parseDetailPage — documents grid declared total (task 5h.2/5h.3, des
   it('reads 24 for the real paginated capture, from page 1 alone (reconciliation across pages is detail.ts’s job, not parsing’s)', () => {
     const detail = parseDetailPage(loadFixtureBytes('detail-page-paginated-documents.html'));
     expect(detail.documentsGrid.declaredTotal).toBe(24);
-    // Page 1 alone: 14 legacy + 1 born-digital = 15, short of the declared
-    // 24 by the 9 rows that live on page 2 -- this is the exact gap S5h's
-    // pager-following in detail.ts closes; parsing one page can never see it.
-    expect(detail.documentsGrid.extractedCount).toBe(14);
-    expect(detail.documentsGrid.skippedCount).toBe(1);
+    // Page 1 alone: 14 legacy + 1 born-digital = 15 rows read, short of the
+    // declared 24 by the 9 rows that live on page 2 -- this is the exact gap
+    // S5h's pager-following in detail.ts closes; parsing one page can never
+    // see it. extractedCount/skippedCount now split by fetchStatus (task
+    // 5i.13), and nothing has been fetched yet at parse time, so every row
+    // reads 'skipped' here -- reportedGap (the real pagination-completeness
+    // signal) is unaffected: it is a plain declaredTotal-minus-rows-read
+    // subtraction, never derived from the extracted/skipped split.
+    expect(detail.documentsGrid.extractedCount).toBe(0);
+    expect(detail.documentsGrid.skippedCount).toBe(15);
     expect(detail.documentsGrid.reportedGap).toBe(9);
   });
 
@@ -182,12 +218,15 @@ describe('parseDetailPage — documents grid declared total (task 5h.2/5h.3, des
   });
 });
 
-describe('summarizeDocumentsGrid — reconciliation arithmetic (task 5h.7)', () => {
-  it('reports zero gap when extracted + skipped equals the declared total', () => {
+describe('summarizeDocumentsGrid — reconciliation arithmetic (task 5h.7, corrected by fetchStatus in task 5i.13)', () => {
+  it('reports zero gap when extracted + skipped equals the declared total, split by fetchStatus rather than documentKind', () => {
+    // Two fetched (regardless of kind) + one not-yet-fetched: the fix this
+    // slice exists for is that a fetched bornDigital document must count as
+    // extracted, not skipped, exactly like a fetched legacy one.
     const documents = [
-      { documentKind: 'legacy' } as never,
-      { documentKind: 'legacy' } as never,
-      { documentKind: 'bornDigital' } as never,
+      { fetchStatus: 'fetched' } as never,
+      { fetchStatus: 'fetched' } as never,
+      { fetchStatus: 'skipped' } as never,
     ];
     expect(summarizeDocumentsGrid(documents, 3)).toEqual({
       declaredTotal: 3,
@@ -198,12 +237,22 @@ describe('summarizeDocumentsGrid — reconciliation arithmetic (task 5h.7)', () 
   });
 
   it('reports a positive gap as a shortfall, never inferred away, when fewer rows were read than declared', () => {
-    const documents = [{ documentKind: 'legacy' } as never];
+    const documents = [{ fetchStatus: 'skipped' } as never];
     expect(summarizeDocumentsGrid(documents, 5)).toEqual({
       declaredTotal: 5,
-      extractedCount: 1,
-      skippedCount: 0,
+      extractedCount: 0,
+      skippedCount: 1,
       reportedGap: 4,
+    });
+  });
+
+  it('counts a failed fetch as not-extracted, the same as a never-attempted one', () => {
+    const documents = [{ fetchStatus: 'fetched' } as never, { fetchStatus: 'failed' } as never];
+    expect(summarizeDocumentsGrid(documents, 2)).toEqual({
+      declaredTotal: 2,
+      extractedCount: 1,
+      skippedCount: 1,
+      reportedGap: 0,
     });
   });
 });

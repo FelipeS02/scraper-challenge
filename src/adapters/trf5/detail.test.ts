@@ -64,10 +64,15 @@ describe('fetchDetail — documents-grid pagination (S5h tasks 5h.6/5h.7/5h.8, d
     // Exactly the priming GET plus the one detail GET -- no pager POST.
     expect(transport.requests).toHaveLength(2);
     if (outcome.kind !== 'ok') return;
+    // extractedCount/skippedCount split by fetchStatus, not documentKind
+    // (task 5i.13); nothing has been fetched yet at this stage (fetchDetail
+    // only parses), so every one of the 12 rows reads 'skipped' here — the
+    // real fetch outcome is written back later by
+    // TRF5Site.withDocumentOutcome (task 5i.1/5i.2).
     expect(outcome.value.documentsGrid).toEqual({
       declaredTotal: 12,
-      extractedCount: 8,
-      skippedCount: 4,
+      extractedCount: 0,
+      skippedCount: 12,
       reportedGap: 0,
     });
   });
@@ -88,10 +93,12 @@ describe('fetchDetail — documents-grid pagination (S5h tasks 5h.6/5h.7/5h.8, d
     if (outcome.kind !== 'ok') return;
     // 14 legacy (page 1) + 9 legacy (page 2) = 23; 1 born-digital (page 1).
     expect(outcome.value.documents).toHaveLength(24);
+    // Same fetchStatus-based split as above (task 5i.13) — 24 rows read, all
+    // still 'skipped' at this pre-fetch stage.
     expect(outcome.value.documentsGrid).toEqual({
       declaredTotal: 24,
-      extractedCount: 23,
-      skippedCount: 1,
+      extractedCount: 0,
+      skippedCount: 24,
       reportedGap: 0,
     });
 

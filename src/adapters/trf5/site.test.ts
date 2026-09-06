@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { HttpResponse } from '../../engine/ports.js';
 import type { WorkUnit } from '../../engine/types.js';
 import { fixtureResponse, loadFixtureBytes, StubTransport } from './__fixtures__/stub-transport.js';
-import type { DocumentRow } from './parsing/detail-page.js';
-import type { TrfPayload } from './schemas/payload.js';
+import { parseDetailPage, type DocumentRow } from './parsing/detail-page.js';
+import { assembleTrfPayload, type TrfPayload } from './schemas/payload.js';
 import { identityKeyName, resultPageCap, TRF5Site } from './site.js';
 import type { TraversalCursor } from './traversal.js';
 
@@ -230,6 +230,40 @@ describe('TRF5Site.fetchDocument — composes the existing documents.ts fetch/de
     if (outcome.kind !== 'ok') return;
     expect(outcome.value.fileName).toBe('0712345-90.2024.4.05.8300/12452668-decisao.pdf');
     expect(outcome.value.bytes.byteLength).toBeGreaterThan(0);
+  });
+});
+
+describe('TRF5Site.withDocumentOutcome — writes the real fetch outcome back onto the payload (task 5i.1/5i.2/5i.13)', () => {
+  it("updates only the matching document's fetchStatus/byteLength/fileName, and recomputes documentsGrid by fetch outcome, never by documentKind", () => {
+    const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
+    const payload = assembleTrfPayload(detail, 'stub://source');
+    if (!payload) throw new Error('fixture failed schema validation');
+    const site = new TRF5Site({ transport: new StubTransport([]), primingUrl: PRIMING_URL });
+    const target = payload.documents[0]!;
+
+    const updated = site.withDocumentOutcome(payload, target, {
+      fetchStatus: 'fetched',
+      byteLength: 4321,
+      fileName: `${payload.processNumber}/${target.documentId}.pdf`,
+    });
+
+    const updatedDoc = updated.documents.find((d) => d.documentId === target.documentId);
+    expect(updatedDoc).toMatchObject({
+      fetchStatus: 'fetched',
+      byteLength: 4321,
+      fileName: `${payload.processNumber}/${target.documentId}.pdf`,
+    });
+    // Every other document is untouched.
+    const others = updated.documents.filter((d) => d.documentId !== target.documentId);
+    expect(others).toEqual(payload.documents.filter((d) => d.documentId !== target.documentId));
+    // documentsGrid recomputed by fetchStatus (task 5i.13): exactly one
+    // document now reads 'fetched', regardless of its documentKind.
+    expect(updated.documentsGrid).toEqual({
+      declaredTotal: payload.documentsGrid.declaredTotal,
+      extractedCount: 1,
+      skippedCount: payload.documents.length - 1,
+      reportedGap: payload.documentsGrid.reportedGap,
+    });
   });
 });
 
