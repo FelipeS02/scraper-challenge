@@ -1,5 +1,5 @@
 import type { FetchOutcome, WorkUnit } from '../types.js';
-import type { DiscoverResult, SitePort, StoredDocument } from '../ports.js';
+import type { DiscoverResult, DocumentFetchOutcome, SitePort, StoredDocument } from '../ports.js';
 
 /**
  * ~20-line fake adapter proving the engine is generic over payload type
@@ -54,5 +54,10 @@ export class FakeSite implements SitePort<FakeItem, FakeDoc> {
 
   reprimeSession(): Promise<void> {
     return Promise.resolve();
+  }
+
+  /** FakeItem carries no per-document fields to update — a no-op, same as FakeNonDateSite's. */
+  withDocumentOutcome(item: FakeItem, _doc: FakeDoc, _outcome: DocumentFetchOutcome): FakeItem {
+    return item;
   }
 }

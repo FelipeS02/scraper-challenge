@@ -174,7 +174,13 @@ export class Scraper<TItem, TDoc, TCursor> {
         continue;
       const item = entry.item as TItem;
       const doc = entry.doc as TDoc;
-      const result = await this.runWithRetry(() => this.config.site.fetchDocument(item, doc));
+      // Same 429 fix as processUnit's document loop (task 5i.10/5i.11/5i.12):
+      // there is no unit here to requeue at all, so a 429 must keep retrying
+      // under the global cooldown rather than being silently dropped as an
+      // unresolved, un-re-recorded ledger entry.
+      const result = await this.runWithRetry(() => this.config.site.fetchDocument(item, doc), {
+        requeueOnRateLimit: false,
+      });
 
       if (result.ok) {
         if (result.value.fileName) {
@@ -190,7 +196,7 @@ export class Scraper<TItem, TDoc, TCursor> {
           });
         }
         await this.config.failureLedger.resolve(entry.itemId, entry.documentId);
-      } else if (!result.requeue) {
+      } else {
         const reason = describeOutcome(result.outcome);
         this.emit('warn', 'document.failed', {
           itemId: entry.itemId,
@@ -238,8 +244,11 @@ export class Scraper<TItem, TDoc, TCursor> {
       this.seenItemIds.add(itemId); // synchronous claim — no await between check and set
       this.config.budget.recordItem();
 
+      // Reassigned by withDocumentOutcome below (S5i tasks 5i.1/5i.2) as each
+      // document's real fetch outcome is written back — never mutated in
+      // place, since TItem is opaque to the engine (design.md D1/D2).
+      let currentItem = item;
       const docs = documentsByItemId.get(itemId) ?? [];
-      let unitRequeue = false;
       for (const doc of docs) {
         // Stops fetching further documents once --max-documents (default 10)
         // or --documents-per-item is reached, across the whole run — the
@@ -249,13 +258,25 @@ export class Scraper<TItem, TDoc, TCursor> {
           break;
         this.config.budget.recordDocument(itemId);
         this.config.budget.recordRequest();
-        const docResult = await this.runWithRetry(() => this.config.site.fetchDocument(item, doc));
+        // Never requeue the WHOLE ITEM on a document-level 429 (task
+        // 5i.10/5i.11): the item was already claimed in seenItemIds above, so
+        // a unit requeue would silently drop it and every one of its
+        // remaining documents (the S5j-disclosed defect). The global cooldown
+        // (design.md D6) still trips exactly as before; runWithRetry's own
+        // loop just keeps retrying THIS document under it until transientCap
+        // is exhausted, then falls through to the failure ledger below like
+        // any other exhausted transient failure.
+        const docResult = await this.runWithRetry(
+          () => this.config.site.fetchDocument(currentItem, doc),
+          { requeueOnRateLimit: false },
+        );
         if (docResult.ok) {
           // Persistence is the engine's concern, driven through DocumentSink — the
           // adapter only returns bytes (trf5-adapter spec, "Document Persistence to
           // Disk"). A failed fetch never reaches here, so no file is ever written for it.
+          let bytesWritten: number | null = null;
           if (docResult.value.fileName) {
-            const bytesWritten = await this.config.documentSink.write(
+            bytesWritten = await this.config.documentSink.write(
               docResult.value.fileName,
               docResult.value.bytes,
             );
@@ -266,12 +287,22 @@ export class Scraper<TItem, TDoc, TCursor> {
               bytesWritten,
             });
           }
+          // The payload tells the truth about what was fetched (S5i tasks
+          // 5i.1/5i.2): byteLength is the sink's own persisted-size return
+          // value, never the adapter's merely-claimed size (same discipline
+          // the document.persisted event above already applies).
+          currentItem = this.config.site.withDocumentOutcome(currentItem, doc, {
+            fetchStatus: 'fetched',
+            byteLength: bytesWritten,
+            fileName: docResult.value.fileName,
+          });
           continue;
         }
-        if (docResult.requeue) {
-          unitRequeue = true;
-          break;
-        }
+        // docResult.ok is false here, and requeueOnRateLimit: false means
+        // runWithRetry never returns requeue:true for a document fetch — a
+        // 429 keeps retrying under the cooldown instead (task 5i.10/5i.11),
+        // so every non-ok outcome reaching this point is a genuine exhausted
+        // failure, recorded to the ledger below.
         {
           const reason = describeOutcome(docResult.outcome);
           const documentId = this.config.site.documentId(doc);
@@ -281,14 +312,18 @@ export class Scraper<TItem, TDoc, TCursor> {
             documentId,
             reason,
             observedAt: this.config.clock.now().toISOString(),
-            item,
+            item: currentItem,
             doc,
+          });
+          currentItem = this.config.site.withDocumentOutcome(currentItem, doc, {
+            fetchStatus: 'failed',
+            byteLength: null,
+            fileName: null,
           });
         }
       }
-      if (unitRequeue) return true;
 
-      await this.config.itemSink.write(this.buildEnvelope(item, itemId));
+      await this.config.itemSink.write(this.buildEnvelope(currentItem, itemId));
     }
 
     const cap = this.config.site.resultPageCap;
@@ -339,8 +374,30 @@ export class Scraper<TItem, TDoc, TCursor> {
     return false;
   }
 
-  /** One request through the global rate-limiter gate, decided by RetryPolicy. */
-  private async runWithRetry<T>(fetchFn: () => Promise<FetchOutcome<T>>): Promise<RetryOutcome<T>> {
+  /**
+   * One request through the global rate-limiter gate, decided by RetryPolicy.
+   *
+   * `requeueOnRateLimit` (default `true`) governs what a 429 (`requeue`
+   * decision) does once the global cooldown is tripped:
+   * - `true` (discovery, `:discover()`): returns immediately so the CALLER
+   *   requeues the whole unit — nothing has been claimed yet at that point,
+   *   so requeuing loses no work (design.md D6, unchanged by this slice).
+   * - `false` (a document fetch, task 5i.10/5i.11): the item was already
+   *   claimed in `seenItemIds` before any document is fetched, so requeuing
+   *   the unit would silently drop the item and every remaining document —
+   *   the defect S5j's own apply run disclosed. Instead the loop CONTINUES:
+   *   `acquire()` on the next attempt blocks until the cooldown this same
+   *   call just tripped clears, `transientCap` bounds the attempts exactly
+   *   like any other transient status (`decide()` needs no change — its
+   *   existing `attempt > transientCap` check already runs before the 429
+   *   special-case), and exhaustion falls through to `recordAndStop` ->
+   *   the failure ledger, exactly like any other exhausted transient failure.
+   */
+  private async runWithRetry<T>(
+    fetchFn: () => Promise<FetchOutcome<T>>,
+    options: { readonly requeueOnRateLimit?: boolean } = {},
+  ): Promise<RetryOutcome<T>> {
+    const requeueOnRateLimit = options.requeueOnRateLimit ?? true;
     let attempt = 1;
     for (;;) {
       await this.config.rateLimiter.acquire();
@@ -364,7 +421,9 @@ export class Scraper<TItem, TDoc, TCursor> {
           const cooldownMs = retryAfterMs ?? this.config.retryPolicy.backoff(attempt);
           this.emit('warn', 'cooldown.triggered', { attempt, cooldownMs });
           this.config.rateLimiter.tripCooldown(cooldownMs);
-          return { ok: false, requeue: true, outcome };
+          if (requeueOnRateLimit) return { ok: false, requeue: true, outcome };
+          attempt += 1;
+          continue;
         }
         case 'recordAndStop':
           return { ok: false, requeue: false, outcome };

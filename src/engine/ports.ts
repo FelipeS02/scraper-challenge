@@ -49,6 +49,19 @@ export interface DocumentSink {
   write(relativePath: string, bytes: Uint8Array): Promise<number>;
 }
 
+/**
+ * The real, engine-observed outcome of one document fetch attempt — payload-
+ * generic (design.md D1), never a site-specific shape (S5i tasks 5i.1/5i.2).
+ * `byteLength` is the DocumentSink's own persisted-size return value when a
+ * file was written, never the adapter's merely-claimed size (same discipline
+ * `engine/scraper.ts`'s `document.persisted` event already applies).
+ */
+export interface DocumentFetchOutcome {
+  readonly fetchStatus: 'fetched' | 'failed';
+  readonly byteLength: number | null;
+  readonly fileName: string | null;
+}
+
 export interface SitePort<TItem, TDoc> {
   readonly resultPageCap: number | null; // TRF5 declares 30; null = no cap declared (D11)
   readonly identityKeyName: string; // TRF5 declares 'processNumber'
@@ -58,6 +71,17 @@ export interface SitePort<TItem, TDoc> {
   discover(unit: WorkUnit<unknown>): Promise<FetchOutcome<DiscoverResult<TItem, TDoc>>>;
   fetchDocument(item: TItem, doc: TDoc): Promise<FetchOutcome<StoredDocument>>;
   reprimeSession(): Promise<void>;
+  /**
+   * Returns a new `TItem` with `doc`'s matching entry updated to reflect
+   * `outcome` — the engine never mutates or inspects the opaque item shape
+   * itself (design.md D1/D2). Called before the item reaches `ItemSink`, so
+   * a persisted item's own document list tells the truth about what was
+   * actually fetched (core-run-control-and-output, "the payload tells the
+   * truth about what was extracted and fetched", S5i). A document never
+   * attempted is left exactly as the adapter's own `discover()` produced it
+   * — the engine only calls this for a document it actually tried.
+   */
+  withDocumentOutcome(item: TItem, doc: TDoc, outcome: DocumentFetchOutcome): TItem;
 }
 
 export interface RunBounds {

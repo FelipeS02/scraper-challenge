@@ -1,6 +1,7 @@
 import { classifyHttpStatus } from '../../engine/http-status.js';
 import type {
   DiscoverResult,
+  DocumentFetchOutcome,
   HttpTransport,
   SitePort,
   StoredDocument,
@@ -8,7 +9,7 @@ import type {
 import type { FetchOutcome, WorkUnit } from '../../engine/types.js';
 import { fetchDetail } from './detail.js';
 import { fetchDocument as fetchDocumentFile } from './documents.js';
-import type { DocumentRow } from './parsing/detail-page.js';
+import { summarizeDocumentsGrid, type DocumentRow } from './parsing/detail-page.js';
 import { parseResultFragment } from './parsing/result-fragment.js';
 import type { TrfPayload } from './schemas/payload.js';
 import { buildResponseView } from './schemas/response-view.js';
@@ -157,6 +158,37 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
 
   fetchDocument(item: TrfPayload, doc: DocumentRow): Promise<FetchOutcome<StoredDocument>> {
     return fetchDocumentFile(this.config.transport, item.processNumber, doc);
+  }
+
+  /**
+   * Writes the engine-observed fetch outcome back onto the matching document
+   * entry, keyed by `documentId` (task 5i.1/5i.2). `documentsGrid` is
+   * recomputed from the updated `documents` array in the same step (task
+   * 5i.13) — `summarizeDocumentsGrid` now splits by `fetchStatus`, so this is
+   * the one place a document's real outcome and the grid's own summary of it
+   * can never drift apart. `declaredTotal` is carried over verbatim: it is
+   * the grid's own footer count, never re-derived from a fetch outcome.
+   */
+  withDocumentOutcome(
+    item: TrfPayload,
+    doc: DocumentRow,
+    outcome: DocumentFetchOutcome,
+  ): TrfPayload {
+    const documents = item.documents.map((row) =>
+      row.documentId === doc.documentId
+        ? {
+            ...row,
+            fetchStatus: outcome.fetchStatus,
+            byteLength: outcome.byteLength,
+            fileName: outcome.fileName,
+          }
+        : row,
+    );
+    return {
+      ...item,
+      documents,
+      documentsGrid: summarizeDocumentsGrid(documents, item.documentsGrid.declaredTotal),
+    };
   }
 
   /**

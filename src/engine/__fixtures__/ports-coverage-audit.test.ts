@@ -98,6 +98,9 @@ const REQUIREMENT_MAP: Readonly<Record<string, readonly string[]>> = {
     'core-run-control-and-output: Personal Data Handling Rules',
   ],
   Logger: ['core-run-control-and-output: Structured Run Observability'],
+  DocumentFetchOutcome: [
+    'core-run-control-and-output: Document Fetch Outcome Written Back to the Payload',
+  ],
 };
 
 describe('engine/ports.ts reverse requirement-coverage audit', () => {

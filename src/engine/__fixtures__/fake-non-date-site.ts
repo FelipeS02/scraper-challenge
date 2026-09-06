@@ -1,5 +1,5 @@
 import type { FetchOutcome, WorkUnit } from '../types.js';
-import type { DiscoverResult, SitePort, StoredDocument } from '../ports.js';
+import type { DiscoverResult, DocumentFetchOutcome, SitePort, StoredDocument } from '../ports.js';
 import type { RegionCursor } from './fake-non-date-traversal.js';
 
 /**
@@ -78,5 +78,14 @@ export class FakeNonDateSite implements SitePort<FakeRegionItem, FakeRegionDoc> 
 
   reprimeSession(): Promise<void> {
     return Promise.resolve();
+  }
+
+  /** FakeRegionItem carries no per-document fields to update — a no-op, same as FakeSite's. */
+  withDocumentOutcome(
+    item: FakeRegionItem,
+    _doc: FakeRegionDoc,
+    _outcome: DocumentFetchOutcome,
+  ): FakeRegionItem {
+    return item;
   }
 }

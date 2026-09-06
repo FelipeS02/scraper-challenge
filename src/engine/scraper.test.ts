@@ -7,6 +7,7 @@ import type {
   CoverageRecord,
   CoverageSink,
   DiscoverResult,
+  DocumentFetchOutcome,
   DocumentSink,
   FailureLedger,
   ItemSink,
@@ -34,9 +35,23 @@ class ThrowingLogger implements Logger {
   }
 }
 
-/** Minimal non-TRF5 test payload — the loop is proven generic (design.md D1). */
+/** One document's engine-observable fetch state within a TestItem (task 5i.1). */
+interface TestDocState {
+  readonly id: string;
+  readonly fetchStatus: 'fetched' | 'skipped' | 'failed';
+  readonly byteLength: number | null;
+  readonly fileName: string | null;
+}
+
+/**
+ * Minimal non-TRF5 test payload — the loop is proven generic (design.md D1).
+ * `documents` is optional and omitted by every test that does not care about
+ * the write-back this slice adds (task 5i.1/5i.2); `withDocumentOutcome`
+ * below is a no-op when it is absent.
+ */
 interface TestItem {
   readonly id: string;
+  readonly documents?: readonly TestDocState[];
 }
 interface TestDoc {
   readonly id: string;
@@ -96,6 +111,24 @@ class ScriptedSite implements SitePort<TestItem, TestDoc> {
   reprimeSession(): Promise<void> {
     this.reprimeCalls += 1;
     return Promise.resolve();
+  }
+
+  /** No-op when the test item carries no `documents` array at all. */
+  withDocumentOutcome(item: TestItem, doc: TestDoc, outcome: DocumentFetchOutcome): TestItem {
+    if (!item.documents) return item;
+    return {
+      ...item,
+      documents: item.documents.map((row) =>
+        row.id === doc.id
+          ? {
+              ...row,
+              fetchStatus: outcome.fetchStatus,
+              byteLength: outcome.byteLength,
+              fileName: outcome.fileName,
+            }
+          : row,
+      ),
+    };
   }
 }
 
@@ -264,7 +297,13 @@ function buildScraper(overrides: {
     site: overrides.site,
     traversal: overrides.traversal,
     pool: new Pool(overrides.concurrency ?? 1),
-    rateLimiter: new RateLimiter(),
+    // Spacing off: this suite drives a stub site directly (no real transport),
+    // and the politeness interval (engine/rate-limiter.ts, "always on" since
+    // the request-spacing slice) would only add wall-clock time to tests that
+    // exercise retry/cooldown/dedup/checkpoint behavior, none of which is
+    // about spacing — same fix already applied to the other suites that hit
+    // this (`git log`, "space requests by a politeness interval").
+    rateLimiter: new RateLimiter(0),
     retryPolicy,
     clock: new FakeClock(),
     itemSink,
@@ -421,6 +460,89 @@ describe('Scraper — 429 wait-duration composition', () => {
     const recorded = logger as RecordingLogger;
     const cooldown = recorded.events.find((event) => event.event === 'cooldown.triggered');
     expect(cooldown).toMatchObject({ level: 'warn', fields: { attempt: 1, cooldownMs: 5000 } });
+  });
+
+  it('keeps the item and its documents when a 429 persists past transientCap on ONE document — never requeues the whole unit (task 5i.10/5i.11: the S5j-disclosed item-loss defect)', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      okDiscover([{ id: 'item-A' }], new Map([['item-A', [{ id: 'doc-1' }, { id: 'doc-2' }]]])),
+    ]);
+    // transientCap is 5 (top-of-file retryPolicy): attempts 1-5 all decide
+    // 'requeue' (429 is unconditional below the cap); attempt 6 exceeds the
+    // cap and decides 'recordAndStop' regardless of outcome kind — so 6
+    // scripted 429s are needed to observe genuine exhaustion, not 5.
+    site.scriptFetch('item-A', 'doc-1', [
+      { kind: 'transient', status: 429, retryAfterMs: 3000 }, // Retry-After honoured on attempt 1
+      { kind: 'transient', status: 429, retryAfterMs: null }, // falls back to the 1000ms backoff stub
+      { kind: 'transient', status: 429, retryAfterMs: null },
+      { kind: 'transient', status: 429, retryAfterMs: null },
+      { kind: 'transient', status: 429, retryAfterMs: null },
+      { kind: 'transient', status: 429, retryAfterMs: null },
+    ]);
+    site.scriptFetch('item-A', 'doc-2', [
+      {
+        kind: 'ok',
+        value: {
+          documentId: 'doc-2',
+          byteLength: 2,
+          contentType: null,
+          fileName: 'item-A/doc-2.pdf',
+          bytes: new Uint8Array([1, 2]),
+        },
+      },
+    ]);
+
+    const { scraper, itemSink, documentSink, failureLedger, logger } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+    });
+
+    const runPromise = scraper.run(bounds);
+    await vi.advanceTimersByTimeAsync(20000); // generous: 3000 + 4x1000 = 7000ms of cooldowns
+    await runPromise;
+
+    // (a) the item is still written — never silently dropped.
+    expect(itemSink.records).toHaveLength(1);
+    expect(itemSink.records[0]?.itemId).toBe('item-A');
+    // (b) doc-1's exhausted 429 is ledgered, keyed to the right document.
+    expect(failureLedger.entries).toHaveLength(1);
+    expect(failureLedger.entries[0]).toMatchObject({ itemId: 'item-A', documentId: 'doc-1' });
+    expect(failureLedger.entries[0]?.reason).toBe('transient:429');
+    // (c) the loop continued to doc-2 — never requeued the whole item/unit.
+    expect(documentSink.writes).toEqual([
+      { path: 'item-A/doc-2.pdf', bytes: new Uint8Array([1, 2]) },
+    ]);
+    expect(site.discoverCalls).toBe(1); // discover() was never re-issued — no unit requeue happened
+
+    // The global cooldown still trips on every 429, and Retry-After still
+    // wins over the computed backoff on the attempt that carries it (D6
+    // unweakened by this fix).
+    // 5 requeue decisions (attempts 1-5, each <= transientCap) trip the
+    // cooldown; the 6th attempt exceeds transientCap and decides
+    // recordAndStop directly (decide() checks the attempt cap before the 429
+    // special-case) — six fetch attempts were made, but only five cooldowns.
+    const recorded = logger as RecordingLogger;
+    const cooldowns = recorded.events.filter((event) => event.event === 'cooldown.triggered');
+    expect(cooldowns).toHaveLength(5);
+    expect(cooldowns[0]).toMatchObject({ fields: { attempt: 1, cooldownMs: 3000 } });
+    expect(cooldowns[1]).toMatchObject({ fields: { attempt: 2, cooldownMs: 1000 } });
+  });
+
+  it('still requeues the whole unit on a discovery-level 429 — task 5i.10/5i.11 leaves this path untouched (nothing is claimed yet at discover time)', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      { kind: 'transient', status: 429, retryAfterMs: 1000 },
+      okDiscover([{ id: 'item-A' }], new Map()),
+    ]);
+
+    const { scraper, itemSink } = buildScraper({ site, traversal: new StubTraversal([unit('A')]) });
+
+    const runPromise = scraper.run(bounds);
+    await vi.advanceTimersByTimeAsync(1000);
+    await runPromise;
+
+    expect(site.discoverCalls).toBe(2); // requeued and re-discovered, exactly as before this slice
+    expect(itemSink.records).toHaveLength(1);
   });
 });
 
@@ -651,6 +773,60 @@ describe('Scraper — write ordering and crash-resume', () => {
 
     expect(documentSink.writes).toEqual([{ path: 'item-A/doc-1.pdf', bytes }]);
   });
+
+  it('retries a ledgered 429 document under the global cooldown without re-discovering its cell, resolving the ledger once it succeeds (task 5i.12)', async () => {
+    vi.useFakeTimers();
+    try {
+      const site = new ScriptedSite();
+      const bytes = new Uint8Array([7]);
+      site.scriptFetch('item-A', 'doc-1', [
+        { kind: 'transient', status: 429, retryAfterMs: 1000 },
+        {
+          kind: 'ok',
+          value: {
+            documentId: 'doc-1',
+            byteLength: 1,
+            contentType: null,
+            fileName: 'item-A/doc-1.pdf',
+            bytes,
+          },
+        },
+      ]);
+
+      const failureLedger = new MemoryFailureLedger();
+      failureLedger.entries.push({
+        itemId: 'item-A',
+        documentId: 'doc-1',
+        reason: 'transient:429',
+        observedAt: '2026-01-01T00:00:00.000Z',
+        item: { id: 'item-A' },
+        doc: { id: 'doc-1' },
+      });
+
+      const documentSink = new MemoryDocumentSink();
+      const { scraper } = buildScraper({
+        site,
+        traversal: new StubTraversal([]),
+        failureLedger,
+        documentSink,
+      });
+
+      const retryPromise = scraper.retryFailedDocuments();
+      await vi.advanceTimersByTimeAsync(1000);
+      await retryPromise;
+
+      // Never re-discovered its cell — the whole point of retry-failed.
+      expect(site.discoverCalls).toBe(0);
+      expect(site.fetchCalls).toBe(2); // the 429 attempt, then the successful retry
+      expect(documentSink.writes).toEqual([{ path: 'item-A/doc-1.pdf', bytes }]);
+      expect(failureLedger.entries.some((entry) => entry.resolved === true)).toBe(true);
+      // Never re-recorded as a second, un-resolved failure entry (the
+      // requeueOnRateLimit:false fix — task 5i.12).
+      expect(failureLedger.entries.filter((entry) => !entry.resolved)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('Scraper — document persistence (Document Persistence to Disk)', () => {
@@ -718,6 +894,59 @@ describe('Scraper — document persistence (Document Persistence to Disk)', () =
     expect(documentSink.writes).toHaveLength(0);
     expect(itemSink.records).toHaveLength(1);
     expect(failureLedger.entries).toHaveLength(1);
+  });
+});
+
+describe('Scraper — document-outcome write-back (task 5i.1/5i.2: the payload tells the truth)', () => {
+  it("writes fetchStatus:'fetched', the sink's real byteLength, and fileName back onto the item's matching document entry", async () => {
+    const site = new ScriptedSite();
+    const bytes = new Uint8Array([1, 2, 3]);
+    site.scriptFetch('item-A', 'doc-1', [
+      {
+        kind: 'ok',
+        value: {
+          documentId: 'doc-1',
+          byteLength: 999, // deliberately wrong — the write-back must use the sink's real size
+          contentType: null,
+          fileName: 'item-A/doc-1.pdf',
+          bytes,
+        },
+      },
+    ]);
+    site.scriptFetch('item-A', 'doc-2', [
+      { kind: 'permanentError', reason: 'notFound', detail: null },
+    ]);
+
+    const itemWithDocs: TestItem = {
+      id: 'item-A',
+      documents: [
+        { id: 'doc-1', fetchStatus: 'skipped', byteLength: null, fileName: null },
+        { id: 'doc-2', fetchStatus: 'skipped', byteLength: null, fileName: null },
+        { id: 'doc-3', fetchStatus: 'skipped', byteLength: null, fileName: null }, // never attempted
+      ],
+    };
+    site.scriptDiscover('A', [
+      okDiscover([itemWithDocs], new Map([['item-A', [{ id: 'doc-1' }, { id: 'doc-2' }]]])),
+    ]);
+
+    const documentSink = new MemoryDocumentSink();
+    const { scraper, itemSink } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+      documentSink,
+    });
+
+    await scraper.run(bounds);
+
+    expect(itemSink.records).toHaveLength(1);
+    const persistedDocs = itemSink.records[0]!.payload.documents;
+    expect(persistedDocs).toEqual([
+      { id: 'doc-1', fetchStatus: 'fetched', byteLength: 3, fileName: 'item-A/doc-1.pdf' },
+      { id: 'doc-2', fetchStatus: 'failed', byteLength: null, fileName: null },
+      // Never attempted — untouched, still 'skipped', proving the engine only
+      // calls withDocumentOutcome for a document it actually tried.
+      { id: 'doc-3', fetchStatus: 'skipped', byteLength: null, fileName: null },
+    ]);
   });
 });
 
