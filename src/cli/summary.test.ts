@@ -88,3 +88,12 @@ describe('printFrontierRunSummary', () => {
     expect(written.join('\n')).toContain('seeds processed: 1');
   });
 });
+
+describe('formatRunSummary unresolved items', () => {
+  it('prints unresolved rows on a separate tally line rather than folding them into complete', () => {
+    const lines = formatRunSummary([coverageRecord({ unresolvedItemCount: 2 })]);
+
+    expect(lines.join('\n')).toContain('complete: 1');
+    expect(lines.join('\n')).toContain('unresolved items: 2');
+  });
+});

@@ -8,12 +8,13 @@ import type { CoverageRecord } from '../engine/ports.js';
  * arithmetic `subdivided`-aware, this consumes it rather than re-deriving it).
  */
 export function formatRunSummary(records: readonly CoverageRecord[]): readonly string[] {
-  const { complete, truncated, failed } = summarizeRunCoverage(records);
+  const { complete, truncated, failed, unresolvedItemCount } = summarizeRunCoverage(records);
   return [
     'Run summary (measured, not certified):',
     `  complete: ${complete}`,
     `  truncated: ${truncated}`,
     `  failed: ${failed}`,
+    `  unresolved items: ${unresolvedItemCount}`,
   ];
 }
 

@@ -59,6 +59,9 @@ const REQUIREMENT_MAP: Readonly<Record<string, readonly string[]>> = {
   ],
   HttpTransport: ['core-resilience-policy: Stubbed-Transport Test Isolation'],
   DiscoverResult: ['core-scraping-engine: Two-Stage Discover-Then-Fetch Execution'],
+  UnresolvedDiscoveryItem: [
+    'core-scraping-engine: Partial Discovery Travels as Result Data, Never a New Outcome Kind',
+  ],
   StoredDocument: ['trf5-adapter: Document Persistence to Disk'],
   DocumentSink: ['trf5-adapter: Document Persistence to Disk'],
   SitePort: ['core-scraping-engine: Payload-Generic Port Contracts'],

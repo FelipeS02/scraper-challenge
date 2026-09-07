@@ -93,7 +93,12 @@ describe('summarizeRunCoverage', () => {
       ),
     ];
 
-    expect(summarizeRunCoverage(records)).toEqual({ complete: 100, truncated: 5, failed: 2 });
+    expect(summarizeRunCoverage(records)).toEqual({
+      complete: 100,
+      truncated: 5,
+      failed: 2,
+      unresolvedItemCount: 0,
+    });
   });
 
   it('excludes a subdivided parent from all three tallies, counting only its children', () => {
@@ -103,7 +108,12 @@ describe('summarizeRunCoverage', () => {
       coverageRecord({ unitKey: 'child-2', state: 'truncated' }),
     ];
 
-    expect(summarizeRunCoverage(records)).toEqual({ complete: 1, truncated: 1, failed: 0 });
+    expect(summarizeRunCoverage(records)).toEqual({
+      complete: 1,
+      truncated: 1,
+      failed: 0,
+      unresolvedItemCount: 0,
+    });
   });
 
   it('does not treat an earlier complete observation as invalidated by a later re-check', () => {
@@ -121,7 +131,7 @@ describe('summarizeRunCoverage', () => {
     const summary = summarizeRunCoverage([t1, t2]);
 
     // The run summary counts the latest observation (exactly-once cell accounting)...
-    expect(summary).toEqual({ complete: 0, truncated: 1, failed: 0 });
+    expect(summary).toEqual({ complete: 0, truncated: 1, failed: 0, unresolvedItemCount: 0 });
     // ...but the original T1 record itself is untouched and still reads `complete`.
     expect(t1.state).toBe('complete');
   });
@@ -353,5 +363,22 @@ describe('pendingDocumentFailures', () => {
     const pending = pendingDocumentFailures(entries);
     expect(pending).toHaveLength(1);
     expect(pending[0]).toMatchObject({ itemId: 'item-2', documentId: 'doc-2' });
+  });
+});
+
+describe('summarizeRunCoverage unresolved item accounting', () => {
+  it('reports unresolved rows as a separate tally across complete and subdivided cells', () => {
+    const records = [
+      coverageRecord({ unitKey: 'complete', unresolvedItemCount: 1 }),
+      coverageRecord({ unitKey: 'subdivided', state: 'subdivided', unresolvedItemCount: 2 }),
+      coverageRecord({ unitKey: 'legacy-without-count' }),
+    ];
+
+    expect(summarizeRunCoverage(records)).toEqual({
+      complete: 2,
+      truncated: 0,
+      failed: 0,
+      unresolvedItemCount: 3,
+    });
   });
 });

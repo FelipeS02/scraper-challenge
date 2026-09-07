@@ -13,9 +13,10 @@ export class JsonlCheckpointStore implements CheckpointStore {
     const { records } = readJsonlFile<CheckpointRecord>(this.filePath);
     const latest = new Map<string, CheckpointRecord>();
     for (const record of records) {
-      const existing = latest.get(record.unitKey);
+      const normalized = { ...record, unresolvedItemCount: record.unresolvedItemCount ?? 0 };
+      const existing = latest.get(normalized.unitKey);
       if (!existing || record.observedAt >= existing.observedAt) {
-        latest.set(record.unitKey, record);
+        latest.set(normalized.unitKey, normalized);
       }
     }
     return Promise.resolve(latest);

@@ -1448,3 +1448,116 @@ describe('Scraper — structured run observability (Structured Run Observability
     expect(checkpointStore.records).toHaveLength(1);
   });
 });
+
+describe('Scraper - unresolved discovery rows', () => {
+  it('emits complete coverage and checkpoint records with the unresolved count for an under-cap partial discovery', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      {
+        kind: 'ok',
+        value: {
+          items: [{ id: 'item-1' }],
+          documentsByItemId: new Map(),
+          count: 2,
+          unresolved: [{ itemId: 'process-2', reason: 'adapter-specific failure text' }],
+        },
+      },
+    ]);
+
+    const { scraper, coverageSink, checkpointStore } = buildScraper({
+      site,
+      traversal: new StubTraversal([unit('A')]),
+    });
+
+    await scraper.run(bounds);
+
+    expect(coverageSink.records).toEqual([
+      expect.objectContaining({
+        unitKey: 'A',
+        state: 'complete',
+        resultCount: 2,
+        unresolvedItemCount: 1,
+      }),
+    ]);
+    expect(checkpointStore.records).toEqual([
+      expect.objectContaining({
+        unitKey: 'A',
+        state: 'complete',
+        unresolvedItemCount: 1,
+      }),
+    ]);
+  });
+
+  it('emits subdivided coverage and checkpoint records with the unresolved count for a saturated partial discovery', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      {
+        kind: 'ok',
+        value: {
+          items: [{ id: 'item-1' }, { id: 'item-2' }, { id: 'item-3' }, { id: 'item-4' }],
+          documentsByItemId: new Map(),
+          count: 5,
+          unresolved: [{ itemId: 'process-5', reason: 'adapter-specific failure text' }],
+        },
+      },
+    ]);
+    site.scriptDiscover('A-child', [okDiscover([{ id: 'item-child' }], new Map())]);
+
+    const traversal = new StubTraversal([unit('A')]);
+    traversal.scriptSplit('A', [unit('A-child')]);
+    const { scraper, coverageSink, checkpointStore } = buildScraper({ site, traversal });
+
+    await scraper.run(bounds);
+
+    expect(coverageSink.records.find((record) => record.unitKey === 'A')).toMatchObject({
+      state: 'subdivided',
+      resultCount: 5,
+      unresolvedItemCount: 1,
+    });
+    expect(checkpointStore.records.find((record) => record.unitKey === 'A')).toMatchObject({
+      state: 'subdivided',
+      unresolvedItemCount: 1,
+    });
+  });
+
+  it('ledgers each adapter-declared row identity, preserves count-based splitting, and persists the unresolved count', async () => {
+    const site = new ScriptedSite();
+    site.scriptDiscover('A', [
+      {
+        kind: 'ok',
+        value: {
+          items: [{ id: 'item-1' }, { id: 'item-2' }, { id: 'item-3' }, { id: 'item-4' }],
+          documentsByItemId: new Map(),
+          count: 5,
+          unresolved: [{ itemId: 'process-5', reason: 'adapter-specific failure text' }],
+        },
+      },
+    ]);
+    const traversal = new StubTraversal([unit('A')]);
+    const { scraper, coverageSink, checkpointStore, failureLedger } = buildScraper({
+      site,
+      traversal,
+    });
+
+    await scraper.run(bounds);
+
+    expect(failureLedger.entries).toEqual([
+      expect.objectContaining({
+        itemId: 'process-5',
+        documentId: null,
+        reason: 'adapter-specific failure text',
+      }),
+    ]);
+    expect(traversal.splitCalls).toHaveLength(1);
+    expect(traversal.splitCalls[0]?.saturated).toEqual({ resultCount: 5, cap: 5 });
+    expect(coverageSink.records[0]).toMatchObject({
+      state: 'truncated',
+      resultCount: 5,
+      unresolvedItemCount: 1,
+    });
+    expect(checkpointStore.records[0]).toMatchObject({
+      state: 'truncated',
+      unresolvedItemCount: 1,
+    });
+  });
+});

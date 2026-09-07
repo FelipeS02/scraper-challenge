@@ -1,5 +1,6 @@
 import type { Budget } from './budget.js';
 import { classifyCellState, computeSetHash, pendingDocumentFailures } from './coverage.js';
+import { describeFailureReason } from './failure-reason.js';
 import { harvestAndPersistSeeds } from './frontier.js';
 import type { Pool } from './pool.js';
 import type {
@@ -78,24 +79,6 @@ export interface FrontierSeedHarvestConfig<TItem, TCursor> {
 type RetryOutcome<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly requeue: boolean; readonly outcome: FetchOutcome<T> };
-
-function describeOutcome(outcome: FetchOutcome<unknown>): string {
-  switch (outcome.kind) {
-    case 'transient':
-      return `transient:${outcome.status ?? 'unknown'}`;
-    case 'sessionExpired':
-      return 'sessionExpired';
-    case 'hostDefect':
-      return outcome.reason;
-    case 'permanentError':
-      // Same convention `transient:${status}` already uses: the site-agnostic
-      // reason crosses the seam alone; adapter-owned detail rides beside it,
-      // still visible to an operator reading failures.jsonl (design.md D12).
-      return outcome.detail === null ? outcome.reason : `${outcome.reason}:${outcome.detail}`;
-    case 'ok':
-      return 'ok';
-  }
-}
 
 export class Scraper<TItem, TDoc, TCursor> {
   private readonly seenItemIds = new Set<string>();
@@ -217,7 +200,7 @@ export class Scraper<TItem, TDoc, TCursor> {
         }
         await this.config.failureLedger.resolve(entry.itemId, entry.documentId);
       } else {
-        const reason = describeOutcome(result.outcome);
+        const reason = describeFailureReason(result.outcome);
         this.emit('warn', 'document.failed', {
           itemId: entry.itemId,
           documentId: entry.documentId,
@@ -247,13 +230,21 @@ export class Scraper<TItem, TDoc, TCursor> {
       await this.config.failureLedger.record({
         itemId: unit.unitKey,
         documentId: null,
-        reason: describeOutcome(discoverResult.outcome),
+        reason: describeFailureReason(discoverResult.outcome),
         observedAt: this.config.clock.now().toISOString(),
       });
       return false;
     }
 
-    const { items, documentsByItemId } = discoverResult.value;
+    const { items, documentsByItemId, unresolved = [] } = discoverResult.value;
+    for (const unresolvedItem of unresolved) {
+      await this.config.failureLedger.record({
+        itemId: unresolvedItem.itemId,
+        documentId: null,
+        reason: unresolvedItem.reason,
+        observedAt: this.config.clock.now().toISOString(),
+      });
+    }
     const cap = this.config.site.resultPageCap;
     const resultCount = discoverResult.value.count;
     // Computed here, BEFORE the items loop, so each item's own seed harvest
@@ -336,7 +327,7 @@ export class Scraper<TItem, TDoc, TCursor> {
         // so every non-ok outcome reaching this point is a genuine exhausted
         // failure, recorded to the ledger below.
         {
-          const reason = describeOutcome(docResult.outcome);
+          const reason = describeFailureReason(docResult.outcome);
           const documentId = this.config.site.documentId(doc);
           this.emit('warn', 'document.failed', { itemId, documentId, reason });
           await this.config.failureLedger.record({
@@ -405,6 +396,7 @@ export class Scraper<TItem, TDoc, TCursor> {
       label: unit.label,
       cursor: unit.cursor,
       resultCount,
+      unresolvedItemCount: unresolved.length,
       state,
       observedAt: this.config.clock.now().toISOString(),
     });
@@ -500,6 +492,7 @@ export class Scraper<TItem, TDoc, TCursor> {
       facetValue: unit.facetValue,
       state,
       resultCount: result.count,
+      unresolvedItemCount: result.unresolved?.length ?? 0,
       declaredCap: cap,
       // A site with no declared cap never saturates (design.md D11) — this
       // guard, not a bare `>=` comparison, is what keeps `null` from being

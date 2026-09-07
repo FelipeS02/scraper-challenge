@@ -35,6 +35,7 @@ export interface RunSummary {
   readonly complete: number;
   readonly truncated: number;
   readonly failed: number;
+  readonly unresolvedItemCount: number;
 }
 
 /**
@@ -55,7 +56,9 @@ export function summarizeRunCoverage(records: readonly CoverageRecord[]): RunSum
   let complete = 0;
   let truncated = 0;
   let failed = 0;
+  let unresolvedItemCount = 0;
   for (const record of latestByUnit.values()) {
+    unresolvedItemCount += record.unresolvedItemCount ?? 0;
     // `subdivided` is not a coverage gap and not a terminal state of its own —
     // its real coverage is carried forward by its own children's records, so
     // it contributes to none of the three tallies (core-coverage-accounting,
@@ -65,7 +68,7 @@ export function summarizeRunCoverage(records: readonly CoverageRecord[]): RunSum
     else if (record.state === 'truncated') truncated += 1;
     else if (record.state === 'failed') failed += 1;
   }
-  return { complete, truncated, failed };
+  return { complete, truncated, failed, unresolvedItemCount };
 }
 
 export interface PartitionInvariantResult {

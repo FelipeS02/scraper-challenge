@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -86,5 +86,23 @@ describe('JsonlCheckpointStore', () => {
 
     expect(loaded.size).toBe(1);
     expect(loaded.get('unit-1')?.state).toBe('complete');
+  });
+  it('normalizes a legacy checkpoint without unresolvedItemCount to zero', async () => {
+    const store = new JsonlCheckpointStore(filePath);
+    const legacy = {
+      unitKey: 'legacy-unit',
+      windowKey: '2026-01-01',
+      facetValue: null,
+      label: 'legacy',
+      cursor: { day: '2026-01-01' },
+      resultCount: 1,
+      state: 'complete',
+      observedAt: '2026-01-01T00:00:00.000Z',
+    };
+    writeFileSync(filePath, `${JSON.stringify(legacy)}\n`);
+
+    const loaded = await store.load();
+
+    expect(loaded.get('legacy-unit')?.unresolvedItemCount).toBe(0);
   });
 });
