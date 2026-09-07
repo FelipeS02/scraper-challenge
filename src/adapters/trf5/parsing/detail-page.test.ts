@@ -4,7 +4,9 @@ import {
   extractDocumentGridPager,
   parseDetailPage,
   parseDocumentGridPage,
+  parseDocumentType,
   parseOccurredAt,
+  parsePartyLine,
   summarizeDocumentsGrid,
 } from './detail-page.js';
 
@@ -45,14 +47,16 @@ describe('parseDetailPage — parties (trf5-adapter spec, party + nested ADVOGAD
   it('extracts active/passive/others parties from the real flat sibling-row structure with name/CPF/role/status and a following lawyer row', () => {
     const detail = parseDetailPage(loadFixtureBytes('detail-page-valid.html'));
 
-    // The active party is CNPJ-identified (a federal agency), a real data
-    // shape PARTY_LINE does not match (disclosed follow-up, apply-progress.md):
-    // it falls through with the whole line as name, cpf null, role UNKNOWN.
+    // The active party is CNPJ-identified (a legal entity, e.g. a federal
+    // agency). The role lives in the trailing parenthesis regardless of which
+    // identifier the line carries, so it is read independently of CPF/CNPJ
+    // rather than only on the CPF path (see parsePartyLine).
     expect(detail.parties.active).toEqual([
       {
-        name: 'PESSOA JURIDICA SINTETICA UM - CNPJ: 00.000.000/0001-00 (REQUERENTE)',
+        name: 'PESSOA JURIDICA SINTETICA UM',
         cpf: null,
-        role: 'UNKNOWN',
+        cnpj: '00.000.000/0001-00',
+        role: 'REQUERENTE',
         status: 'Ativo',
         lawyers: [],
       },
@@ -61,6 +65,7 @@ describe('parseDetailPage — parties (trf5-adapter spec, party + nested ADVOGAD
       {
         name: 'PARTE SINTETICA DOIS',
         cpf: '000.000.000-00',
+        cnpj: null,
         role: 'EXECUTADO',
         status: 'Ativo',
         lawyers: [
@@ -77,6 +82,58 @@ describe('parseDetailPage — parties (trf5-adapter spec, party + nested ADVOGAD
     // structure — `<div id="...processoParteOutrosInteressadosResumidoDiv">
     // </div>`, no nested table), so selecting it must yield [] rather than throw.
     expect(detail.parties.others).toEqual([]);
+  });
+});
+
+describe('parsePartyLine — role comes from the trailing parenthesis, identifier from what precedes it', () => {
+  it('reads role and CNPJ from a legal-entity line', () => {
+    expect(parsePartyLine('PEDREIRA SAO JOSE LTDA - CNPJ: 12.019.556/0001-09 (APELADO)')).toEqual({
+      name: 'PEDREIRA SAO JOSE LTDA',
+      cpf: null,
+      cnpj: '12.019.556/0001-09',
+      role: 'APELADO',
+    });
+  });
+
+  it('reads role and CPF from a natural-person line', () => {
+    expect(parsePartyLine('YOKIARA CUNHA DE ANDRADE - CPF: 992.188.365-87 (APELANTE)')).toEqual({
+      name: 'YOKIARA CUNHA DE ANDRADE',
+      cpf: '992.188.365-87',
+      cnpj: null,
+      role: 'APELANTE',
+    });
+  });
+
+  it('keeps the role when the line carries no identifier at all', () => {
+    expect(parsePartyLine('MINISTERIO PUBLICO FEDERAL (FISCAL DA LEI)')).toEqual({
+      name: 'MINISTERIO PUBLICO FEDERAL',
+      cpf: null,
+      cnpj: null,
+      role: 'FISCAL DA LEI',
+    });
+  });
+
+  it('falls back to UNKNOWN rather than guessing when no trailing parenthesis is rendered', () => {
+    expect(parsePartyLine('PARTE SEM PAPEL DECLARADO')).toEqual({
+      name: 'PARTE SEM PAPEL DECLARADO',
+      cpf: null,
+      cnpj: null,
+      role: 'UNKNOWN',
+    });
+  });
+});
+
+describe('parseDocumentType — trailing parenthesis of a document label', () => {
+  it('extracts the type from a label whose title itself contains hyphens and digits', () => {
+    expect(
+      parseDocumentType(
+        '09/06/2025 16:41:49 - Despacho Inspeção - 2188 - INSPEÇÃO GERAL ORDINÁRIA - 2025 (Despacho)',
+      ),
+    ).toBe('Despacho');
+  });
+
+  it('stays null when the label renders no trailing parenthesis', () => {
+    expect(parseDocumentType('01/09/2026 16:57:41 - Decisão')).toBeNull();
   });
 });
 
@@ -135,6 +192,10 @@ describe('parseDetailPage — documents (legacy idBin-redirect rows, plus born-d
       binId: '6799913',
       documentHash: 'ca6635b5e2ee62df470430feb7a20bc574c3db40',
       label: expect.stringContaining('Despacho') as string,
+      // The grid renders "<date> - <title> (<type>)"; the trailing parenthesis
+      // is the document type, lifted into its own field while `label` stays
+      // the verbatim rendered text.
+      documentType: 'Despacho',
       downloadUrl: expect.stringContaining('idProcessoDocumento=6884863') as string,
       fileName: null,
       contentType: null,

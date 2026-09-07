@@ -22,6 +22,7 @@ const lawyerSchema = z.object({
 const partySchema = z.object({
   name: z.string(),
   cpf: z.string().nullable(),
+  cnpj: z.string().nullable(),
   role: z.string(),
   status: z.string().nullable(),
   lawyers: z.array(lawyerSchema),
@@ -42,6 +43,7 @@ const documentSchema = z.object({
   binId: z.string().nullable(),
   documentHash: z.string().nullable(),
   label: z.string(),
+  documentType: z.string().nullable(),
   downloadUrl: z.string().nullable(),
   fileName: z.string().nullable(),
   contentType: z.string().nullable(),

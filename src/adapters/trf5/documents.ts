@@ -56,8 +56,23 @@ const PARENT_DIR_REFERENCE = '..';
  * component. Sanitizes per character rather than rejecting the whole
  * candidate for one unsafe character (task 5i.6).
  */
+/**
+ * The grid renders every label as "<date> - <title> (<type>)", and the type is
+ * now carried by `DocumentRow.documentType` in its own right. Leaving it in
+ * the slug too produced filenames that said it twice
+ * ("...-despacho-despacho.pdf"), so the trailing parenthesis is dropped before
+ * sluggifying. A label consisting of NOTHING but the type keeps it — a file
+ * named after its type beats a file named after nothing.
+ */
+const TRAILING_TYPE = /\s*\([^()]*\)\s*$/;
+
+function withoutTrailingType(label: string): string {
+  const stripped = label.replace(TRAILING_TYPE, '').trim();
+  return stripped.length > 0 ? stripped : label;
+}
+
 function deriveSlug(label: string): string | null {
-  const folded = foldAccents(label).toLowerCase();
+  const folded = foldAccents(withoutTrailingType(label)).toLowerCase();
   const sanitized = folded
     .replace(UNSAFE_RUN, '-')
     .replace(REPEATED_SEPARATOR, '-')

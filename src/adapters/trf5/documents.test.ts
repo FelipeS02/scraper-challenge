@@ -12,7 +12,8 @@ function documentRow(overrides: Partial<DocumentRow> = {}): DocumentRow {
     documentId: '12452668',
     binId: '12196568',
     documentHash: 'sha1hash0002',
-    label: 'Decisão',
+    label: 'Decisão (Decisão)',
+    documentType: 'Decisão',
     downloadUrl:
       '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam' +
       '?idBin=12196568&numeroDocumento=sha1hash0002&nomeArqProcDocBin=Decis%E3o' +
@@ -48,6 +49,29 @@ describe('buildDocumentPath — Stable Document Filename Derivation (trf5-adapte
       buildDocumentPath(PROCESS_NUMBER, documentId, 'Decisão'),
     );
     expect(new Set(paths).size).toBe(3);
+  });
+
+  it('drops the label trailing type parenthesis so the type is not repeated in the filename', () => {
+    const path = buildDocumentPath(
+      PROCESS_NUMBER,
+      '12042858',
+      '09/06/2026 14:45:37 - Despacho (Despacho)',
+    );
+    expect(path).toBe(`${PROCESS_NUMBER}/12042858-09-06-2026-14-45-37-despacho.pdf`);
+  });
+
+  it('keeps a descriptive title that merely happens to end in a parenthesis-free type word', () => {
+    const path = buildDocumentPath(
+      PROCESS_NUMBER,
+      '12028346',
+      '13/04/2026 18:49:14 - Despacho Inspeção - 2152 (Despacho)',
+    );
+    expect(path).toBe(`${PROCESS_NUMBER}/12028346-13-04-2026-18-49-14-despacho-inspecao-2152.pdf`);
+  });
+
+  it('falls back to the whole label when stripping the type would leave nothing to name the file', () => {
+    const path = buildDocumentPath(PROCESS_NUMBER, '12452668', '(Sentença)');
+    expect(path).toBe(`${PROCESS_NUMBER}/12452668-sentenca.pdf`);
   });
 
   it('discards a hostile label and degrades to <processNumber>/<idProcessoDocumento>.pdf', () => {

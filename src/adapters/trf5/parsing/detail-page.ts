@@ -30,6 +30,8 @@ export interface Lawyer {
 export interface Party {
   readonly name: string;
   readonly cpf: string | null;
+  /** Set for a legal entity (`- CNPJ: ...`); `null` for a natural person (D9). */
+  readonly cnpj: string | null;
   readonly role: string;
   readonly status: string | null;
   readonly lawyers: readonly Lawyer[];
@@ -98,6 +100,13 @@ export interface DocumentRow {
   readonly binId: string | null;
   readonly documentHash: string | null;
   readonly label: string;
+  /**
+   * The document's own type, rendered as the label's trailing parenthesis
+   * ("... - Despacho Inspeção - 2188 - ... (Despacho)"). Derived, never
+   * destructive: `label` keeps the verbatim rendered text. `null` when the
+   * grid renders no such parenthesis, rather than a guess from the title.
+   */
+  readonly documentType: string | null;
   readonly downloadUrl: string | null;
   // Populated by S4b's fetch stage; enumeration-only here.
   readonly fileName: string | null;
@@ -259,7 +268,17 @@ function parseSubjects(text: string): readonly LabeledCode[] {
   return trimmed.split(/\s+-\s+/).map(parseLabeledCode);
 }
 
-const PARTY_LINE = /^(.+?)\s*-\s*CPF:\s*([\d.-]+)\s*\(([^)]+)\)$/;
+/**
+ * A party line renders as `<name>[ - <CPF|CNPJ>: <id>] (<ROLE>)`. The role is
+ * always the trailing parenthesis and is therefore read FIRST, independently
+ * of which identifier — if any — precedes it. Before this, a single regex
+ * required `- CPF:` to be present, so every CNPJ-identified legal entity fell
+ * through to `role: 'UNKNOWN'` with the identifier and role left glued inside
+ * `name` (observed live 2026-09-06 across a 10-day run: INSS, MPF, and every
+ * other company party).
+ */
+const PARTY_ROLE = /^(.*?)\s*\(([^()]+)\)$/;
+const PARTY_IDENTIFIER = /^(.+?)\s*-\s*(CPF|CNPJ):\s*([\d./-]+)$/;
 const LAWYER_LINE = /^(.+?)\s*-\s*OAB\s+([A-Z]{2})([\w-]+)\s*-\s*CPF:\s*([\d.-]+)\s*\(ADVOGADO\)$/;
 
 function parseLawyerLine(line: string): Lawyer {
@@ -269,17 +288,28 @@ function parseLawyerLine(line: string): Lawyer {
 }
 
 /**
- * A party (bold-face line) that does not match `CPF:` — a CNPJ-identified
- * legal entity, e.g. a federal agency (observed live 2026-09-05) — falls
- * through with the whole line as name, `cpf: null`, `role: 'UNKNOWN'`.
- * Disclosed follow-up (apply-progress.md); not fixed in this slice — no task
- * asked for a CNPJ-carrying schema, and the party is still recorded, never
- * dropped.
+ * Splits a party line into role, identifier and name, in that order of
+ * confidence. A line rendering no trailing parenthesis keeps `role:
+ * 'UNKNOWN'` — an honest "not stated by the page", never a guess — and a line
+ * carrying no recognized identifier keeps both `cpf` and `cnpj` at `null`
+ * (D9) with the remaining text as the name, so a party is recorded in full
+ * even when only part of its line is understood. Exported for direct coverage
+ * of those fallback branches, the precedent {@link parseOccurredAt} sets.
  */
-function parsePartyLine(line: string): Omit<Party, 'status' | 'lawyers'> {
-  const match = PARTY_LINE.exec(line);
-  if (!match) return { name: line, cpf: null, role: 'UNKNOWN' };
-  return { name: match[1]!.trim(), cpf: match[2]!, role: match[3]! };
+export function parsePartyLine(line: string): Omit<Party, 'status' | 'lawyers'> {
+  const roleMatch = PARTY_ROLE.exec(line);
+  const role = roleMatch ? roleMatch[2]!.trim() : 'UNKNOWN';
+  const head = roleMatch ? roleMatch[1]!.trim() : line.trim();
+
+  const idMatch = PARTY_IDENTIFIER.exec(head);
+  if (!idMatch) return { name: head, cpf: null, cnpj: null, role };
+  const identifier = idMatch[3]!;
+  return {
+    name: idMatch[1]!.trim(),
+    cpf: idMatch[2] === 'CPF' ? identifier : null,
+    cnpj: idMatch[2] === 'CNPJ' ? identifier : null,
+    role,
+  };
 }
 
 /**
@@ -375,6 +405,18 @@ const BORN_DIGITAL_VIEWER_URL = /openPopUp\([^,]*,\s*'([^']+)'\)/;
  * that viewer URL (the fetch entry point, never the final PDF location);
  * `binId` stays `null` (D9) since there is no legacy `idBin=` for this shape.
  */
+const DOCUMENT_TYPE = /\(([^()]+)\)\s*$/;
+
+/**
+ * Reads {@link DocumentRow.documentType} off a rendered label. Anchored at the
+ * end so a title carrying its own parentheses mid-string cannot be mistaken
+ * for the type, and `null` when there is no trailing parenthesis at all.
+ */
+export function parseDocumentType(label: string): string | null {
+  const match = DOCUMENT_TYPE.exec(label.trim());
+  return match ? match[1]!.trim() : null;
+}
+
 function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
   const documents: DocumentRow[] = [];
   bySuffixId($, 'processoDocumentoGridTab')
@@ -385,12 +427,14 @@ function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
       if (legacyAnchor.length > 0) {
         const href = legacyAnchor.attr('href') ?? '';
         const url = new URL(href, 'stub://pjeconsulta');
+        const label = legacyAnchor.text().trim();
         documents.push({
           documentKind: 'legacy',
           documentId: url.searchParams.get('idProcessoDocumento') ?? '',
           binId: url.searchParams.get('idBin'),
           documentHash: url.searchParams.get('numeroDocumento'),
-          label: legacyAnchor.text().trim(),
+          label,
+          documentType: parseDocumentType(label),
           downloadUrl: href,
           fileName: null,
           contentType: null,
@@ -434,6 +478,7 @@ function extractDocuments($: cheerio.CheerioAPI): readonly DocumentRow[] {
         binId: null,
         documentHash: null,
         label: found.label,
+        documentType: parseDocumentType(found.label),
         downloadUrl: found.viewerUrl,
         fileName: null,
         contentType: null,

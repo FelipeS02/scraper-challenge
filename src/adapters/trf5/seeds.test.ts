@@ -40,7 +40,7 @@ describe('TRF5Seeds.harvestSeeds (core-frontier-crawl, "Seed Harvesting and Prio
     const payload: TrfPayload = {
       ...loadFixturePayload(),
       parties: {
-        active: [{ name: 'A', cpf: null, role: 'AUTOR', status: null, lawyers: [] }],
+        active: [{ name: 'A', cpf: null, cnpj: null, role: 'AUTOR', status: null, lawyers: [] }],
         passive: [],
         others: [],
       },
@@ -55,8 +55,22 @@ describe('TRF5Seeds.harvestSeeds (core-frontier-crawl, "Seed Harvesting and Prio
       ...loadFixturePayload(),
       parties: {
         active: [
-          { name: 'A', cpf: '111.111.111-11', role: 'AUTOR', status: null, lawyers: [] },
-          { name: 'B', cpf: '111.111.111-11', role: 'AUTOR', status: null, lawyers: [] },
+          {
+            name: 'A',
+            cpf: '111.111.111-11',
+            cnpj: null,
+            role: 'AUTOR',
+            status: null,
+            lawyers: [],
+          },
+          {
+            name: 'B',
+            cpf: '111.111.111-11',
+            cnpj: null,
+            role: 'AUTOR',
+            status: null,
+            lawyers: [],
+          },
         ],
         passive: [],
         others: [],
