@@ -220,7 +220,16 @@ export class Scraper<TItem, TDoc, TCursor> {
 
   /** Returns `true` when the unit must be requeued (429 cooldown owns the wait). */
   private async processUnit(unit: WorkUnit<TCursor>, queue: WorkUnit<TCursor>[]): Promise<boolean> {
-    this.emit('info', 'unit.started', { unitKey: unit.unitKey, windowKey: unit.windowKey });
+    // `depth` is the probe level this unit sits at: 0 is a seed window, each
+    // increment one subdivision the adapter chose (date bisection, then class,
+    // then name substring for TRF5). Emitted so a console reader can see the
+    // run descend into a saturated cell instead of only seeing more unit keys.
+    this.emit('info', 'unit.started', {
+      unitKey: unit.unitKey,
+      windowKey: unit.windowKey,
+      depth: this.splitDepth.get(unit.unitKey) ?? 0,
+      label: unit.label,
+    });
 
     this.config.budget.recordRequest();
     const discoverResult = await this.runWithRetry(() => this.config.site.discover(unit));
@@ -441,7 +450,14 @@ export class Scraper<TItem, TDoc, TCursor> {
       const decision = decide(outcome, attempt, this.config.retryPolicy);
       switch (decision.action) {
         case 'retryAfter':
-          this.emit('warn', 'fetch.retry', { attempt, delayMs: decision.delayMs });
+          this.emit('warn', 'fetch.retry', {
+            attempt,
+            delayMs: decision.delayMs,
+            // Which failure was absorbed — a 429, a 5xx, or a host defect —
+            // rather than only that SOMETHING was retried. Reuses the ledger's
+            // own vocabulary so console and ledger never disagree.
+            reason: describeFailureReason(outcome),
+          });
           await this.config.clock.sleep(decision.delayMs);
           attempt += 1;
           continue;
@@ -453,7 +469,11 @@ export class Scraper<TItem, TDoc, TCursor> {
         case 'requeue': {
           const retryAfterMs = outcome.kind === 'transient' ? outcome.retryAfterMs : null;
           const cooldownMs = retryAfterMs ?? this.config.retryPolicy.backoff(attempt);
-          this.emit('warn', 'cooldown.triggered', { attempt, cooldownMs });
+          this.emit('warn', 'cooldown.triggered', {
+            attempt,
+            cooldownMs,
+            reason: describeFailureReason(outcome),
+          });
           this.config.rateLimiter.tripCooldown(cooldownMs);
           if (requeueOnRateLimit) return { ok: false, requeue: true, outcome };
           attempt += 1;
