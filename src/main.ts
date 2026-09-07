@@ -125,6 +125,11 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
     transport: deps.transport,
     primingUrl: PRIMING_URL,
     harvester: nameHarvester,
+    rowRetry: {
+      cap: RETRY_POLICY.hostDefectCap,
+      backoff: RETRY_POLICY.backoff,
+      sleep: (delayMs) => deps.clock.sleep(delayMs),
+    },
   });
   const maxNameProbes = args.command === 'scrape' ? args.maxNameProbes : 0;
   const traversal = new TRF5Traversal({

@@ -1,4 +1,5 @@
 import { classifyHttpStatus } from '../../engine/http-status.js';
+import { describeFailureReason } from '../../engine/failure-reason.js';
 import type {
   DiscoverResult,
   DocumentFetchOutcome,
@@ -54,6 +55,29 @@ export interface TRF5SiteConfig {
    * harvester so a caller that never wires one still runs unaffected.
    */
   readonly harvester?: NameHarvester;
+  /** Per-row recovery uses the same cap/backoff selected for host defects by composition. */
+  readonly rowRetry?: {
+    readonly cap: number;
+    readonly backoff: (attempt: number) => number;
+    readonly sleep: (ms: number) => Promise<void>;
+  };
+}
+
+const DEFAULT_ROW_RETRY = {
+  cap: 2,
+  backoff: () => 0,
+  sleep: () => Promise.resolve(),
+};
+const MAX_UNRESOLVED_REASON_LENGTH = 256;
+
+function sanitizeUnresolvedReason(outcome: FetchOutcome<unknown>): string {
+  const text = `${outcome.kind}:${describeFailureReason(outcome)}`;
+  const printableText = Array.from(text, (character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127 ? ' ' : character;
+  }).join('');
+
+  return printableText.replace(/\s+/g, ' ').trim().slice(0, MAX_UNRESOLVED_REASON_LENGTH);
 }
 
 /**
@@ -70,9 +94,11 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
 
   private session: SessionState | null = null;
   private readonly harvester: NameHarvester;
+  private readonly rowRetry: NonNullable<TRF5SiteConfig['rowRetry']>;
 
   constructor(private readonly config: TRF5SiteConfig) {
     this.harvester = config.harvester ?? new NameHarvester();
+    this.rowRetry = config.rowRetry ?? DEFAULT_ROW_RETRY;
   }
 
   itemId(item: TrfPayload): string {
@@ -159,20 +185,34 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
     }
 
     const items: TrfPayload[] = [];
+    const unresolved: { itemId: string; reason: string }[] = [];
     const documentsByItemId = new Map<string, readonly DocumentRow[]>();
 
     for (const row of fragment.rows) {
-      const detailOutcome = await fetchDetail(
-        this.config.transport,
-        this.config.primingUrl,
-        this.session,
-        row.ca,
-      );
-      // A single row's detail-fetch failure fails the whole discover() call
-      // rather than silently dropping the row: `fetchDetail` already ran the
-      // full validity chain, so this is never a re-invented classification,
-      // only a pass-through of an outcome the chain already produced (D12).
-      if (detailOutcome.kind !== 'ok') return detailOutcome;
+      let attempt = 0;
+      let detailOutcome: FetchOutcome<TrfPayload>;
+      for (;;) {
+        detailOutcome = await fetchDetail(
+          this.config.transport,
+          this.config.primingUrl,
+          this.session,
+          row.ca,
+        );
+        if (detailOutcome.kind === 'ok') break;
+        if (detailOutcome.kind !== 'hostDefect' && detailOutcome.kind !== 'permanentError') {
+          return detailOutcome;
+        }
+        if (attempt >= this.rowRetry.cap) {
+          unresolved.push({
+            itemId: row.processNumber,
+            reason: sanitizeUnresolvedReason(detailOutcome),
+          });
+          break;
+        }
+        attempt += 1;
+        await this.rowRetry.sleep(this.rowRetry.backoff(attempt));
+      }
+      if (detailOutcome.kind !== 'ok') continue;
       const payload = detailOutcome.value;
       items.push(payload);
       // Every document reaches the engine's fetch loop (design.md D14, S5j):
@@ -182,7 +222,15 @@ export class TRF5Site implements SitePort<TrfPayload, DocumentRow> {
       documentsByItemId.set(payload.processNumber, payload.documents);
     }
 
-    return { kind: 'ok', value: { items, documentsByItemId, count: fragment.count } };
+    return {
+      kind: 'ok',
+      value: {
+        items,
+        documentsByItemId,
+        count: fragment.count,
+        ...(unresolved.length ? { unresolved } : {}),
+      },
+    };
   }
 
   fetchDocument(item: TrfPayload, doc: DocumentRow): Promise<FetchOutcome<StoredDocument>> {

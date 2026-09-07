@@ -27,7 +27,8 @@ function documentRow(overrides: Partial<DocumentRow> = {}): DocumentRow {
     documentId: '12452668',
     binId: '12196568',
     documentHash: 'sha1hash0002',
-    label: 'Decisao',
+    label: 'Decisao (Decisao)',
+    documentType: 'Decisao',
     downloadUrl:
       '/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam' +
       '?idBin=12196568&numeroDocumento=sha1hash0002&nomeArqProcDocBin=Decisao' +
@@ -177,22 +178,106 @@ describe('TRF5Site.discover — D12 site-agnostic failure vocabulary (trf5-adapt
     expect(outcome.kind).toBe('hostDefect');
   });
 
-  it('propagates a per-row detail-fetch failure as the already-classified outcome, never re-inventing one', async () => {
+  it('keeps an exhausted per-row invalid-token failure as unresolved data, never re-inventing its classification', async () => {
     const transport = new StubTransport([
       fixtureResponse(200, 'text/html', 'priming-page-1.html'),
       searchFragment(1),
+      fixtureResponse(200, 'text/html', 'detail-page-invalid-token.html'),
+      fixtureResponse(200, 'text/html', 'detail-page-invalid-token.html'),
       fixtureResponse(200, 'text/html', 'detail-page-invalid-token.html'),
     ]);
     const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
 
     const outcome = await site.discover(unit());
 
-    expect(outcome).toEqual({
-      kind: 'permanentError',
-      reason: 'invalidReference',
-      detail: 'invalidTokenShell',
+    expect(outcome).toMatchObject({
+      kind: 'ok',
+      value: {
+        unresolved: [
+          {
+            itemId: '0000001-00.2026.4.05.8300',
+            reason: 'permanentError:invalidReference:invalidTokenShell',
+          },
+        ],
+      },
     });
   });
+});
+
+describe('TRF5Site.discover — bounded per-row tolerance', () => {
+  it('keeps 29 resolved rows, retries one broken detail row, and reports its process number with a bounded reason', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      searchFragment(resultPageCap),
+      ...Array.from({ length: resultPageCap - 1 }, () =>
+        fixtureResponse(200, 'text/html', 'detail-page-valid.html'),
+      ),
+      fixtureResponse(200, 'text/html', 'host-defect.html'),
+      fixtureResponse(200, 'text/html', 'host-defect.html'),
+      fixtureResponse(200, 'text/html', 'host-defect.html'),
+    ]);
+    const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+    const outcome = await site.discover(unit());
+
+    expect(outcome.kind).toBe('ok');
+    if (outcome.kind !== 'ok') return;
+    expect(outcome.value).toMatchObject({ count: resultPageCap });
+    expect(outcome.value.items).toHaveLength(resultPageCap - 1);
+    expect(outcome.value.unresolved).toHaveLength(1);
+    const unresolved = outcome.value.unresolved?.[0];
+    expect(unresolved?.itemId).toBe('0000030-00.2026.4.05.8300');
+    expect(unresolved?.reason).toMatch(/^hostDefect:/);
+    expect(unresolved?.reason.length).toBeLessThanOrEqual(256);
+    expect(unresolved?.reason).not.toMatch(/[\r\n\t]/);
+    expect(transport.requests).toHaveLength(2 + (resultPageCap - 1) + 3);
+  });
+
+  it.each([
+    ['hostDefect', 'host-defect.html'],
+    ['permanentError', 'detail-page-invalid-token.html'],
+  ])(
+    'retries exhausted %s detail outcomes through the configured row budget',
+    async (_kind, fixture) => {
+      const transport = new StubTransport([
+        fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+        searchFragment(1),
+        fixtureResponse(200, 'text/html', fixture),
+        fixtureResponse(200, 'text/html', fixture),
+        fixtureResponse(200, 'text/html', fixture),
+      ]);
+      const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+      const outcome = await site.discover(unit());
+
+      expect(outcome.kind).toBe('ok');
+      if (outcome.kind !== 'ok') return;
+      expect(outcome.value.items).toEqual([]);
+      expect(outcome.value.unresolved).toHaveLength(1);
+      expect(transport.requests).toHaveLength(5);
+    },
+  );
+
+  it.each([
+    ['sessionExpired', fixtureResponse(200, 'text/xml', 'session-expired.xml')],
+    ['transient', { status: 503, headers: {}, body: new Uint8Array() }],
+  ] as const)(
+    'immediately aborts the row set for a per-row %s outcome',
+    async (kind, detailResponse) => {
+      const transport = new StubTransport([
+        fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+        searchFragment(2),
+        detailResponse,
+        fixtureResponse(200, 'text/html', 'detail-page-valid.html'),
+      ]);
+      const site = new TRF5Site({ transport, primingUrl: PRIMING_URL });
+
+      const outcome = await site.discover(unit());
+
+      expect(outcome.kind).toBe(kind);
+      expect(transport.requests).toHaveLength(3);
+    },
+  );
 });
 
 describe('TRF5Site.discover — 429 precedence over content classification (S5g, core-resilience-policy)', () => {

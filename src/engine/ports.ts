@@ -27,6 +27,14 @@ export interface DiscoverResult<TItem, TDoc> {
   readonly items: readonly TItem[];
   readonly documentsByItemId: ReadonlyMap<string, readonly TDoc[]>;
   readonly count: number;
+  /** Adapter-declared rows that could not be resolved while discovery still succeeded. */
+  readonly unresolved?: readonly UnresolvedDiscoveryItem[];
+}
+
+/** Opaque adapter-declared identity and sanitized reason for one unresolved discovery row. */
+export interface UnresolvedDiscoveryItem {
+  readonly itemId: string;
+  readonly reason: string;
 }
 
 export interface StoredDocument {
@@ -142,6 +150,8 @@ export interface CheckpointRecord {
   // persisted checkpoint on resume, instead of fabricating it from the
   // declared cap (design.md D10, "Re-split inputs").
   readonly resultCount: number;
+  /** Rows unresolved during this cell's otherwise successful discovery. */
+  readonly unresolvedItemCount?: number;
   readonly state: 'complete' | 'truncated' | 'failed' | 'subdivided';
   readonly observedAt: string;
 }
@@ -152,7 +162,8 @@ export interface CheckpointStore {
 }
 
 export interface LedgerEntry {
-  readonly itemId: string; // for a discovery-stage failure, the unit's `unitKey` (no item was ever produced)
+  /** A discovery-stage entry uses the row identity when the adapter supplied it, else the unit key. */
+  readonly itemId: string;
   readonly documentId: string | null; // null for a discovery-stage failure
   readonly reason: string;
   readonly observedAt: string;
@@ -192,6 +203,8 @@ export interface CoverageRecord {
   readonly facetValue: string | null;
   readonly state: 'complete' | 'truncated' | 'failed' | 'subdivided';
   readonly resultCount: number;
+  /** Rows unresolved during this cell's otherwise successful discovery. */
+  readonly unresolvedItemCount?: number;
   readonly declaredCap: number | null;
   readonly saturated: boolean;
   readonly itemSetHash: string;
