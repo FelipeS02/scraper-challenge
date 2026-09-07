@@ -61,6 +61,18 @@ function addDays(day: string, amount: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Levels 1 and 2. Every unit declares its dimensions from the date layer up —
+ * date alone before class expansion, date + class after it. Date is the first
+ * partition layer this adapter ever applies, so a unit that has not descended
+ * any further still says WHAT it partitioned on, instead of leaving an empty
+ * bag that makes its coverage record less analyzable than a deeper one's
+ * (observed on a live run: 23 of 53 records carried `dimensions: {}`).
+ *
+ * A single-day window declares the bare day rather than a collapsed
+ * `day..day` range, so `date` carries the same shape here as it does in
+ * {@link nameProbeUnit} and a consumer can group across levels on one key.
+ */
 function windowUnit(
   dateFrom: string,
   dateTo: string,
@@ -75,6 +87,10 @@ function windowUnit(
     facetValue,
     label: windowKey,
     cursor: seedCpf === undefined ? { dateFrom, dateTo } : { dateFrom, dateTo, seedCpf },
+    dimensions: {
+      date: dateFrom === dateTo ? dateFrom : windowKey,
+      ...(facetValue === null ? {} : { class: facetValue }),
+    },
   };
 }
 

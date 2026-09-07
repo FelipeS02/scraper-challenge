@@ -20,6 +20,12 @@ function unit(
     facetValue,
     label: windowKey,
     cursor: { dateFrom, dateTo },
+    // Mirrors windowUnit's own dimensions so the equality assertions below
+    // keep comparing whole units, never a unit against a stale shape.
+    dimensions: {
+      date: dateFrom === dateTo ? dateFrom : windowKey,
+      ...(facetValue === null ? {} : { class: facetValue }),
+    },
   };
 }
 
@@ -34,7 +40,7 @@ describe('TRF5Traversal — declared facet', () => {
 describe('TRF5Traversal — the class catalogue is fetched per run, never hardcoded', () => {
   it('expands a saturated single day into one unit per fetched class, bounded by maxFacetValues', async () => {
     const transport = new StubTransport([
-      fixtureResponse(200, 'text/xml', 'classes-catalogue.xml'),
+      fixtureResponse(200, 'text/xml;charset=UTF-8', 'classes-catalogue.xml'),
     ]);
     const traversal = new TRF5Traversal({ transport, session });
 
@@ -42,20 +48,20 @@ describe('TRF5Traversal — the class catalogue is fetched per run, never hardco
     const children = await traversal.split(unit('2026-09-01', '2026-09-01', null), saturated);
 
     expect(transport.requests).toHaveLength(1); // fetched over the wire, not a static array
-    expect(children).toHaveLength(6); // the fixture's own count — asserting a fetch, not the literal 132
-    expect((children ?? []).map((child) => child.facetValue)).toEqual([
-      'ACAO CIVIL COLETIVA',
-      'APELACAO CIVEL', // CNJ code (198) is parsed out of the label, not left inline
-      'HABEAS CORPUS CRIMINAL',
-      'MANDADO DE SEGURANCA CIVEL',
-      'EMBARGOS DE DECLARACAO',
-      'TUTELA CAUTELAR ANTECEDENTE',
+    // maxFacetValues, not the catalogue's own size: the real captured fixture
+    // carries all 132 classes the endpoint returns, so this asserts the bound
+    // is applied to a real fetch rather than asserting a fixture's length.
+    expect(children).toHaveLength(10);
+    expect((children ?? []).slice(0, 3).map((child) => child.facetValue)).toEqual([
+      'AÇÃO CIVIL COLETIVA',
+      'AÇÃO CIVIL DE IMPROBIDADE ADMINISTRATIVA',
+      'AÇÃO CIVIL PÚBLICA CÍVEL',
     ]);
   });
 
   it('caps facet expansion at the run-declared maxFacetValues', async () => {
     const transport = new StubTransport([
-      fixtureResponse(200, 'text/xml', 'classes-catalogue.xml'),
+      fixtureResponse(200, 'text/xml;charset=UTF-8', 'classes-catalogue.xml'),
     ]);
     const traversal = new TRF5Traversal({ transport, session });
 
@@ -77,6 +83,52 @@ describe('TRF5Traversal — the class catalogue is fetched per run, never hardco
 
     expect(result).toBeNull();
     expect(transport.requests).toHaveLength(0); // no further fetch once already faceted
+  });
+});
+
+describe('TRF5Traversal — every unit declares its partition dimensions, starting at the date layer', () => {
+  it('declares the date range on a seed window, so a top-level record is analyzable like every other', async () => {
+    const transport = new StubTransport([]);
+    const traversal = new TRF5Traversal({ transport, session });
+
+    const [seedUnit] = await traversal.seed({
+      dateFrom: '2026-08-24',
+      dateTo: '2026-09-02',
+      maxFacetValues: 10,
+    });
+
+    expect(seedUnit?.dimensions).toEqual({ date: '2026-08-24..2026-09-02' });
+  });
+
+  it('declares a bare day, not a collapsed range, once bisection reaches a single day', async () => {
+    const transport = new StubTransport([]);
+    const traversal = new TRF5Traversal({ transport, session });
+    await traversal.seed({ dateFrom: '2026-09-01', dateTo: '2026-09-02', maxFacetValues: 10 });
+
+    const children = await traversal.split(unit('2026-09-01', '2026-09-02', null), saturated);
+
+    // The same shape nameProbeUnit uses, so `date` means one thing across
+    // every level rather than "2026-09-01" at one depth and
+    // "2026-09-01..2026-09-01" at another.
+    expect((children ?? []).map((child) => child.dimensions)).toEqual([
+      { date: '2026-09-01' },
+      { date: '2026-09-02' },
+    ]);
+  });
+
+  it('adds the class to the dimensions once a day expands into per-class units', async () => {
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/xml;charset=UTF-8', 'classes-catalogue.xml'),
+    ]);
+    const traversal = new TRF5Traversal({ transport, session });
+    await traversal.seed({ dateFrom: '2026-09-01', dateTo: '2026-09-01', maxFacetValues: 2 });
+
+    const children = await traversal.split(unit('2026-09-01', '2026-09-01', null), saturated);
+
+    expect(children?.[0]?.dimensions).toEqual({
+      date: '2026-09-01',
+      class: 'AÇÃO CIVIL COLETIVA',
+    });
   });
 });
 
