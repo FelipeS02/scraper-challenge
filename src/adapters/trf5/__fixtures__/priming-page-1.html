@@ -1,0 +1,52 @@
+<!doctype html>
+<!--
+  Shaped after the live priming page (48 KB) captured 2026-09-05, reduced to the
+  elements parsePrimingPage reads. Every id, jsessionid and ViewState below is a
+  synthetic placeholder; the STRUCTURE is not invented.
+
+  THE SEARCH TRIGGER IS `fPP:j_id244`, defined in the a4j <script> component near
+  the bottom of this form — proven live on 2026-09-05: posting it returns 35668
+  bytes of results, posting `fPP:searchProcessos` returns 2874 bytes that update
+  only an empty rich-messages panel and never run the search.
+
+  The visible button is a decoy, and the sharpest one here. Its onclick reads
+  `return executarReCaptcha();;A4J.AJAX.Submit(...)` — the A4J call sits AFTER a
+  `return` and is unreachable dead code. A browser goes through
+  executarReCaptcha() -> executarPesquisa(), and executarPesquisa is what the
+  <script> component defines. `if (false)` around grecaptcha.execute() is
+  server-rendered: the captcha is disabled and never gates the search.
+
+  Two earlier readings of this page were both wrong and both silent. The original
+  fixture invented `<input type="hidden" name="fPP:j_id244" value="fPP:j_id244">`,
+  which exists nowhere on the real page. Its replacement scanned onclick handlers
+  and picked the button. Neither ever raised an error; each simply searched
+  nothing and reported a complete, empty run.
+
+  The judicial-class combo below is the third decoy: also an a4j submit, also
+  self-referential, rendered BEFORE the others, distinguished only by carrying
+  `ajaxSingle` — the marker of a partial field refresh rather than a form submit.
+
+  Do not reformat this file. The onclick payload is parsed as a string, and a
+  formatter that unquotes its object keys breaks it — see .prettierignore.
+-->
+<html>
+  <body>
+    <form id="fPP" name="fPP" method="post" action="/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=STUBSESSIONID0001AAAA">
+      <input type="hidden" autocomplete="off" name="fPP" value="fPP" />
+      <input type="hidden" name="javax.faces.ViewState" value="j_id1" />
+      <input type="text" name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso" />
+      <input type="text" name="fPP:dnp:nomeParte" />
+      <input type="text" name="fPP:j_id180:nomeAdv" />
+      <input type="text" name="fPP:j_id189:classeJudicial" />
+      <input id="fPP:j_id189:sgbClasseJudicial:j_id199" name="fPP:j_id189:sgbClasseJudicial:j_id199" type="button" value="Selecionar" onclick="A4J.AJAX.Submit('fPP',event,{'similarityGroupingId':'fPP:j_id189:sgbClasseJudicial:j_id199','actionUrl':'/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=STUBSESSIONID0001AAAA','parameters':{'fPP:j_id189:sgbClasseJudicial:j_id199':'fPP:j_id189:sgbClasseJudicial:j_id199','ajaxSingle':'fPP:j_id189:sgbClasseJudicial'} } );return false;" />
+      <input type="text" name="fPP:dpDec:documentoParte" />
+      <select name="fPP:Decoration:estadoComboOAB"></select>
+      <input type="text" name="fPP:dataAutuacaoDecoration:dataAutuacaoInicioInputDate" />
+      <input type="text" name="fPP:dataAutuacaoDecoration:dataAutuacaoFimInputDate" />
+      <input class="btn btn-primary" id="fPP:searchProcessos" name="fPP:searchProcessos" type="button" value="Pesquisar" onclick="return executarReCaptcha();;A4J.AJAX.Submit('fPP',event,{'similarityGroupingId':'fPP:searchProcessos','actionUrl':'/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=STUBSESSIONID0001AAAA','parameters':{'fPP:searchProcessos':'fPP:searchProcessos'} } );return false;" />
+      <script id="fPP:j_id244" type="text/javascript">//<![CDATA[
+executarPesquisa=function(){A4J.AJAX.Submit('fPP',null,{'similarityGroupingId':'fPP:j_id244','actionUrl':'/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=STUBSESSIONID0001AAAA','oncomplete':function(request,event,data){hideLoading(); grecaptcha.reset();},'parameters':{'fPP:j_id244':'fPP:j_id244'} } )};
+//]]></script>
+    </form>
+  </body>
+</html>

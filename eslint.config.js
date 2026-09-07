@@ -36,8 +36,55 @@ export default tseslint.config(
       // Floating promises are how scrapers silently drop work.
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
-      // `console` is the logger's own transport; everything else goes through it.
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      // Structured Run Observability: no module writes to the console directly —
+      // everything goes through the Logger port. `infra/logging/**` is the one
+      // carve-out below, since it IS the console transport.
+      'no-console': 'error',
+    },
+  },
+
+  // The logging implementation is the only place allowed to touch `console`
+  // directly (core-run-control-and-output, "Structured Run Observability").
+  {
+    files: ['src/infra/logging/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
+  // Human-facing run output (the dry-run forecast and the run summary) MUST
+  // remain on stdout, never interleaved with log events (core-run-control-and-
+  // output, "Structured Run Observability"). Narrowed to exactly these two
+  // files — not a blanket allowance for `src/cli/**`.
+  {
+    files: ['src/cli/dry-run.ts', 'src/cli/summary.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
+  // Enforced adapter seam: the engine is payload-generic and must never import
+  // an adapter, a transport, or an HTML parser directly — only through the ports
+  // declared in engine/ports.ts. This is a build-time seam, not a convention.
+  {
+    files: ['src/engine/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/adapters/**', '**/infra/**', '**/cli/**'],
+              message: 'engine/ must not import an adapter — this is the ports/adapters seam.',
+            },
+            {
+              group: ['axios', 'axios-*', 'cheerio', 'tough-cookie'],
+              message:
+                'engine/ must not touch a transport or an HTML parser; go through HttpTransport.',
+            },
+          ],
+        },
+      ],
     },
   },
 

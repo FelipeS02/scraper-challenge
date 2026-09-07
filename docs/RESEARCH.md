@@ -181,10 +181,19 @@ at the byte level — decoding as UTF-8, or letting the HTTP layer guess, corrup
 
 ---
 
-## 3. Pagination: there is none, and the cap cannot be escaped
+## 3. Pagination on the search response: there is none, and the cap cannot be escaped
 
-This is the part of the challenge phrased as "discover how pagination works". The honest
-answer is that it does not exist.
+**Corrected 2026-09-06 (S5h): this section's title and every finding below are scoped to
+the search response specifically, not to every response this site returns.** The original
+title read "Pagination: there is none, and the cap cannot be escaped" — a true finding about
+the search response, generalized past its own scope. Nobody re-ran the same search against
+the *detail* page, which is a different response and does paginate. See "The detail page is
+a different response, and it does paginate" at the end of this section. Every finding below
+about the search response was never wrong and stands unchanged.
+
+This is the part of the challenge phrased as "discover how pagination works", for the search
+results list specifically. The honest answer, for that one response, is that it does not
+exist.
 
 When a query matches more than 30 processes the server returns:
 
@@ -275,6 +284,136 @@ searches minutes apart (`b72d0376cf3b` → `87402dd14bb1`). **The data is live a
 A window marked complete is complete *as observed at that time*, which is exactly why the
 checkpoint records an observation timestamp rather than an absolute claim.
 
+### Measured partition yield
+
+The yield of each partition axis was measured end to end against the live site on
+`03/09/2026` (a saturated day). All counts are unique `ca` tokens after deduplication.
+
+| Strategy | Requests | Unique processes |
+|---|---|---|
+| Base (no filter, capped) | 1 | 30 |
+| Date × judicial class (union of all 132 classes) | ~132 | 128 |
+| Date × class × name-substring (on the residual saturated classes) | +~50 | 191 |
+
+Two findings shape the design of the third axis:
+
+- **The class axis already does most of the work.** Only 19 of 132 classes had any results
+  that day, and only **2 still saturated at 30** (`APELAÇÃO CÍVEL`, `AGRAVO DE INSTRUMENTO`).
+  The date × class sweep is not broken — the name axis only has to attack that residue.
+- **A third axis exists and it works: `nomeParte` / `nomeAdv` are literal, case-insensitive
+  SUBSTRING filters** (not prefix, not token-AND; verified: a mid-name fragment matches, a
+  real-token-wrong-order string returns 0), requiring at least two space-separated tokens.
+  They compose with both the date window and the class filter. On the two residual saturated
+  classes a name-substring sweep fully desaturated them (0 of 28 probes still hit 30):
+  `APELAÇÃO CÍVEL` 30 → 85, `AGRAVO DE INSTRUMENTO` 30 → 38.
+
+**Static dictionary vs adaptive extension.** Two ways to choose the substring probes were
+compared on the dense cell `APELAÇÃO CÍVEL`. A fixed dictionary of common PT-BR surname
+bigrams reached 85 unique in 29 requests. An adaptive strategy — probes ranked by frequency
+across the party names already visible in the returned rows, stopped on yield decay — reached
+**95 unique in 22 requests** (−24% requests, +12% coverage), because it spends requests on
+the fragments that actually dominate that cell (institutional litigants: INSS, CEF, conselhos,
+municípios) instead of a blind surname list. The result rows carry the party names, so the
+filter's own output seeds the next probe. This is heuristic coverage, not provable
+completeness — the honest-gap reporting stands; the residue simply shrinks.
+
+The result rows themselves already carry the parties column
+(`<PARTE A> e outros (N) X <PARTE B>`), which is what makes the adaptive seed possible with
+no extra detail-page fetch.
+
+### Bounded live acceptance attempt (2026-09-06): blocked before any A/B could run
+
+**This does not replace the `2026-09-03` measurements above** — those numbers stand as the
+record of what the class axis alone recovers on that day. This is a separate, later
+acceptance attempt for the shipped `trf5-name-substring-axis` implementation, and it never
+reached the point of producing a comparable number.
+
+The plan was a controlled same-day A/B — run the identical date twice against a fresh
+`output/` each time, `--max-name-probes 0` (class-only baseline) then `--max-name-probes 30`
+(axis on) — rather than trusting the `2026-09-03`/`128` constant against an unrelated date,
+since that number only ever meant anything for that specific day.
+
+**Every attempt failed before either half of the A/B could run**, on the SAME cause across
+four different dates:
+
+| Date tried | Result |
+|---|---|
+| `2026-09-03` (1st attempt, before a classification fix) | `discover()` failed: one row's detail page returned a 302 to `errorUnexpected.seam`, classified as `unclassified` (a real gap, since fixed) |
+| `2026-09-03` (2nd attempt, after the fix) | `discover()` still failed: the SAME row now correctly classifies as `hostDefect` ("errorUnexpected.seam with PersistenceException"), but the fix was never meant to make a permanently-broken row succeed — it only makes the failure honest |
+| `2026-09-01`, `2026-09-02`, `2026-09-04` (bounded 3-candidate retry, ordinary weekdays, no Brazilian holiday) | Each failed identically: at least one process among that day's unfaceted 30-row result set returns `errorUnexpected.seam with PersistenceException` on every retry |
+
+**The finding**: `TRF5Site.discover()` fails its ENTIRE result set on a single row's
+detail-fetch failure (`site.ts`'s own comment: "a single row's detail-fetch failure fails the
+whole discover() call rather than silently dropping the row"). Hitting this on **every one of
+four dates tried** — not one unlucky process on one unlucky day — indicates this is not a rare
+edge case for the scraper's current operating conditions; it is a live, present blocker for
+*any* full day-level sweep with detail fetching enabled, independent of the name-substring
+axis this change adds. The class axis (`APELAÇÃO CÍVEL`/`AGRAVO DE INSTRUMENTO` etc.) itself
+never gets exercised on any of these dates today, because the very first, unfaceted
+`discover()` call never completes.
+
+**Root cause, isolated (2026-09-06, decisive, read-only diagnostics — throwaway scripts, not
+committed):** two competing hypotheses produced the identical symptom above and had to be told
+apart directly, not inferred from the aggregate pattern:
+- **H1 — scattered broken records.** The corpus itself contains individual processes whose
+  detail page unconditionally raises a Hibernate `PersistenceException` server-side; any
+  30-row page that happens to include one fails, regardless of what the client does.
+- **H2 — a client-side Seam conversation bug.** The scraper's OWN detail-fetch sequence
+  poisons the JBoss Seam conversation (the `cid` in `errorUnexpected.seam?cid=<n>` is a Seam
+  conversation id), so the Nth detail fetch of a session dies regardless of which process it
+  names.
+
+**Test A (decisive): fetch the known-failing row as the FIRST request of a brand-new session.**
+A completely fresh `AxiosTransport` (new cookie jar, new priming GET, new `jsessionid`, new
+ViewState) searched `03/09/2026`, then fetched row index 1
+(`0001647-83.2005.4.05.8308`) as its very FIRST detail request — before row 0, before
+anything else that could poison a conversation:
+
+```
+status=302 location=https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam?cid=109060
+```
+
+It failed identically, with the same `PersistenceException` shape, as the FIRST request of a
+session that had never made a prior detail fetch. **This directly falsifies H2**: there was no
+earlier conversation for this request to inherit or poison. The fault travels with the
+process, not with request order or session state.
+
+**Test B: cross-date first-failure index, sequential row order, fresh session per date.**
+
+| Date | First-failing index | Process number | `cid` |
+|---|---|---|---|
+| `2026-09-03` | 1 | `0001647-83.2005.4.05.8308` | `107039` |
+| `2026-09-02` | 1 | `0820320-27.2019.4.05.8300` | `107049` |
+
+Read in isolation this table's "same low index, different process numbers" shape is the
+pattern that would suggest H2 — but Test A already ran the direct causal experiment and
+falsified H2's required mechanism for exactly the `2026-09-03` row this table also names: it
+fails with zero prior requests in its session, so it cannot be an artifact of request order.
+**H1 stands: these are two genuinely different, individually broken records, one per date**,
+and Test B's own `cid` values (`107039`, `107049`, and Test A's separate `109060` — all
+close in magnitude despite being three unrelated sessions run seconds apart) confirm `cid` is
+a server-global, per-request Seam conversation counter, not a session-scoped value our
+client could corrupt. The observation that failure has consistently landed near index 1
+across the dates sampled so far is a real, currently unexplained pattern in the corpus itself
+(possibly related to result ordering correlating with record age or filing batch) — but it is
+a property of the SITE's data, not of the scraper's session handling, and is not investigated
+further here (out of scope for this diagnostic round).
+
+**Correction to the earlier reading in this subsection**: the initial framing above ("at least
+one process... on every date tried... indicates a live blocker") was written before this
+causal isolation and left the cause ambiguous between H1 and H2. It is now confirmed as H1 —
+individually broken source records, not a scraper-side session/conversation defect — so no
+correction is needed to the recommended fix (a `discover()` partial-row-tolerance change is
+still the right target), only to the certainty of the diagnosis, which is now direct rather
+than inferred.
+
+**Consequence for this change**: the name-substring partition level (`split()`'s L3/L4
+cascade, `NameHarvester`, `nomeParte` mapping) is fully implemented and unit-tested — see
+`apply-progress.md` — but could not be exercised end-to-end live in this apply batch. A
+`discover()` partial-row-tolerance fix (skip/record a permanently broken row and continue with
+the rest of that page) is a separate, larger `trf5-adapter`/`core-scraping-engine` change,
+explicitly out of scope for this attempt.
+
 So a complete sweep is not a pagination problem, it is a **partitioning** problem. The only
 usable lever is the filing-date range (`dataAutuacaoInicio` / `dataAutuacaoFim`):
 
@@ -294,6 +433,46 @@ The `from == to` branch matters: a single day can hold more than 30 filings, and
 further subdivision is possible on this axis. That case must be recorded as a known
 coverage gap rather than silently treated as complete. Secondary axes (judicial class,
 OAB state) exist if it ever needs to be narrowed further.
+
+### The detail page is a different response, and it does paginate
+
+Measured 2026-09-06, against a real process (`0800293-46.2016.4.05.8100`, 24 documents) that
+a live-scraped run had already shown extracting only 14 rows from page 1. The documents grid
+on the *detail* page — never searched by the check above, which only ever looked at the
+search response — carries its own footer, its own row count, and its own pagination widget.
+
+**Two different pagination widgets exist on the same detail page, not one.** The two
+parties-list tables each render a `rich:datascroller`
+(`new Richfaces.Datascroller('<tableId>:<footerFormId>:<scrollerId>', ...)`) in their
+`<tfoot>`, `display: none` because each fits on one page — present in every detail-page
+fixture this repository already carries. **The documents grid uses a different widget
+entirely: a `rich:inputNumberSlider`** (`new Richfaces.Slider('<sliderId>', {'minValue':
+'1', 'maxValue':'<pageCount>', ...})`), declared in its own `<form>` sibling to the grid's
+table, not nested inside it. Design decision D13, written before this measurement, assumed
+every scroller on the page shared the Datascroller shape; that assumption was an inference
+from the parties-list markup, never re-verified against an actually-paginated grid until
+this capture corrected it.
+
+The slider's `onchange` handler embeds its own `A4J.AJAX.Submit(<formId>, event, {...})`
+call as a JS string literal (its quotes arrive backslash-escaped in the raw markup, since it
+nests inside the slider constructor's own single-quoted config — a different escaping shape
+than the parties-list scrollers' plain `<script>`-body submits). Requesting page N means
+POSTing the pager's own `<form>`'s complete hidden-field set (harvested verbatim, never
+hand-picked) with the slider's own value field set to N and the submit's self-referential
+trigger parameter added — the same "harvest, don't guess" discipline this document already
+applies to the search trigger (§2 Step 2) and the class-suggestion box (below).
+
+The grid's own footer (`<span class="pull-right text-muted">N resultados
+encontrados</span>`, the table's immediate next sibling) reports the true total regardless
+of how many pages have been read — 24 on both page 1 and page 2 of this capture — so a
+shortfall between rows read and total declared is always measurable, never inferred.
+
+**The consequence.** A scraper that reads only page 1 of the documents grid silently drops
+every document past the page-size boundary — exactly the defect a live run exposed. Every
+grid on the detail page (parties, movements, documents) can in principle paginate; only the
+documents grid's pagination is fixed here (S5h), because it is the one a live process was
+observed to actually need. Whether the parties/movements grids ever exceed one page in
+practice is unmeasured.
 
 ---
 
@@ -431,8 +610,10 @@ the minimum a technically competent implementation owes the people in the record
 
 ## 8. Not yet verified
 
-- How much of a saturated day the 132-class partition actually recovers in practice. The
-  mechanism is proven; the yield is not measured.
+- ~~How much of a saturated day the 132-class partition actually recovers in practice.~~
+  **Measured 2026-09-04 (see §3, "Measured partition yield").** On `03/09/2026` the class
+  axis lifts a saturated day from 30 to 128, leaving 2 residual saturated classes; a
+  name-substring sub-partition then lifts those to 191 total.
 - Whether a process can carry more than one judicial class (which would mean the class
   partition double-counts rather than partitions). Deduplication by process number makes
   this harmless either way, but it is worth confirming.
@@ -447,3 +628,239 @@ the minimum a technically competent implementation owes the people in the record
 *Method note: the exact a4j POST body was recovered from a Jam recording of a manual
 browsing session, which made the full field set visible without guesswork. Everything
 after that was reproduced independently with `curl`.*
+
+---
+
+## 9. Reconciliation — what the first live runs actually returned (2026-09-05)
+
+S5e wired a real transport and a real composition root for the first time. Every live
+run since has driven out a defect in a module this document, or an earlier slice, had
+already marked "verified" or "complete" — because a fixture built to match this
+document's prose is not the same thing as a fixture built from a captured response.
+This section corrects every prose claim the live traffic actually contradicted.
+Nothing below is guesswork: each row was reproduced by running the production adapter
+code (never a hand-written script) against the live host and inspecting the raw bytes.
+
+### 9.1 The search trigger is a `<script>` component, not a hidden-input `onclick`
+
+§2 Step 2 names `fPP:j_id244` as "the trigger" but describes it only as "a different
+control", which reads like a hidden input. It is not: the visible button's own
+`onclick` is unreachable (`return executarReCaptcha();;A4J.AJAX.Submit(...)` — the
+`A4J.AJAX.Submit` call sits after a `return` and never runs), and the control that
+actually fires the search is defined inside a `<script id="fPP:j_id244">` element, not
+an attribute on any visible control. A structural scan has to look inside `<script>`
+bodies for a self-referential `A4J.AJAX.Submit(...,{'parameters':{'x':'x'}})` call and
+prefer it over any `onclick`-based candidate — scanning `onclick` attributes alone
+finds the button and silently searches nothing (fixed in `c3d17a5`; see
+`session.ts`'s `findSubmitTriggerId`).
+
+### 9.2 The zero-result footer has no number at all
+
+§3 shows the saturated footer as `"30 resultados encontrados"`, which is accurate. It
+does not show the OTHER end of that scale: a genuinely empty result set renders the
+identical table structure with an **empty** `<tbody>` and a footer reading
+`"resultados encontrados"` — no `"0"`, no number of any kind. Treating an absent
+number as a parse failure, or assuming a leading digit is always present, both break
+on this case (fixed in `135d2e6`).
+
+### 9.3 The detail page is label-keyed, not id-keyed, and every id carries a server-generated prefix
+
+§2 Step 5's component-id table (`processoTrfViewView`, `processoPartesPoloAtivoResumidoList`,
+…) is accurate as a list of **ids that exist on the page** — but every one of them
+carries a server-generated form prefix (e.g. `j_id146:processoTrfViewView`, never a
+bare `processoTrfViewView`), confirming §1's own warning that ids are not a stable
+contract. Two consequences follow that this document did not previously spell out:
+
+- **A selector must match the suffix (`[id$=":name"]`), never assume a bare id.**
+- **The header's own container cannot be selected as an element at all.** It renders
+  as `<form id="j_id146:processoTrfViewView">` nested inside an already-open RichFaces
+  tab `<form>`. HTML forbids nested `<form>` elements, and the HTML parsing algorithm
+  silently drops a nested `<form>` START tag rather than erroring — so no DOM element
+  ever carries that id once the page is parsed, even though the id string is still
+  present in the raw markup. Detection of "is this a detail page" has to work on the
+  raw text (a regex/substring test), and field extraction cannot scope to "inside the
+  header container" at all.
+
+Inside that (non-existent-as-an-element) header, individual fields are **not**
+separately-id'd spans (`#numeroProcesso`, `#dataDistribuicao`, …, as an earlier
+invented fixture assumed). Every field is a `.propertyView` block —
+`.name label` carries the visible Portuguese label text, `.value` carries the value —
+and extraction has to walk every `.propertyView` on the page and key off that label
+text. Two fields ("Órgão Julgador Colegiado" + "Endereço", and "Órgão Julgador") share
+a *blank*-labeled `.propertyView` each, with the real sub-label carried by a `<b>` tag
+inside the value instead of `.name label`.
+
+### 9.4 "Assunto" is a flat, sometimes-truncated string — not a nested list
+
+§2 Step 5 lists "Assunto (repeating, hierarchical, each with CNJ codes)" without
+showing the markup. The real markup is **one flat string**, hierarchy levels joined by
+`" - "`, each with its own trailing `(code)` — never a nested `<ul>`. On at least one
+observed process, the site itself truncates the last segment with no closing `")"` at
+all (`"...Reforma Agrária (10124"`, no `)`) — a genuine site-side rendering limit, not
+a capture artifact. A parser that requires a closing paren silently drops that last
+subject's code.
+
+### 9.5 Parties are a flat table; a lawyer is a following sibling row, not a nested list
+
+§2 Step 5 describes lawyers as "nested" under a party, and an earlier invented fixture
+modeled that as `<ul class="advogados"><li>`. The real markup has no such nesting: a
+party and every lawyer under it are **sibling `<tr>` rows** in the same table body. The
+only structural signal distinguishing them is a `<span class="text-bold">` wrapping a
+party's line, versus an explicit-but-empty `<span class="">` wrapping a lawyer's line
+that directly follows it — a lawyer row belongs to the party row immediately above it.
+
+One data shape the row-parsing regex does not cover: a **CNPJ-identified party** (a
+legal entity, e.g. a federal agency) renders as `"NAME - CNPJ: xx.xxx.xxx/xxxx-xx
+(ROLE)"`. The existing `CPF:`-only pattern does not match it; the party is still
+recorded (whole line as name, `cpf: null`, `role: 'UNKNOWN'`), never dropped, but its
+CNPJ is not captured into a dedicated field. Disclosed, not fixed in S5f — no
+requirement currently asks for a CNPJ-carrying schema.
+
+### 9.6 Movements are one cell, not two — "date - description" as a single string
+
+§2 Step 5 names `processoEvento` as the movements table but does not show its row
+shape. The real row is `tr.rich-table-row` (no `.evento` class anywhere on the page),
+one cell holding `"dd/mm/yyyy hh:mm:ss - description"` as a single string, and a second
+(usually empty) "Documento" cell. §8's "row structure not yet mapped" is now resolved
+for the date/description split; the CNJ code per movement remains unmapped exactly as
+§8 already flagged.
+
+### 9.7 The documents grid mixes two unrelated delivery mechanisms
+
+§2 Step 4's document scheme (`?idBin=&numeroDocumento=&nomeArqProcDocBin=&idProcessoDocumento=`,
+a 302 straight to a PDF) is confirmed accurate — it is still present on live pages and
+is what this scraper fetches. What §2 Step 4 does not mention, because it was not yet
+observed: the same documents grid also renders **"born-digital" documents** through a
+completely different link, `documentoSemLoginHTML.seam?ca=<hash>&idProcessoDoc=<id>`,
+distinguishable by an `<i class="fa fa-external-link">` icon versus the PDF row's
+`<i class="fa fa-file-pdf-o">`, and by having `href="#"` (the real target lives only
+inside the `onclick`'s `openPopUp(...)` call). Fetching that URL returns **200
+`text/html`** — an in-browser rendered document view, complete with an
+electronic-signature block.
+
+**Corrected S5j (design.md D14): this view is not a dead end.** Reading it in a
+browser (2026-09-06) showed it renders its own `Gerar PDF` command link, whose
+`onclick` calls JSF's `jsfcljs` client-side helper to submit a form carrying `ca` plus
+a second id, `idProcDocBin` — **not** the `idProcessoDoc` the viewer URL itself
+carries. Neither id derives from the other, and `idProcDocBin` appears nowhere on the
+detail page (verified against a fixture holding four born-digital rows: zero
+occurrences). S5h through S5i (and this file, before this correction) all asserted
+this view has "no PDF at all" — a claim reproduced in four places
+(`docs/RESEARCH.md`, `parsing/detail-page.ts`'s comment, the `detail-page-valid.html`
+fixture header, and design.md's own D14) and never re-tested until now. Retrieval is
+a two-step flow: GET the viewer, harvest its own submit contract, then POST it
+(`src/adapters/trf5/parsing/document-viewer.ts`, `documents.ts`).
+
+**Measured, live (2026-09-06)**: the POST returns `200 application/pdf` in a single
+request, with no redirect. Verified end to end by `pnpm scrape` against process
+`0005643-82.2001.4.05.8000`, which wrote all four of its born-digital documents —
+3444, 3435, 7181 and 5908 bytes, every one a structurally complete `%PDF-1.4` file.
+
+**A withdrawn finding, kept because the mistake is instructive.** This section
+previously recorded a "genuine host-side defect in the training environment's
+PDF-generation path", based on a 302 to `errorUnexpected.seam` carrying a
+`java.lang.NullPointerException` inside
+`br.jus.cnj.pje.view.VisualizarExpedienteAction.imprimirPdf()`, reproduced across
+three documents in two processes and unaffected by seven request-shape variants
+(`cid` propagation, `idProcessoDoc` in the body, an AJAX "idView" priming submit,
+`Referer`/`Origin` headers). **That conclusion was wrong.** The fault was in the
+throwaway diagnostic script: it took the viewer URL from a regex over raw HTML and
+never decoded `&amp;`, so the viewer GET sent a parameter named `amp;idProcessoDoc`
+and the Seam conversation never received `idProcessoDoc` — leaving the
+conversation-scoped bean that `imprimirPdf()` dereferences unpopulated. Decoding that
+one entity turns the same POST into a PDF. The seven variants never varied the axis
+that mattered, so their 100% failure rate measured one shared harness bug, not a host
+fault. Production was never affected: `parsing/detail-page.ts` reads the row's
+`onclick` through cheerio, which decodes entities. The captured error response is kept
+as `__fixtures__/document-viewer-gerar-pdf-host-defect.html` — it is a genuine
+`errorUnexpected.seam` page and proves the failure branch this adapter must reject.
+
+A process whose documents are *entirely* born-digital (`0008256-27.2005.4.05.8100` is
+one candidate) was previously recorded as yielding zero persisted documents. That is
+also withdrawn: born-digital documents are fetchable, so such a process should now
+yield its full set. Whether the production court server behaves identically
+is unverified and out of scope (RESEARCH §6/§9.11's standing rule: this scraper never
+probes a live judicial portal beyond what a bounded, disclosed acceptance run needs).
+
+### 9.8 `pdfs/` was reserved since S1, never wired until S5f
+
+The `.gitignore` entry and README both documented a top-level `pdfs/` output directory
+since the very first slice. The actual document sink wired in `main.ts` (S5e) pointed
+at `output/documents/` instead — a drift no test caught, because no test exercised a
+real document fetch end to end through the composition root before S5f. Fixed in S5f:
+`RunDeps` now carries an explicit `pdfsDir`, defaulting to `pdfs/` in the real CLI
+entry point.
+
+### 9.9 Saturation-driven subdivision (`split()`) is unproven against real data, and its own class-catalogue fetch looks unreliable live
+
+§3's judicial-class partition (the "second axis") was designed and unit-tested against
+`StubTransport`, but S5c never had a live saturated day to subdivide until S5f's
+acceptance run. Result: `unit.saturated` fired correctly (resultCount 30, cap 30), but
+the follow-up `split()` call returned `null` (no children), so the cell finished
+`truncated` rather than `subdivided` — the *reporting* is honest (a coverage gap is
+recorded, not hidden), but the subdivision mechanism itself did not fire.
+
+A read-only reproduction (same call shape: prime → prime → search 30 rows → 30 detail
+fetches → classes-catalogue POST, all sharing the one cookie-jar session) got a `200
+text/xml` response for the classes catalogue, but with only a handful of `<li>`
+elements — far short of the documented ~132-entry catalogue — rather than a
+recognizable `login.seam` session-expiry redirect. `classes.ts`'s `parseClassCatalogue`
+has no content-based validity check at all (unlike every other TRF5 response schema in
+this codebase, which all run through `classifyValidity`): it blindly scans the whole
+document for `<li>` elements with no scope to the suggestion box's own container, so it
+cannot tell "the real catalogue" apart from a handful of unrelated `<li>` elements
+elsewhere on whatever page it actually received. The exact live count (a clean `0`) and
+the reproduction's count (a nonzero handful) do not match, so the precise mechanism is
+not fully pinned down — but the reproduction confirms the catalogue fetch is fragile
+under a real, already-aged run session, which is enough to explain an unreliable
+`bounded.length`. **Recorded, not fixed** — task 5f.9's explicit instruction, and
+consistent with the standing rule that a live discovery is disclosed before it is
+chased.
+
+### 9.10 Budget's request count is a logical-operation count, not an HTTP call count
+
+Not a markup discovery, but worth recording alongside the others: `--max-requests`
+counts one `recordRequest()` per `discover()` call and one per document fetch — never
+the number of actual HTTP round trips either makes internally. `TRF5Site.discover()`
+alone can issue 1 search POST + up to 30 detail GETs for a single "request" as the
+budget counts it. `--max-requests 12` therefore does not bound the live acceptance
+run's actual HTTP traffic to 12 — it bounds the number of *work units and document
+fetches* the engine attempts. Observed directly on the acceptance run below; not a new
+defect, just a reconciliation of what the flag actually measures.
+
+### 9.11 The 429 mechanism was unreachable in production until S5g — never a live observation, now stub-proven end to end
+
+Not a markup discovery — a defect in this codebase, found by the full-change verify
+report and closed by S5g. `FetchOutcome.transient` (the union member the whole
+resilience policy is built around) had exactly zero production construction sites:
+`retry-policy.ts` and `scraper.ts` both correctly handled it, `rate-limiter.test.ts`
+correctly proved `RateLimiter` in isolation, and every test still passed, because
+nothing ever built the value those correct consumers were waiting for. A 429 on any of
+the three TRF5 request paths (search, detail, document fetch) fell through to
+content-based classification instead — on the document path it became a generic
+`hostDefect` (bounded per-worker retry only); on search and detail it was worse, since
+neither path read `status` at all, so an empty 429 body could even misclassify as a
+valid empty result. `engine/http-status.ts` (`classifyHttpStatus`) now runs first on
+all three paths, before any content or validity-chain classification.
+
+**Still true, and unchanged by this slice**: as of 2026-09-05, **a 429 has never once
+been observed from this host** — not during S1's reconnaissance (§5, "On case 6"), and
+not across every live run since, including S5f's full acceptance run against the real
+portal. The whole mechanism — classification, the global cooldown, `Retry-After`
+precedence, and the failed unit returning to the queue rather than the failure ledger —
+is proven exclusively against a stubbed `HttpTransport` and `vi.useFakeTimers()`
+(`engine/http-status.test.ts`, the three adapter-level 429-precedence tests in
+`site.test.ts`/`detail.test.ts`/`documents.test.ts`, and
+`adapters/trf5/global-cooldown.test.ts`'s end-to-end drive through the real `TRF5Site`).
+This is not a gap — `core-resilience-policy`'s own "Stubbed-Transport Test Isolation"
+requirement mandates exactly this, precisely because provoking a real 429 against a
+court's production server is not acceptable reconnaissance (§5, "On case 6").
+
+"Retry-After Precedence" is satisfied for **delta-seconds form only**
+(`Retry-After: 5` -> `5000`ms). An HTTP-date value, a negative value, a non-numeric
+value, or an absent header all resolve to `null`, deferring to the existing
+`retryAfterMs ?? config.backoff(attempt)` fallback already correct in both consumers.
+This is a deliberate, disclosed narrowing (S5g task 5g.3): HTTP-date parsing needs the
+engine's injected `Clock` to resolve "now" against, and no response ever observed
+against this host — real or reconstructed — has carried a `Retry-After` header in any
+form. Left as an explicit follow-up, not silently unsupported.

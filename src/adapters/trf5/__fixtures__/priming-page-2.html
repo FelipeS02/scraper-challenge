@@ -1,0 +1,32 @@
+<!doctype html>
+<!--
+  A second priming response with a different session, used to prove primeSession
+  harvests each run's own values and never reuses a prior run's. Same live-shaped
+  structure as priming-page-1.html; only the jsessionid and ViewState differ.
+
+  The trigger id is `fPP:searchProcessos` in BOTH fixtures on purpose: on the real
+  portal the search button's id is stable across sessions, and the values that do
+  rotate are the ones asserted as different.
+
+  Do not reformat this file — see priming-page-1.html and .prettierignore.
+-->
+<html>
+  <body>
+    <form id="fPP" name="fPP" method="post" action="/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=STUBSESSIONID0002BBBB">
+      <input type="hidden" autocomplete="off" name="fPP" value="fPP" />
+      <input type="hidden" name="javax.faces.ViewState" value="j_id7" />
+      <input type="text" name="fPP:numProcesso-inputNumeroProcessoDecoration:numProcesso-inputNumeroProcesso" />
+      <input type="text" name="fPP:dnp:nomeParte" />
+      <input type="text" name="fPP:j_id180:nomeAdv" />
+      <input type="text" name="fPP:j_id189:classeJudicial" />
+      <input type="text" name="fPP:dpDec:documentoParte" />
+      <select name="fPP:Decoration:estadoComboOAB"></select>
+      <input type="text" name="fPP:dataAutuacaoDecoration:dataAutuacaoInicioInputDate" />
+      <input type="text" name="fPP:dataAutuacaoDecoration:dataAutuacaoFimInputDate" />
+      <input class="btn btn-primary" id="fPP:searchProcessos" name="fPP:searchProcessos" type="button" value="Pesquisar" onclick="return executarReCaptcha();;A4J.AJAX.Submit('fPP',event,{'similarityGroupingId':'fPP:searchProcessos','actionUrl':'/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=STUBSESSIONID0002BBBB','parameters':{'fPP:searchProcessos':'fPP:searchProcessos'} } );return false;" />
+      <script id="fPP:j_id244" type="text/javascript">//<![CDATA[
+executarPesquisa=function(){A4J.AJAX.Submit('fPP',null,{'similarityGroupingId':'fPP:j_id244','actionUrl':'/pjeconsulta/ConsultaPublica/listView.seam;jsessionid=STUBSESSIONID0002BBBB','parameters':{'fPP:j_id244':'fPP:j_id244'} } )};
+//]]></script>
+    </form>
+  </body>
+</html>

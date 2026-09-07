@@ -67,13 +67,59 @@ ISO-8859-1 at the byte level, never as UTF-8.
 - THEN the result is `Decisão`, not mojibake
 
 ### Requirement: Stable Document Filename Derivation
-Stored document filenames MUST derive from `ca` plus `idProcessoDocumento`, never from the
-label alone, because multiple documents in one process can share the same label.
+Stored document paths MUST derive from `processNumber` plus `idProcessoDocumento`, never
+from the label alone, because multiple documents in one process can share the same label.
+Documents MUST be filed one directory per process, named `<processNumber>/<idProcessoDocumento>-<slug>.pdf`.
+
+The `slug` is derived from the ISO-8859-1-decoded label and is decorative only: it MUST NOT
+participate in uniqueness, and a hostile, empty, or unrepresentable label MUST degrade to
+`<idProcessoDocumento>.pdf` rather than colliding or escaping the output directory. Every
+path component MUST match `[A-Za-z0-9._-]+` before it is joined.
+
+This requirement previously derived the filename from the `ca` token. `ca` is a
+session-scoped token whose stability across sessions is unverified (`docs/RESEARCH.md`
+open questions); deriving a durable path from it would file the same document under a
+different name on a later run. `processNumber` is the adapter's own declared identity key
+and does not rotate. See "Persisted Identifier Stability" in core-run-control-and-output.
 
 #### Scenario: Three same-labeled documents in one process
 - GIVEN a process with three documents all labeled `Decisão` but distinct `idProcessoDocumento`
 - WHEN the adapter stores all three
-- THEN each has a distinct filename and none overwrites another
+- THEN each has a distinct path and none overwrites another
+
+#### Scenario: Document path is human-navigable
+- GIVEN a document labeled `Decisão` with `idProcessoDocumento` `12452668` in process `0123456-78.2026.4.05.8100`
+- WHEN the adapter files it
+- THEN its path is `0123456-78.2026.4.05.8100/12452668-decisao.pdf`
+
+#### Scenario: Hostile label cannot escape the output directory
+- GIVEN a document whose decoded label is `../../etc/passwd`
+- WHEN the adapter derives its path
+- THEN the slug is discarded and the path is `<processNumber>/<idProcessoDocumento>.pdf`
+
+#### Scenario: Same document re-scraped in a later session keeps its path
+- GIVEN a document already stored in an earlier run
+- WHEN the same document is scraped again in a new session with a different `ca`
+- THEN its derived path is unchanged
+
+### Requirement: Document Persistence to Disk
+Fetched document bytes MUST be written to the run's document output directory at the path
+derived above. A `StoredDocument` result MUST describe a document that was actually
+persisted; reporting `byteLength` and `fileName` for bytes that were never written is
+forbidden.
+
+Writing MUST be crash-safe in the same sense as the JSONL sinks: a killed run MUST NOT
+leave a partially-written file that later reads as complete.
+
+#### Scenario: Fetched document reaches the filesystem
+- GIVEN a document fetch that returns 200 with a body
+- WHEN the adapter stores it
+- THEN the bytes exist on disk at the derived path and `byteLength` equals the written file's size
+
+#### Scenario: Failed document fetch writes no file
+- GIVEN a document fetch that fails
+- WHEN the failure is ledgered
+- THEN no file exists at that document's derived path and the already-extracted item is still written
 
 ### Requirement: Full Field Inventory Extraction
 The adapter MUST extract the complete detail-page field inventory: header (número, data

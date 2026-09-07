@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!--
+  Redacted CAPTURE of a real zero-result AJAX search response (4846 bytes, taken
+  2026-09-05 for dataAutuacao 01/01/2035), reduced to the panel the parser reads.
+
+  Captured rather than written, and it shows: the site renders the table and its
+  footer as usual with an EMPTY `<tbody id="fPP:processosTable:tb"></tbody>`, and
+  the footer reads "resultados encontrados" with NO number at all — not "0
+  resultados". An invented fixture would have guessed the zero.
+
+  Do not reformat this file — see .prettierignore.
+-->
+<html lang="pt_BR" xmlns="http://www.w3.org/1999/xhtml"><head><title></title></head><body><div class="rich-panel col-sm-9" id="fPP:processosGridPanel"><div class="rich-panel-body panel" id="fPP:processosGridPanel_body"><dl id="fPP:j_id248" class="rich-messages" style="display: none;"><dt></dt></dl><table class="rich-table" id="fPP:processosTable" border="0" cellpadding="0" cellspacing="0"><colgroup span="3"></colgroup><thead class="rich-table-thead"><tr class="rich-table-subheader"><th class="rich-table-subheadercell" scope="col" id="fPP:processosTable:j_id255header"><div id="fPP:processosTable:j_id255header:sortDiv"></div></th><th class="rich-table-subheadercell" scope="col" id="fPP:processosTable:j_id257header"><div id="fPP:processosTable:j_id257header:sortDiv">Processo</div></th><th class="rich-table-subheadercell" scope="col" id="fPP:processosTable:j_id263header"><div id="fPP:processosTable:j_id263header:sortDiv">&#218;ltima movimenta&#231;&#227;o</div></th></tr></thead><tfoot><tr class="rich-table-footer"><td class="rich-table-footercell" colspan="3" scope="colgroup"><div id="fPP:processosTable:j_id249" class="col-sm-12"><div class="pull-left" title="Pagina&#231;&#227;o"></div><div class="pull-right"><span class="text-muted">resultados encontrados</span></div></div></td></tr></tfoot><tbody id="fPP:processosTable:tb"></tbody></table><div class="alert alert-info">A presente consulta n&#227;o retornar&#225; qualquer resultado em caso de informa&#231;&#245;es prestadas incorretamente ou de processos sob segredo de justi&#231;a.</div></div></div><meta name="Ajax-Update-Ids" content="fPP:processosGridPanel" /><meta id="Ajax-Response" name="Ajax-Response" content="true" /></body></html>

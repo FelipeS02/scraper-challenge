@@ -25,7 +25,11 @@ Thumbs.db
 # Local AI tooling state (machine-specific, not part of the deliverable)
 .atl/
 .engram/
+.codegraph/
 
 # Logs
 *.log
 npm-debug.log*
+
+# gentle-ai per-change bookkeeping, not project state
+.gentle-ai-instance

@@ -1,0 +1,209 @@
+<?xml version="1.0"?>
+<!--
+  Redacted CAPTURE of the real TRF5 PJe documents-grid pager's own AJAX
+  response (page 2 of 2, 40491 bytes originally), taken 2026-09-06 against
+  the same process as detail-page-paginated-documents.html (see that
+  file's header for the full capture/redaction notes). This response is
+  declared charset=UTF-8 by its own Content-Type header -- unlike the
+  ISO-8859-1 full-page GET -- and contains no personal data at all: no
+  process number, no party/lawyer name, no ca token (verified by grep
+  before committing). Kept byte-for-byte as captured, no redaction applied.
+-->
+
+<html lang="pt_BR" xmlns="http://www.w3.org/1999/xhtml"><head><title></title><script id="org.ajax4jsf.queue_script" type="text/javascript">//<![CDATA[
+if (typeof A4J != 'undefined') { if (A4J.AJAX) { with (A4J.AJAX) {if (!EventQueue.getQueue('org.richfaces.queue.global')) { EventQueue.addQueue(new EventQueue('org.richfaces.queue.global',null,null)) };}}};
+//]]>
+</script><link class="user" href="/pjeconsulta/stylesheet/estilos/bootstrap/bootstrap.min.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/dropzone/dropzone.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/estilos/richfaces/tema.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/padrao.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/autos-digitais.css" rel="stylesheet" type="text/css" /><link class="user" href="/pjeconsulta/stylesheet/estilos/select2/select2.min.css" rel="stylesheet" type="text/css" /><script src="/pjeconsulta/js/modernizr.custom.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/jquery-ui-1.8.1.min.custom.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/jquery-2.1.4.min.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/select2/select2.min.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/fuse.min.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/bootstrap/bootstrap.min.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/jquery.maskedinput.min.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/mousetrap/mousetrap.min.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/mousetrap/plugins/global-bind/mousetrap-global-bind.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/pje/menu.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/global.js?v=20220316" type="text/javascript">
+</script><script src="/pjeconsulta/js/pje.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/pjeOffice.js" type="text/javascript">
+</script><script src="/pjeconsulta/js/signerApplet.js" type="text/javascript">
+</script></head><body><div class="rich-panel col-sm-12" id="j_id146:processoDocumentoGridTabPanel"><div class="rich-panel-header" id="j_id146:processoDocumentoGridTabPanel_header">Documentos juntados ao processo</div><div class="rich-panel-body panel" id="j_id146:processoDocumentoGridTabPanel_body"><script type="text/javascript">//<![CDATA[
+                                        if ($('processoDocumentoGridTabMessages')) {
+                                                setTimeout("if ($('processoDocumentoGridTabMessages')) $('processoDocumentoGridTabMessages').style.display='none'", 15000);
+                                        }
+                                //]]>
+</script><table class="rich-table" id="j_id146:processoDocumentoGridTab" border="0" cellpadding="0" cellspacing="0"><colgroup span="2"></colgroup><thead class="rich-table-thead"><tr class="rich-table-subheader"><th class="rich-table-subheadercell" scope="col" colspan="1" id="j_id146:processoDocumentoGridTab:j_id590header"><div id="j_id146:processoDocumentoGridTab:j_id590header:sortDiv"><form id="j_id146:processoDocumentoGridTab:j_id592" name="j_id146:processoDocumentoGridTab:j_id592" method="post" class="text-left" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><a href="#" id="j_id146:processoDocumentoGridTab:j_id592:j_id593" name="j_id146:processoDocumentoGridTab:j_id592:j_id593" onclick="A4J.AJAX.Submit('j_id146:processoDocumentoGridTab:j_id592',event,{'similarityGroupingId':'j_id146:processoDocumentoGridTab:j_id592:j_id593','containerId':'j_id146:j_id569','parameters':{'j_id146:processoDocumentoGridTab:j_id592:j_id593':'j_id146:processoDocumentoGridTab:j_id592:j_id593','ajaxSingle':'j_id146:processoDocumentoGridTab:j_id592:j_id593'} ,'status':'_viewRoot:status'} );return false;" title="Ordem crescente"><img src="/pjeconsulta/img/grid/arrow-up.png" class="" /></a><span class="ml-5 mr-5 text-left">Documento</span><a href="#" id="j_id146:processoDocumentoGridTab:j_id592:j_id596" name="j_id146:processoDocumentoGridTab:j_id592:j_id596" onclick="A4J.AJAX.Submit('j_id146:processoDocumentoGridTab:j_id592',event,{'similarityGroupingId':'j_id146:processoDocumentoGridTab:j_id592:j_id596','containerId':'j_id146:j_id569','parameters':{'j_id146:processoDocumentoGridTab:j_id592:j_id596':'j_id146:processoDocumentoGridTab:j_id592:j_id596','ajaxSingle':'j_id146:processoDocumentoGridTab:j_id592:j_id596'} ,'status':'_viewRoot:status'} );return false;" title="Ordem decrescente"><img src="/pjeconsulta/img/grid/arrow-down.png" class="" /></a><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:j_id592" value="j_id146:processoDocumentoGridTab:j_id592" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:j_id592:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:j_id592:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id592() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:j_id592','',['j_id146:processoDocumentoGridTab:j_id592:j_idcl','j_id146:processoDocumentoGridTab:j_id592:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3Aj_id592(){clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id592();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_j_id592(){clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id592();}
+clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id592();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></div></th><th class="rich-table-subheadercell" scope="col" colspan="1" id="j_id146:processoDocumentoGridTab:j_id626header"><div id="j_id146:processoDocumentoGridTab:j_id626header:sortDiv"><form id="j_id146:processoDocumentoGridTab:j_id628" name="j_id146:processoDocumentoGridTab:j_id628" method="post" class="text-left" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><a href="#" id="j_id146:processoDocumentoGridTab:j_id628:j_id629" name="j_id146:processoDocumentoGridTab:j_id628:j_id629" onclick="A4J.AJAX.Submit('j_id146:processoDocumentoGridTab:j_id628',event,{'similarityGroupingId':'j_id146:processoDocumentoGridTab:j_id628:j_id629','containerId':'j_id146:j_id569','parameters':{'j_id146:processoDocumentoGridTab:j_id628:j_id629':'j_id146:processoDocumentoGridTab:j_id628:j_id629','ajaxSingle':'j_id146:processoDocumentoGridTab:j_id628:j_id629'} ,'status':'_viewRoot:status'} );return false;" title="Ordem crescente"><img src="/pjeconsulta/img/grid/arrow-up.png" class="" /></a><span class="ml-5 mr-5 text-left">Certidão</span><a href="#" id="j_id146:processoDocumentoGridTab:j_id628:j_id632" name="j_id146:processoDocumentoGridTab:j_id628:j_id632" onclick="A4J.AJAX.Submit('j_id146:processoDocumentoGridTab:j_id628',event,{'similarityGroupingId':'j_id146:processoDocumentoGridTab:j_id628:j_id632','containerId':'j_id146:j_id569','parameters':{'j_id146:processoDocumentoGridTab:j_id628:j_id632':'j_id146:processoDocumentoGridTab:j_id628:j_id632','ajaxSingle':'j_id146:processoDocumentoGridTab:j_id628:j_id632'} ,'status':'_viewRoot:status'} );return false;" title="Ordem decrescente"><img src="/pjeconsulta/img/grid/arrow-down.png" class="" /></a><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:j_id628" value="j_id146:processoDocumentoGridTab:j_id628" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:j_id628:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:j_id628:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id628() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:j_id628','',['j_id146:processoDocumentoGridTab:j_id628:j_idcl','j_id146:processoDocumentoGridTab:j_id628:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3Aj_id628(){clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id628();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_j_id628(){clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id628();}
+clear_j_id146_3AprocessoDocumentoGridTab_3Aj_id628();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></div></th></tr></thead><tbody id="j_id146:processoDocumentoGridTab:tb"><tr class="rich-table-row rich-table-firstrow"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:0:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:0:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810837&amp;numeroDocumento=10b156c81750de8a0d752d041c3bd45c7ce96fb4&amp;nomeArqProcDocBin=Despacho&amp;idProcessoDocumento=6895937&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:0:j_id604:j_id617" target="idPdfDespacho" onclick="openPopUp('idPdfDespacho', 'about:blank')" title="Despacho (2,15 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>12/07/2018 15:32:47 - Despacho (Despacho)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:0:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:0:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:0:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:0:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:0:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:0:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:0:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:0:j_id640:j_id642:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:0:j_id640:j_id642:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A0_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:0:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:0:j_id640:j_id642:j_idcl','j_id146:processoDocumentoGridTab:0:j_id640:j_id642:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A0_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A0_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_0_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A0_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A0_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:1:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:1:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810827&amp;numeroDocumento=0c4d9fe4ef0d10f77ad2b76d757577b5607f413d&amp;nomeArqProcDocBin=Decis%E3o&amp;idProcessoDocumento=6895927&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:1:j_id604:j_id617" target="idPdfDecisão" onclick="openPopUp('idPdfDecisão', 'about:blank')" title="Decisão (4,37 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>25/05/2018 15:27:35 - Decisão (Decisão)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:1:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:1:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:1:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:1:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:1:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:1:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:1:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:1:j_id640:j_id642:_link_hidden_" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:1:j_id640:j_id642:j_idcl" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A1_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:1:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:1:j_id640:j_id642:_link_hidden_','j_id146:processoDocumentoGridTab:1:j_id640:j_id642:j_idcl']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A1_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A1_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_1_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A1_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A1_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:2:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:2:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810816&amp;numeroDocumento=b742a38a8295d02123e1efe381d66974ccaaedf4&amp;nomeArqProcDocBin=Inspe%E7%E3o&amp;idProcessoDocumento=6895916&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:2:j_id604:j_id617" target="idPdfDespacho (Inspeção)" onclick="openPopUp('idPdfDespacho (Inspeção)', 'about:blank')" title="Inspeção (1,81 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>01/03/2018 23:37:38 - Inspeção (Despacho)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:2:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:2:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:2:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:2:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:2:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:2:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:2:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:2:j_id640:j_id642:_link_hidden_" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:2:j_id640:j_id642:j_idcl" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A2_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:2:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:2:j_id640:j_id642:_link_hidden_','j_id146:processoDocumentoGridTab:2:j_id640:j_id642:j_idcl']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A2_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A2_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_2_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A2_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A2_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:3:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:3:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810815&amp;numeroDocumento=0a26de98826bd8ad90307a11aa21c1e893b6b7c6&amp;nomeArqProcDocBin=Inspe%E7%E3o&amp;idProcessoDocumento=6895915&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:3:j_id604:j_id617" target="idPdfDespacho (Inspeção)" onclick="openPopUp('idPdfDespacho (Inspeção)', 'about:blank')" title="Inspeção (1,27 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>31/03/2017 11:58:00 - Inspeção (Despacho)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:3:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:3:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:3:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:3:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:3:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:3:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:3:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:3:j_id640:j_id642:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:3:j_id640:j_id642:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A3_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:3:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:3:j_id640:j_id642:j_idcl','j_id146:processoDocumentoGridTab:3:j_id640:j_id642:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A3_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A3_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_3_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A3_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A3_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:4:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:4:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810817&amp;numeroDocumento=d2aac29e0c8cdea0432e453a573d820fcd471731&amp;nomeArqProcDocBin=Decis%E3o&amp;idProcessoDocumento=6895917&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:4:j_id604:j_id617" target="idPdfDecisão" onclick="openPopUp('idPdfDecisão', 'about:blank')" title="Decisão (3,18 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>24/04/2018 10:07:45 - Decisão (Decisão)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:4:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:4:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:4:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:4:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:4:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:4:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:4:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:4:j_id640:j_id642:_link_hidden_" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:4:j_id640:j_id642:j_idcl" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A4_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:4:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:4:j_id640:j_id642:_link_hidden_','j_id146:processoDocumentoGridTab:4:j_id640:j_id642:j_idcl']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A4_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A4_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_4_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A4_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A4_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:5:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:5:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810805&amp;numeroDocumento=3b287fa0a1ffc1067abbcbe1d827d04cfe164b35&amp;nomeArqProcDocBin=Despacho&amp;idProcessoDocumento=6895905&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:5:j_id604:j_id617" target="idPdfDespacho" onclick="openPopUp('idPdfDespacho', 'about:blank')" title="Despacho (1,93 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>16/01/2017 09:32:44 - Despacho (Despacho)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:5:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:5:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:5:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:5:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:5:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:5:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:5:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:5:j_id640:j_id642:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:5:j_id640:j_id642:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A5_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:5:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:5:j_id640:j_id642:j_idcl','j_id146:processoDocumentoGridTab:5:j_id640:j_id642:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A5_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A5_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_5_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A5_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A5_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:6:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:6:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810790&amp;numeroDocumento=51c90e6f5c9915e64f5f3d8ac791e85de5c4ba5b&amp;nomeArqProcDocBin=Despacho&amp;idProcessoDocumento=6895890&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:6:j_id604:j_id617" target="idPdfDespacho" onclick="openPopUp('idPdfDespacho', 'about:blank')" title="Despacho (2,41 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>23/05/2016 18:45:15 - Despacho (Despacho)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:6:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:6:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:6:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:6:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:6:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:6:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:6:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:6:j_id640:j_id642:_link_hidden_" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:6:j_id640:j_id642:j_idcl" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A6_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:6:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:6:j_id640:j_id642:_link_hidden_','j_id146:processoDocumentoGridTab:6:j_id640:j_id642:j_idcl']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A6_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A6_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_6_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A6_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A6_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:7:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:7:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810778&amp;numeroDocumento=a628f9d10f7f2b3741c129024d11f6ae2eae2d99&amp;nomeArqProcDocBin=Despacho&amp;idProcessoDocumento=6895878&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:7:j_id604:j_id617" target="idPdfDespacho" onclick="openPopUp('idPdfDespacho', 'about:blank')" title="Despacho (2,00 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>08/04/2016 15:30:27 - Despacho (Despacho)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:7:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:7:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:7:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:7:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:7:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:7:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:7:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:7:j_id640:j_id642:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:7:j_id640:j_id642:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A7_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:7:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:7:j_id640:j_id642:j_idcl','j_id146:processoDocumentoGridTab:7:j_id640:j_id642:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A7_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A7_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_7_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A7_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A7_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr><tr class="rich-table-row"><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:8:j_id590" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:8:j_id604"><a href="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?idBin=6810494&amp;numeroDocumento=b10df0e9eb8b1e0e80c5c29c16946ca2c75fbd3c&amp;nomeArqProcDocBin=Despacho&amp;idProcessoDocumento=6895644&amp;actionMethod=ConsultaPublica%2FDetalheProcessoConsultaPublica%2FlistView.xhtml%3AprocessoDocumentoBinHome.setDownloadInstance%28row%29" id="j_id146:processoDocumentoGridTab:8:j_id604:j_id617" target="idPdfDespacho" onclick="openPopUp('idPdfDespacho', 'about:blank')" title="Despacho (1,52 Kb)" class="btn btn-default btn-sm"><i class="fa fa-file-pdf-o"></i>26/01/2016 12:22:26 - Despacho (Despacho)</a></span></td><td class="rich-table-cell" id="j_id146:processoDocumentoGridTab:8:j_id626" colspan="1" rowspan="1"><span id="j_id146:processoDocumentoGridTab:8:j_id640"><script type="text/javascript">//<![CDATA[
+                        function abrirPopUp(){
+                                openPopUp('comprovante', '');
+                        }
+                        function abrirPopUpPeticao(){
+                                openPopUp('comprovantePeticaoInicial', '');
+                        }
+                //]]>
+</script><form id="j_id146:processoDocumentoGridTab:8:j_id640:j_id642" name="j_id146:processoDocumentoGridTab:8:j_id640:j_id642" method="post" action="/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam"><div align="center"><div id="j_id146:processoDocumentoGridTab:8:j_id640:j_id642:linksSemCertidao"></div></div><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:8:j_id640:j_id642" value="j_id146:processoDocumentoGridTab:8:j_id640:j_id642" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:8:j_id640:j_id642:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:processoDocumentoGridTab:8:j_id640:j_id642:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3AprocessoDocumentoGridTab_3A8_3Aj_id640_3Aj_id642() {
+_clearJSFFormParameters('j_id146:processoDocumentoGridTab:8:j_id640:j_id642','',['j_id146:processoDocumentoGridTab:8:j_id640:j_id642:j_idcl','j_id146:processoDocumentoGridTab:8:j_id640:j_id642:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3AprocessoDocumentoGridTab_3A8_3Aj_id640_3Aj_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A8_3Aj_id640_3Aj_id642();}
+function clearFormHiddenParams_j_id146_processoDocumentoGridTab_8_j_id640_j_id642(){clear_j_id146_3AprocessoDocumentoGridTab_3A8_3Aj_id640_3Aj_id642();}
+clear_j_id146_3AprocessoDocumentoGridTab_3A8_3Aj_id640_3Aj_id642();
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></span></td></tr></tbody></table><span class="pull-right text-muted">24 resultados encontrados</span><div id="j_id146:j_id652"><form id="j_id146:j_id653" name="j_id146:j_id653" method="post" action="javascript:A4J.AJAX.SubmitForm('j_id146:j_id653',{'similarityGroupingId':'j_id146:j_id653','actionUrl':'/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam','containerId':'j_id146:j_id569','parameters':{'j_id146:j_id653':'j_id146:j_id653'}%20}%20)"><table border="0" cellpadding="0" cellspacing="0" class="rich-inslider rich-slider" id="j_id146:j_id653:j_id654" style="width: 250px;width:250px;"><tbody><tr><td class="rich-inslider-td-arrow" rowspan="2"><div style="position : relative"><div class="rich-inslider-tip" id="j_id146:j_id653:j_id654TipArrowDec" style="display: none;">&#160;</div><div class="rich-inslider-dec-horizontal rich-inslider-arrow" id="j_id146:j_id653:j_id654ArrowDec"></div></div></td><td class="rich-inslider-left-num">1</td><td class="rich-inslider-right-num">2</td><td class="rich-inslider-td-arrow" rowspan="2"><div style="position : relative"><div class="rich-inslider-tip" id="j_id146:j_id653:j_id654TipArrowInc" style="display: none;">&#160;</div><div class="rich-inslider-inc-horizontal rich-inslider-arrow" id="j_id146:j_id653:j_id654ArrowInc"></div></div></td><td rowspan="2" style="text-align: left; vertical-align: bottom"><input class="rich-inslider-field-right rich-inslider-field" id="j_id146:j_id653:j_id654Input" name="j_id146:j_id653:j_id654" size="3" style=";" type="text" value="2" /></td></tr><tr><td class="rich-inslider-size rich-inslider-vert-spacer" colspan="2"><table border="0" cellpadding="0" cellspacing="0" class="rich-inslider-size"><tbody><tr><td id="j_id146:j_id653:j_id654Track"><div style="position : relative"><div class="rich-inslider-tip" id="j_id146:j_id653:j_id654Tip" style="display: none;">&#160;</div><div class="rich-inslider-handler" id="j_id146:j_id653:j_id654Handle" style="visibility:hidden;">&#160;</div></div><div class="rich-inslider-track"><table cellpadding="0" cellspacing="0" class="rich-inslider-track-decor-1"><tbody><tr><td class="rich-inslider-track-decor-2"><img alt="" src="/pjeconsulta/a4j/g/3_3_3.Finalorg/richfaces/renderkit/html/images/spacer.gif" style="display: block;" /></td></tr></tbody></table></div><script type="text/javascript">//<![CDATA[
+new Richfaces.Slider("j_id146:j_id653:j_id654",{'minValue':'1','maxValue':'2','sliderValue':'2','width':'250px','onchange':'A4J.AJAX.Submit(\'j_id146:j_id653\',event,{\'similarityGroupingId\':\'j_id146:j_id653:j_id655\',\'actionUrl\':\'/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam\',\'eventsQueue\':\'\',\'containerId\':\'j_id146:j_id569\',\'parameters\':{\'j_id146:j_id653:j_id655\':\'j_id146:j_id653:j_id655\'} ,\'status\':\'_viewRoot:status\'} )','showArrows':true} )
+//]]>
+</script></td></tr></tbody></table></td></tr></tbody></table><span class="pull-left mt-10 ml-5 text-muted">página</span><input type="hidden" autocomplete="off" name="j_id146:j_id653" value="j_id146:j_id653" /><input type="hidden" autocomplete="off" name="autoScroll" value="" /><input type="hidden" autocomplete="off" name="j_id146:j_id653:j_idcl" value="" /><input type="hidden" autocomplete="off" name="j_id146:j_id653:_link_hidden_" value="" /><script type="text/javascript">//<![CDATA[
+function clear_j_id146_3Aj_id653() {
+_clearJSFFormParameters('j_id146:j_id653','',['j_id146:j_id653:j_idcl','j_id146:j_id653:_link_hidden_']);
+}
+function clearFormHiddenParams_j_id146_3Aj_id653(){clear_j_id146_3Aj_id653();}
+function clearFormHiddenParams_j_id146_j_id653(){clear_j_id146_3Aj_id653();}
+clear_j_id146_3Aj_id653();
+//]]>
+</script><script type="text/javascript">//<![CDATA[
+A4J.setupForm('j_id146:j_id653');
+//]]>
+</script><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></form></div></div></div><meta name="Ajax-Update-Ids" content="j_id146:processoDocumentoGridTabPanel" /><span id="ajax-view-state"><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></span><meta id="Ajax-Response" name="Ajax-Response" content="true" /><meta name="Ajax-Update-Ids" content="j_id146:processoDocumentoGridTabPanel" /><span id="ajax-view-state"><input type="hidden" name="javax.faces.ViewState" id="javax.faces.ViewState" value="j_id2" autocomplete="off" /></span><meta id="Ajax-Response" name="Ajax-Response" content="true" /></body></html>
