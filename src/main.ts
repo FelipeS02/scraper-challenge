@@ -176,6 +176,7 @@ export async function runScraper(args: ParsedArgs, deps: RunDeps): Promise<void>
       traversal,
       stateStore: seedStateStore,
       itemSink: new JsonlItemSink(join(deps.outputDir, 'items.jsonl')),
+      failureLedger: new JsonlFailureLedger(join(deps.outputDir, 'state', 'failures.jsonl')),
       rateLimiter: new RateLimiter(args.requestSpacingMs),
       budget,
       clock: deps.clock,

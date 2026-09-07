@@ -1,10 +1,13 @@
 import type { Budget } from './budget.js';
+import { describeFailureReason } from './failure-reason.js';
 import type {
   AdapterStateStore,
   Clock,
+  FailureLedger,
   FrontierCapable,
   ItemSink,
   Logger,
+  LogLevel,
   RunBounds,
   Seed,
   SitePort,
@@ -90,6 +93,7 @@ export interface FrontierRunConfig<TItem, TDoc, TCursor> {
   readonly traversal: TraversalPort<TCursor>;
   readonly stateStore: AdapterStateStore;
   readonly itemSink: ItemSink<TItem>;
+  readonly failureLedger: FailureLedger;
   readonly rateLimiter: RateLimiter;
   /** Reused, never re-implemented (task 6.10): the same hard ceiling S5b built for phase 1. */
   readonly budget: Budget;
@@ -131,10 +135,27 @@ export async function runFrontierCrawl<TItem, TDoc, TCursor>(
   let seedsProcessed = 0;
   let newItemsFound = 0;
 
+  // Fire-and-forget, exactly like Scraper.emit: a throwing Logger must never
+  // fail, delay, or alter a crawl (core-run-control-and-output, "Structured
+  // Run Observability"). `config.logger` was accepted but never written to
+  // before this — a phase-2 run was silent end to end.
+  const emit = (
+    level: LogLevel,
+    event: string,
+    fields: Readonly<Record<string, unknown>>,
+  ): void => {
+    try {
+      config.logger?.log({ level, event, fields });
+    } catch {
+      // Absorbed by design — see above.
+    }
+  };
+
   for (const seed of queue) {
     if (!config.budget.canSpendRequest()) break;
     seedsProcessed += 1;
     let newItemsThisSeed = 0;
+    emit('info', 'frontier.seed.started', { seedIndex: seedsProcessed, seedsQueued: queue.length });
 
     const stack: QueuedUnit<TCursor>[] = [
       { unit: config.frontierCapable.unitFromSeed(seed, config.bounds), depth: 0 },
@@ -145,11 +166,38 @@ export async function runFrontierCrawl<TItem, TDoc, TCursor>(
       const next = stack.pop();
       if (!next) break;
       const { unit, depth } = next;
+      emit('info', 'frontier.unit.started', {
+        unitKey: unit.unitKey,
+        windowKey: unit.windowKey,
+        depth,
+        label: unit.label,
+      });
 
       await config.rateLimiter.acquire();
       config.budget.recordRequest();
       const result = await config.site.discover(unit);
-      if (result.kind !== 'ok') continue; // a failed seed search is skipped, not retried, in this slice
+      if (result.kind !== 'ok') {
+        emit('warn', 'frontier.unit.failed', {
+          unitKey: unit.unitKey,
+          reason: describeFailureReason(result),
+        });
+        await config.failureLedger.record({
+          itemId: unit.unitKey,
+          documentId: null,
+          reason: describeFailureReason(result),
+          observedAt: config.clock.now().toISOString(),
+        });
+        continue;
+      }
+
+      for (const unresolvedItem of result.value.unresolved ?? []) {
+        await config.failureLedger.record({
+          itemId: unresolvedItem.itemId,
+          documentId: null,
+          reason: unresolvedItem.reason,
+          observedAt: config.clock.now().toISOString(),
+        });
+      }
 
       for (const item of result.value.items) {
         const itemId = config.site.itemId(item);
@@ -170,11 +218,22 @@ export async function runFrontierCrawl<TItem, TDoc, TCursor>(
       const cap = config.site.resultPageCap;
       const saturated = cap !== null && result.value.count >= cap;
       if (saturated && depth < maxSplitDepth) {
+        emit('warn', 'frontier.unit.saturated', {
+          unitKey: unit.unitKey,
+          resultCount: result.value.count,
+          cap,
+          depth,
+        });
         const children = await config.traversal.split(unit, {
           resultCount: result.value.count,
           cap,
         });
         if (children) {
+          emit('info', 'frontier.unit.subdivided', {
+            unitKey: unit.unitKey,
+            childCount: children.length,
+            depth: depth + 1,
+          });
           for (const child of children) stack.push({ unit: child, depth: depth + 1 });
         }
       }

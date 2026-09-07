@@ -10,8 +10,10 @@ import {
 import type {
   AdapterStateStore,
   DiscoverResult,
+  FailureLedger,
   FrontierCapable,
   ItemSink,
+  LedgerEntry,
   OutputRecord,
   RunBounds,
   SaturationInfo,
@@ -55,6 +57,30 @@ class MemoryItemSink implements ItemSink<FakeItem> {
   readonly records: OutputRecord<FakeItem>[] = [];
   write(record: OutputRecord<FakeItem>): Promise<void> {
     this.records.push(record);
+    return Promise.resolve();
+  }
+}
+
+class MemoryFailureLedger implements FailureLedger {
+  readonly entries: LedgerEntry[] = [];
+
+  load(): Promise<readonly LedgerEntry[]> {
+    return Promise.resolve(this.entries);
+  }
+
+  record(entry: LedgerEntry): Promise<void> {
+    this.entries.push(entry);
+    return Promise.resolve();
+  }
+
+  resolve(itemId: string, documentId: string | null): Promise<void> {
+    this.entries.push({
+      itemId,
+      documentId,
+      reason: 'resolved',
+      observedAt: '2026-01-01T00:00:00.000Z',
+      resolved: true,
+    });
     return Promise.resolve();
   }
 }
@@ -205,6 +231,7 @@ describe('runFrontierCrawl — reads seeds a prior process persisted (core-front
       traversal: new StubFrontierTraversal(),
       stateStore,
       itemSink,
+      failureLedger: new MemoryFailureLedger(),
       rateLimiter: new RateLimiter(0),
       budget: unboundedBudget(),
       clock,
@@ -253,6 +280,7 @@ describe('runFrontierCrawl — yield-decay stop condition (core-frontier-crawl, 
       traversal: new StubFrontierTraversal(),
       stateStore,
       itemSink: new MemoryItemSink(),
+      failureLedger: new MemoryFailureLedger(),
       rateLimiter: new RateLimiter(0),
       budget: unboundedBudget(),
       clock,
@@ -304,6 +332,7 @@ describe('runFrontierCrawl — request budget ceiling (core-frontier-crawl, "Req
       traversal: new StubFrontierTraversal(),
       stateStore,
       itemSink: new MemoryItemSink(),
+      failureLedger: new MemoryFailureLedger(),
       rateLimiter: new RateLimiter(0),
       budget,
       clock,
@@ -346,6 +375,7 @@ describe('runFrontierCrawl — saturated seed search bisects, reusing traversal.
       traversal,
       stateStore,
       itemSink,
+      failureLedger: new MemoryFailureLedger(),
       rateLimiter: new RateLimiter(0),
       budget: unboundedBudget(),
       clock,
@@ -362,5 +392,73 @@ describe('runFrontierCrawl — saturated seed search bisects, reusing traversal.
     expect(traversal.splitCalls).toBe(2);
     expect(result.newItemsFound).toBe(2);
     expect(itemSink.records.map((r) => r.itemId).sort()).toEqual(['item-1', 'item-2']);
+  });
+});
+
+describe('runFrontierCrawl - unresolved-row and failed-seed ledger parity', () => {
+  it('records one entry per unresolved row and a failed seed, then continues to the next seed', async () => {
+    const stateStore = new MemoryAdapterStateStore();
+    await stateStore.append(SEEDS_STATE_KEY, {
+      seed: { kind: 'high', value: 'broken-seed' },
+      cellState: 'complete',
+    });
+    await stateStore.append(SEEDS_STATE_KEY, {
+      seed: { kind: 'low', value: 'partial-seed' },
+      cellState: 'complete',
+    });
+    const site = new ScriptedFrontierSite();
+    site.scriptDiscover('frontier|high|broken-seed', [
+      { kind: 'hostDefect', reason: 'errorUnexpected.seam with PersistenceException' },
+    ]);
+    site.scriptDiscover('frontier|low|partial-seed', [
+      {
+        kind: 'ok',
+        value: {
+          items: [{ id: 'resolved-item' }],
+          documentsByItemId: new Map(),
+          count: 2,
+          unresolved: [
+            { itemId: 'process-1', reason: 'adapter reason one' },
+            { itemId: 'process-2', reason: 'adapter reason two' },
+          ],
+        },
+      },
+    ]);
+    const failureLedger = new MemoryFailureLedger();
+
+    const result = await runFrontierCrawl({
+      site,
+      frontierCapable: new FakeFrontierCapable(),
+      traversal: new StubFrontierTraversal(),
+      stateStore,
+      itemSink: new MemoryItemSink(),
+      failureLedger,
+      rateLimiter: new RateLimiter(0),
+      budget: unboundedBudget(),
+      clock,
+      bounds,
+      runId: 'frontier-run-1',
+      schemaVersion: 1,
+    });
+
+    expect(result).toEqual({ seedsProcessed: 2, newItemsFound: 1 });
+    expect(site.discoverCalls).toEqual(['frontier|high|broken-seed', 'frontier|low|partial-seed']);
+    expect(failureLedger.entries).toEqual([
+      expect.objectContaining({
+        itemId: 'frontier|high|broken-seed',
+        documentId: null,
+        reason: 'errorUnexpected.seam with PersistenceException',
+      }),
+      expect.objectContaining({
+        itemId: 'process-1',
+        documentId: null,
+        reason: 'adapter reason one',
+      }),
+      expect.objectContaining({
+        itemId: 'process-2',
+        documentId: null,
+        reason: 'adapter reason two',
+      }),
+    ]);
   });
 });

@@ -168,7 +168,10 @@ describe('runScraper — the composition root wiring (S5e)', () => {
     const expectedPath = join(
       pdfsDir,
       '0123456-78.2026.4.05.8100',
-      '6884889-24-02-2026-14-57-27-despacho-despacho.pdf',
+      // The label's own trailing "(Despacho)" is dropped from the slug — the
+      // type lives in `documentType` now, and repeating it here only produced
+      // "...-despacho-despacho.pdf".
+      '6884889-24-02-2026-14-57-27-despacho.pdf',
     );
     expect(readFileSync(expectedPath)).toHaveLength(135);
     // Never written under outputDir — the two roots stay separate.
@@ -247,5 +250,48 @@ describe('runScraper — frontier seed harvesting and crawl (S6, core-frontier-c
     // carries the persisted seed's own CPF as documentoParte.
     const searchRequest = transport.requests[2];
     expect(searchRequest?.body).toContain(encodeURIComponent('000.000.000-00'));
+  });
+});
+
+describe('runScraper - frontier failure-ledger wiring', () => {
+  it('persists a failed seed search through the composed frontier failure ledger', async () => {
+    outputDir = mkdtempSync(join(tmpdir(), 'pje-main-frontier-ledger-'));
+    pdfsDir = mkdtempSync(join(tmpdir(), 'pje-main-frontier-ledger-pdfs-'));
+    mkdirSync(join(outputDir, 'state'), { recursive: true });
+    writeFileSync(
+      join(outputDir, 'state', 'seeds.jsonl'),
+      `${JSON.stringify({
+        seed: { kind: 'partyCpf', value: '000.000.000-00' },
+        cellState: 'complete',
+      })}\n`,
+    );
+    const transport = new StubTransport([
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      fixtureResponse(200, 'text/html', 'priming-page-1.html'),
+      fixtureResponse(200, 'text/html', 'host-defect.html'),
+    ]);
+
+    await runScraper(scrapeArgs({ frontier: true }), {
+      transport,
+      clock: FAKE_CLOCK,
+      outputDir,
+      logsDir: join(outputDir, 'logs'),
+      pdfsDir,
+      runId: 'test-run-frontier-ledger',
+    });
+
+    const entries = readFileSync(join(outputDir, 'state', 'failures.jsonl'), 'utf-8')
+      .trim()
+      .split('\n')
+      .map(
+        (line) => JSON.parse(line) as { itemId: string; documentId: string | null; reason: string },
+      );
+    expect(entries).toEqual([
+      expect.objectContaining({
+        itemId: 'frontier|partyCpf|000.000.000-00|2026-01-01..2026-01-01',
+        documentId: null,
+        reason: 'errorUnexpected.seam with PersistenceException',
+      }),
+    ]);
   });
 });
