@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import type { HttpTransport } from '../../engine/ports.js';
-import { decodeLatin1 } from './decode.js';
+import { decodeByContentType } from './decode.js';
 import type { SessionState } from './session.js';
 
 /** One entry of the judicial-class suggestion catalogue (docs/RESEARCH.md §3, "the second axis"). */
@@ -41,18 +41,47 @@ export async function fetchClassCatalogue(
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: params.toString(),
   });
-  return parseClassCatalogue(response.body);
+  return parseClassCatalogue(response.body, response.headers['content-type'] ?? null);
 }
 
-function parseClassCatalogue(body: Uint8Array): readonly TrfClass[] {
-  const $ = cheerio.load(decodeLatin1(body), { xmlMode: true });
-  return $('li')
+/**
+ * Reads the catalogue out of the `rich:suggestionbox`'s own rendered table
+ * (RichFaces 3.3.3): one `tr.richfaces_suggestionEntry` per class, the CNJ
+ * code and the label each in their own cell.
+ *
+ * Scoped to `tr.richfaces_suggestionEntry` rather than scanning the whole
+ * document, because the response is the entire page shell, not a bare
+ * fragment — an unscoped scan cannot tell the catalogue apart from unrelated
+ * markup elsewhere on the page (docs/RESEARCH.md §9.9 raised exactly this
+ * about the previous `$('li')` scan). Correcting §9.9's open question: this
+ * parser returned `0` while a text scan of the same bytes counted a handful of
+ * `<li>`, because those `<li>` sit inside CDATA `<script>` blocks — one
+ * response, two ways of counting, never two host behaviors.
+ *
+ * A response carrying no suggestion rows yields `[]`, and `split()` treats an
+ * empty catalogue as "cannot subdivide on this axis" — a recorded coverage
+ * gap, never a crash and never a guess.
+ */
+export function parseClassCatalogue(
+  body: Uint8Array,
+  contentType: string | null,
+): readonly TrfClass[] {
+  const $ = cheerio.load(decodeByContentType(body, contentType), { xmlMode: true });
+  return $('tr.richfaces_suggestionEntry')
     .toArray()
-    .map((el) => {
-      const text = $(el).text().trim();
-      const match = /^(.*?)\s*\((\d+)\)$/.exec(text);
-      return match
-        ? { label: match[1]!.trim(), cnjCode: match[2]! }
-        : { label: text, cnjCode: null };
-    });
+    .map((row) => {
+      const cells = $(row)
+        .find('td')
+        .toArray()
+        .map((cell) => $(cell).text().trim());
+      // Two of the four cells are the suggestion widget's own empty spacers;
+      // the code and the label are identified by shape (the all-digits cell is
+      // the CNJ code) rather than by a fixed column index, so a spacer added
+      // or dropped cannot silently swap the two fields.
+      const filled = cells.filter((text) => text.length > 0);
+      const cnjCode = filled.find((text) => /^\d+$/.test(text)) ?? null;
+      const label = filled.find((text) => text !== cnjCode) ?? '';
+      return { label, cnjCode };
+    })
+    .filter((cls) => cls.label.length > 0);
 }
