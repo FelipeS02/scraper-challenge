@@ -1,4 +1,5 @@
 import type { HttpTransport, HttpResponse } from '../../engine/ports.js';
+import { encodeFormBodyLatin1 } from './encoding.js';
 import { buildResponseView } from './schemas/response-view.js';
 import { classifyValidity } from './schemas/validity-chain.js';
 import { primeSession, type SessionState } from './session.js';
@@ -51,18 +52,23 @@ function resolveFieldName(
   return match;
 }
 
+/**
+ * Encoded ISO-8859-1, never UTF-8 (`encodeFormBodyLatin1`): `nomeParte`,
+ * `nomeAdv` and `classeJudicial` all carry accented Portuguese, and a UTF-8
+ * body makes the host match nothing while still answering 200 with an empty
+ * result set.
+ */
 export function buildSearchRequestBody(session: SessionState, criteria: SearchCriteria): string {
   validateSearchCriteria(criteria);
-  const params = new URLSearchParams();
-  params.set('AJAXREQUEST', '_viewRoot');
+  const pairs: [string, string][] = [['AJAXREQUEST', '_viewRoot']];
   for (const token of SEARCH_FIELD_TOKENS) {
-    params.set(resolveFieldName(session, token), criteria[token] ?? '');
+    pairs.push([resolveFieldName(session, token), criteria[token] ?? '']);
   }
-  params.set('fPP', 'fPP');
-  params.set('javax.faces.ViewState', session.viewState);
-  params.set(session.triggerId, session.triggerId);
-  params.set('AJAX:EVENTS_COUNT', '1');
-  return params.toString();
+  pairs.push(['fPP', 'fPP']);
+  pairs.push(['javax.faces.ViewState', session.viewState]);
+  pairs.push([session.triggerId, session.triggerId]);
+  pairs.push(['AJAX:EVENTS_COUNT', '1']);
+  return encodeFormBodyLatin1(pairs);
 }
 
 /** `text/xml` + `Ajax-Response: redirect` to `login.seam` — the site's real 401 (case 3). */

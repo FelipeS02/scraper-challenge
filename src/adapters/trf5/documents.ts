@@ -1,7 +1,7 @@
 import { classifyHttpStatus } from '../../engine/http-status.js';
 import type { HttpTransport, StoredDocument } from '../../engine/ports.js';
 import type { FetchOutcome } from '../../engine/types.js';
-import { decodePercentEncodedLatin1 } from './encoding.js';
+import { decodePercentEncodedLatin1, encodeFormBodyLatin1 } from './encoding.js';
 import type { DocumentRow } from './parsing/detail-page.js';
 import { extractDocumentViewerPdfContract } from './parsing/document-viewer.js';
 
@@ -186,17 +186,19 @@ async function fetchBornDigitalDocument(
   }
 
   const actionUrl = new URL(contract.actionUrl, doc.downloadUrl).toString();
-  const body = new URLSearchParams();
-  for (const [name, value] of contract.hiddenFields) body.set(name, value);
-  body.set(contract.downloadParam, contract.downloadParam);
-  body.set('ca', contract.ca);
-  body.set('idProcDocBin', contract.idProcDocBin);
+  // Latin-1, like every other body this adapter posts — the hidden fields
+  // echoed back here came out of an ISO-8859-1 page.
+  const body: [string, string][] = [];
+  for (const [name, value] of contract.hiddenFields) body.push([name, value]);
+  body.push([contract.downloadParam, contract.downloadParam]);
+  body.push(['ca', contract.ca]);
+  body.push(['idProcDocBin', contract.idProcDocBin]);
 
   const submitResponse = await transport.send({
     method: 'POST',
     url: actionUrl,
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+    body: encodeFormBodyLatin1(body),
   });
   const submitStatusOutcome = classifyHttpStatus(submitResponse.status, submitResponse.headers);
   if (submitStatusOutcome) return submitStatusOutcome;
