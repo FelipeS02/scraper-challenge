@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest';
+import { fixtureResponse } from '../support/stub-transport.js';
+import { buildResponseView, type ResponseView } from '../../schemas/response-view.js';
+import { classifyValidity } from '../../schemas/validity-chain.js';
+
+/** A response satisfying every schema at once — proves priority, not just correctness. */
+const overlappingView: ResponseView = {
+  status: 200,
+  contentType: 'text/xml',
+  bodyText: '',
+  isAjaxRedirectToLogin: true,
+  isErrorUnexpectedPage: true,
+  hasPersistenceException: true,
+  isHtmlPage: false,
+  hasDetailHeaderBlock: false,
+  hasPartiesBlock: false,
+  isErrorRedirect: false,
+};
+
+describe('classifyValidity — ordered chain, first match wins (trf5-adapter spec)', () => {
+  it('matches sessionExpired for an Ajax-Response redirect to login.seam (case 3)', () => {
+    const view = buildResponseView(fixtureResponse(200, 'text/xml', 'session-expired.xml'));
+    expect(classifyValidity(view)).toEqual({ kind: 'sessionExpired' });
+  });
+
+  it('matches unprimedSession for an errorUnexpected.seam page without PersistenceException (case 2)', () => {
+    const view = buildResponseView(fixtureResponse(200, 'text/html', 'unprimed-session.html'));
+    expect(classifyValidity(view)).toEqual({ kind: 'unprimedSession' });
+  });
+
+  it('matches hostDefect for an errorUnexpected.seam page carrying a PersistenceException (case 5)', () => {
+    const view = buildResponseView(fixtureResponse(200, 'text/html', 'host-defect.html'));
+    expect(classifyValidity(view)).toEqual({ kind: 'hostDefect' });
+  });
+
+  it('picks sessionExpired first when a view satisfies every schema at once (order contract)', () => {
+    expect(classifyValidity(overlappingView)).toEqual({ kind: 'sessionExpired' });
+  });
+
+  it('falls through to hostDefect once sessionExpired no longer matches (order contract)', () => {
+    expect(classifyValidity({ ...overlappingView, isAjaxRedirectToLogin: false })).toEqual({
+      kind: 'hostDefect',
+    });
+  });
+
+  it('does not classify an unrecognized response as any of the first three branches', () => {
+    const view = buildResponseView(fixtureResponse(200, 'text/xml', 'search-ok.xml'));
+    expect(classifyValidity(view)).toEqual({ kind: 'unclassified' });
+  });
+
+  it('matches invalidTokenShell for a 200 detail page with no header block and no parties block (D8)', () => {
+    const view = buildResponseView(
+      fixtureResponse(200, 'text/html', 'detail-page-invalid-token.html'),
+    );
+    expect(classifyValidity(view)).toEqual({ kind: 'invalidTokenShell' });
+  });
+
+  it('matches validData for a 200 detail page with header+parties but zero documents — not mistaken for a shell', () => {
+    const view = buildResponseView(
+      fixtureResponse(200, 'text/html', 'detail-page-valid-no-documents.html'),
+    );
+    expect(classifyValidity(view)).toEqual({ kind: 'validData' });
+  });
+
+  it('does not classify a text/xml search fragment as invalidTokenShell even when it lacks detail blocks', () => {
+    const view = buildResponseView(fixtureResponse(200, 'text/xml', 'search-ok.xml'));
+    expect(classifyValidity(view).kind).not.toBe('invalidTokenShell');
+  });
+
+  it('matches hostDefect for a 302 redirect to errorUnexpected.seam, with an empty body (measured live 2026-09-06)', () => {
+    const view = buildResponseView({
+      status: 302,
+      headers: {
+        location: 'https://pjett.trf5.jus.br/pjeconsulta/errorUnexpected.seam?cid=104706',
+      },
+      body: new Uint8Array(),
+    });
+
+    expect(classifyValidity(view)).toEqual({ kind: 'hostDefect' });
+  });
+
+  it('does not swallow a 302 to an unrelated location into hostDefect — it still falls through to unclassified', () => {
+    const view = buildResponseView({
+      status: 302,
+      headers: { location: 'https://pjett.trf5.jus.br/pjeconsulta/somewhereElse.seam' },
+      body: new Uint8Array(),
+    });
+
+    expect(classifyValidity(view)).toEqual({ kind: 'unclassified' });
+  });
+});

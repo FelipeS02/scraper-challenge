@@ -476,13 +476,19 @@ the engine running against a site that is not TRF5 and does not even partition b
 
 ## Testing
 
-Test runner: [vitest](https://vitest.dev).
+Test runner: [vitest](https://vitest.dev). Tests are classified into mutually exclusive projects.
 
 ```
-pnpm test           # vitest run
-pnpm test:watch     # vitest
-pnpm test:coverage  # vitest run --coverage
+pnpm test               # all projects
+pnpm test:unit          # deterministic, isolated behaviour
+pnpm test:integration   # component seams with stubbed transports/filesystems
+pnpm test:contract      # structural and architectural contracts
+pnpm test:watch         # Vitest watch mode
+pnpm test:coverage      # coverage across all projects
 ```
+
+Fixtures are data only under `src/**/tests/fixtures/`; reusable fakes and transports
+live under `src/**/tests/support/`. Neither directory is discovered as a test suite.
 
 **No real personal data.** This repository is public. No fixture, test, comment, or
 committed file may contain a real CPF, a real party name, or a real OAB registration

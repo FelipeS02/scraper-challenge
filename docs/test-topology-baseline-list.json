@@ -1,0 +1,1514 @@
+﻿[
+  {
+    "name": "Pool concurrency > never runs more units in flight than the configured concurrency limit",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/pool.test.ts"
+  },
+  {
+    "name": "Pool concurrency > processes every unit exactly once",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/pool.test.ts"
+  },
+  {
+    "name": "Pool dependency graph > does not depend on Redis, BullMQ, or any other external queue client",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/pool.test.ts"
+  },
+  {
+    "name": "parseDetailPage — header (trf5-adapter spec, Full Field Inventory Extraction) > extracts numero, data distribuicao, classe+CNJ code, assunto hierarchy, jurisdicao, orgaos, endereco, processo referencia from real .propertyView label/value pairs",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — parties (trf5-adapter spec, party + nested ADVOGADO lawyer) > extracts active/passive/others parties from the real flat sibling-row structure with name/CPF/role/status and a following lawyer row",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parsePartyLine — role comes from the trailing parenthesis, identifier from what precedes it > reads role and CNPJ from a legal-entity line",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parsePartyLine — role comes from the trailing parenthesis, identifier from what precedes it > reads role and CPF from a natural-person line",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parsePartyLine — role comes from the trailing parenthesis, identifier from what precedes it > keeps the role when the line carries no identifier at all",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parsePartyLine — role comes from the trailing parenthesis, identifier from what precedes it > falls back to UNKNOWN rather than guessing when no trailing parenthesis is rendered",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDocumentType — trailing parenthesis of a document label > extracts the type from a label whose title itself contains hyphens and digits",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDocumentType — trailing parenthesis of a document label > stays null when the label renders no trailing parenthesis",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — movements (rawCells preserved verbatim, cnjCode null, occurredAt parsed) > splits the real single-cell \"date - description\" text, preserves both cells verbatim into rawCells, and parses occurredAt from rawDate (task 5i.3/5i.4 — these two assertions previously encoded the hardcoded-null defect)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseOccurredAt — timezone handling is explicit, never the runner local zone (design.md, task 5i.4) > parses dd/MM/yyyy HH:mm:ss as America/Recife (fixed UTC-03:00, no DST) into a UTC ISO instant",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseOccurredAt — timezone handling is explicit, never the runner local zone (design.md, task 5i.4) > stays null when rawDate itself is absent",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseOccurredAt — timezone handling is explicit, never the runner local zone (design.md, task 5i.4) > stays null when rawDate does not match the exact dd/MM/yyyy HH:mm:ss shape, rather than guessing",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — documents (legacy idBin-redirect rows, plus born-digital rows S5h stops dropping) > enumerates the legacy idBin-redirect document rows with label and ids",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — documents (legacy idBin-redirect rows, plus born-digital rows S5h stops dropping) > extracts born-digital rows (documentoSemLoginHTML.seam, no idBin= anchor) with their identifier and a distinct outcome, never dropping them (D14, task 5h.4)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — documents (legacy idBin-redirect rows, plus born-digital rows S5h stops dropping) > extracts the viewer URL into downloadUrl for a born-digital row, the entry point S5j's two-step fetch needs (design.md D14)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — documents (legacy idBin-redirect rows, plus born-digital rows S5h stops dropping) > strips the anchor’s screen-reader-only \"Visualizar documentos\" prefix from a born-digital label, structurally (task 5i.14) — leaving the real descriptive date/type text a slug can use",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — documents grid declared total (task 5h.2/5h.3, design.md D13) > reads the declared total from the grid’s own footer, matched by id suffix never a hardcoded prefix",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — documents grid declared total (task 5h.2/5h.3, design.md D13) > reads 24 for the real paginated capture, from page 1 alone (reconciliation across pages is detail.ts’s job, not parsing’s)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDetailPage — documents grid declared total (task 5h.2/5h.3, design.md D13) > reports zero declared and zero extracted when the grid renders no rows at all",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "summarizeDocumentsGrid — reconciliation arithmetic (task 5h.7, corrected by fetchStatus in task 5i.13) > reports zero gap when extracted + skipped equals the declared total, split by fetchStatus rather than documentKind",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "summarizeDocumentsGrid — reconciliation arithmetic (task 5h.7, corrected by fetchStatus in task 5i.13) > reports a positive gap as a shortfall, never inferred away, when fewer rows were read than declared",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "summarizeDocumentsGrid — reconciliation arithmetic (task 5h.7, corrected by fetchStatus in task 5i.13) > counts a failed fetch as not-extracted, the same as a never-attempted one",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "extractDocumentGridPager — harvests the pagination widget’s own submit contract (task 5h.5, design.md D13) > returns null for a single-page grid with no scroller at all (task 5h.8’s guard fixture)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "extractDocumentGridPager — harvests the pagination widget’s own submit contract (task 5h.5, design.md D13) > harvests the real documents-grid pager — a rich:inputNumberSlider, never a guessed parameter name",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "parseDocumentGridPage — parses a further pager page’s own AJAX response (task 5h.6) > extracts the 9 legacy rows from the real captured page-2 response, decoded per its own declared UTF-8 charset",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/detail-page.test.ts"
+  },
+  {
+    "name": "extractDocumentViewerPdfContract — harvests the Gerar PDF submit contract (design.md D14) > harvests the form action, hidden fields, download param, ca and idProcDocBin from the real captured viewer page",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/document-viewer.test.ts"
+  },
+  {
+    "name": "extractDocumentViewerPdfContract — harvests the Gerar PDF submit contract (design.md D14) > returns null when the page has no Gerar PDF command link at all",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/document-viewer.test.ts"
+  },
+  {
+    "name": "extractDocumentViewerPdfContract — harvests the Gerar PDF submit contract (design.md D14) > matches the Gerar PDF anchor and its form by id SUFFIX, never a hardcoded \"j_id42\" literal (S5f/S5h rule)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/document-viewer.test.ts"
+  },
+  {
+    "name": "Scraper + TRF5Site — a real 429 response trips the global cooldown (core-resilience-policy, \"Global 429 Cooldown\") > pauses every worker for the cooldown duration and returns the failed unit to the queue, never the failure ledger",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/global-cooldown.test.ts"
+  },
+  {
+    "name": "primeSession — harvests fields from actual response content > extracts jsessionid, ViewState, field names, and trigger id from a priming response",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "primeSession — harvests fields from actual response content > uses each run own harvested values — never a value from a prior run",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > prefers the script-defined submit over an onclick one — the live page has both",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > falls back to an onclick submit when the form defines no script one",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > throws when two script-defined submits are indistinguishable",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > skips an ajaxSingle control even when it comes first in document order",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > throws naming every candidate when two submit triggers are indistinguishable",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > throws when the form carries no a4j submit trigger at all",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > primes a session whose form action carries no jsessionid — the cookie case",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > still throws when the form action is missing outright",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "parsePrimingPage — trigger identification is structural, and loud when unsure > does not mistake a self-referential hidden input for the trigger",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/session.test.ts"
+  },
+  {
+    "name": "TRF5Seeds.seedKindRanking (trf5-adapter spec, \"Declared Seed Kinds and Ranking\") > ranks lawyerCpf above partyCpf",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/seeds.test.ts"
+  },
+  {
+    "name": "TRF5Seeds.harvestSeeds (core-frontier-crawl, \"Seed Harvesting and Prioritization\") > harvests exact-match CPFs from the fixture — one lawyerCpf seed, one partyCpf seed",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/seeds.test.ts"
+  },
+  {
+    "name": "TRF5Seeds.harvestSeeds (core-frontier-crawl, \"Seed Harvesting and Prioritization\") > never harvests a null or empty CPF",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/seeds.test.ts"
+  },
+  {
+    "name": "TRF5Seeds.harvestSeeds (core-frontier-crawl, \"Seed Harvesting and Prioritization\") > de-duplicates the same CPF appearing on more than one party or lawyer row",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/seeds.test.ts"
+  },
+  {
+    "name": "TRF5Seeds.unitFromSeed (core-frontier-crawl, \"Mandatory Date Range on Seed Searches\") > always carries the run-bounds date range on the resulting cursor",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/seeds.test.ts"
+  },
+  {
+    "name": "TRF5Seeds.unitFromSeed (core-frontier-crawl, \"Mandatory Date Range on Seed Searches\") > produces a distinct unitKey per seed value, so two seeds never collide in a checkpoint/queue",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/seeds.test.ts"
+  },
+  {
+    "name": "Scraper — two-stage discover -> fetch loop > still writes the item when its document fetch fails, and records the document failure",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — two-stage discover -> fetch loop > skips the fetch stage entirely when discovery fails",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — budget enforcement (core-run-control-and-output) > stops collecting further items once --max-items is reached, still proceeding to summary",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — budget enforcement (core-run-control-and-output) > stops fetching further documents once --max-documents is reached, across the whole run",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — 429 wait-duration composition > requeues the unit and lets the global cooldown own the wait, honoring Retry-After precedence",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — 429 wait-duration composition > keeps the item and its documents when a 429 persists past transientCap on ONE document — never requeues the whole unit (task 5i.10/5i.11: the S5j-disclosed item-loss defect)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — 429 wait-duration composition > still requeues the whole unit on a discovery-level 429 — task 5i.10/5i.11 leaves this path untouched (nothing is claimed yet at discover time)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — dedup by adapter-declared identity key and envelope shape > writes the same item once across two overlapping cells, with the exact mandatory envelope",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — checkpoint carries the whole opaque WorkUnit > persists facetValue and label alongside cursor, not just the cursor",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — write ordering and crash-resume > writes items, then coverage, then checkpoint, in that order",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — write ordering and crash-resume > resumes without re-issuing discovery for an already-complete cell after a crash",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — write ordering and crash-resume > retrying a failed document re-issues only fetchDocument, never the cell discovery",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — write ordering and crash-resume > retryFailedDocuments writes the recovered document through DocumentSink",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — write ordering and crash-resume > retries a ledgered 429 document under the global cooldown without re-discovering its cell, resolving the ledger once it succeeds (task 5i.12)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — document persistence (Document Persistence to Disk) > writes a successfully fetched document through the DocumentSink using the real bytes",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — document persistence (Document Persistence to Disk) > writes no file when the document fetch fails, while still writing the item and the ledger entry",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — document-outcome write-back (task 5i.1/5i.2: the payload tells the truth) > writes fetchStatus:'fetched', the sink's real byteLength, and fileName back onto the item's matching document entry",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — saturation-driven subdivision (Saturation-Driven Subdivision) > calls split() on a saturated unit, enqueues its children, and records the parent as subdivided",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — saturation-driven subdivision (Saturation-Driven Subdivision) > records a truncated gap and enqueues nothing when split() returns null (regression: null-split path unchanged)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — saturation-driven subdivision (Saturation-Driven Subdivision) > bounds a lineage to the configured max split depth, recording truncated without calling split() again",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — saturation-driven subdivision (Saturation-Driven Subdivision) > resumes a subdivided checkpoint by re-splitting it directly, never re-discovering, skipping already-complete children, and passes the persisted observed result count — not the declared cap — as SaturationInfo",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — saturation-driven subdivision (Saturation-Driven Subdivision) > never treats a null-cap site as saturated, regardless of result count",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — WorkUnit.dimensions pass-through (core-coverage-accounting delta, generic pass-through only) > carries an adapter-declared dimensions bag onto the coverage record unchanged",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — WorkUnit.dimensions pass-through (core-coverage-accounting delta, generic pass-through only) > defaults to an empty dimensions bag when the adapter declares none (unchanged for every existing WorkUnit)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — site-agnostic failure vocabulary (Site-Agnostic Failure Vocabulary) > ledgers just the reason when a permanentError's detail is null",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — site-agnostic failure vocabulary (Site-Agnostic Failure Vocabulary) > ledgers reason:detail when a permanentError carries adapter-owned detail — same convention as transient:${status}",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — frontier seed harvesting (core-frontier-crawl, \"Deferred Phase-2 Invocation\") > persists no seeds at all when frontierSeedHarvest is not configured — plain scrape unaffected",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — frontier seed harvesting (core-frontier-crawl, \"Deferred Phase-2 Invocation\") > harvests and persists every written item's seeds, tagged by the cell's own complete/truncated state",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — frontier seed harvesting (core-frontier-crawl, \"Deferred Phase-2 Invocation\") > tags a non-saturated cell's seeds as complete, never truncated",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — structured run observability (Structured Run Observability) > emits unit.started before discovery and unit.completed after the checkpoint write",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — structured run observability (Structured Run Observability) > emits unit.saturated when a cell result count reaches the declared cap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — structured run observability (Structured Run Observability) > emits fetch.retry with attempt and delay when a transient 5xx failure is retried",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — structured run observability (Structured Run Observability) > emits session.reprimed when a sessionExpired outcome triggers a re-prime",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper — structured run observability (Structured Run Observability) > a Logger that throws does not fail the run or change its outcome",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper - unresolved discovery rows > emits complete coverage and checkpoint records with the unresolved count for an under-cap partial discovery",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper - unresolved discovery rows > emits subdivided coverage and checkpoint records with the unresolved count for a saturated partial discovery",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "Scraper - unresolved discovery rows > ledgers each adapter-declared row identity, preserves count-based splitting, and persists the unresolved count",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/scraper.test.ts"
+  },
+  {
+    "name": "parseClassCatalogue — the real rich:suggestionbox table > extracts the whole 132-entry catalogue the endpoint returns",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/classes.test.ts"
+  },
+  {
+    "name": "parseClassCatalogue — the real rich:suggestionbox table > reads the CNJ code and the label out of their own cells",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/classes.test.ts"
+  },
+  {
+    "name": "parseClassCatalogue — the real rich:suggestionbox table > decodes by the declared charset, so Portuguese accents survive verbatim",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/classes.test.ts"
+  },
+  {
+    "name": "parseClassCatalogue — the real rich:suggestionbox table > gives every entry a non-empty label and a numeric CNJ code",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/classes.test.ts"
+  },
+  {
+    "name": "parseClassCatalogue — the real rich:suggestionbox table > returns an empty catalogue rather than throwing when the response carries no suggestion box",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/classes.test.ts"
+  },
+  {
+    "name": "fetchDetail — Detail Fetch Session Requirement (trf5-adapter spec) > primes a session first when none is provided, then fetches the detail page",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — Detail Fetch Session Requirement (trf5-adapter spec) > does not re-prime when a session is already provided",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — 429 precedence over content classification (S5g, core-resilience-policy) > classifies a stubbed 429 detail response as transient before the validity chain runs",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — documents-grid pagination (S5h tasks 5h.6/5h.7/5h.8, design.md D13) > a single-page grid issues zero extra requests (detail-page-valid.html has no scroller at all)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — documents-grid pagination (S5h tasks 5h.6/5h.7/5h.8, design.md D13) > follows the real harvested pager contract to fetch page 2 and merges its rows, reconciling to the declared total of 24",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — a detail page reached via a 302-to-errorUnexpected.seam redirect (measured live 2026-09-06) > classifies it as hostDefect exactly like the directly-rendered 200 version, never unclassified/hostDefect-by-fallback",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — a detail page reached via a 302-to-errorUnexpected.seam redirect (measured live 2026-09-06) > a 302 to an unrelated location is NOT swallowed into hostDefect by the new branch",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — site-agnostic failure vocabulary (design.md D12) > reports an invalid-token shell as permanentError:invalidReference with the site detail preserved, never a site-specific reason literal",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "fetchDetail — site-agnostic failure vocabulary (design.md D12) > reports a schema-mismatched valid-looking page as permanentError:schemaMismatch with detail null",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/detail.test.ts"
+  },
+  {
+    "name": "JsonlItemSink > appends one JSON object per line, never a JSON array",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-item-sink.test.ts"
+  },
+  {
+    "name": "JsonlItemSink > leaves every already-written line valid after a run is killed mid-way (3 writes -> 3 valid lines)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-item-sink.test.ts"
+  },
+  {
+    "name": "JsonlItemSink > never mutates an already-written line when the same item is observed again",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-item-sink.test.ts"
+  },
+  {
+    "name": "JsonlItemSink > drops a torn final line with a warning at load, keeping the valid lines",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-item-sink.test.ts"
+  },
+  {
+    "name": "JsonlItemSink > reports a torn final line through the given Logger, never through console.warn",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-item-sink.test.ts"
+  },
+  {
+    "name": "JsonlItemSink > treats a malformed non-final line as fatal",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-item-sink.test.ts"
+  },
+  {
+    "name": "TRF5 declared SitePort constants (trf5-adapter spec) > declares a result-page cap of 30",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5 declared SitePort constants (trf5-adapter spec) > declares processNumber as the item identity key",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — composes session priming, search, row parsing and detail fetch > returns one item per parsed row, with resultCount set from the observed row count",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — composes session priming, search, row parsing and detail fetch > reports a saturated fragment (rows === resultPageCap) truthfully, never silently truncated",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — D12 site-agnostic failure vocabulary (trf5-adapter spec, Content-Based Validity Chain) > maps a persistently expired session to sessionExpired, never a bare status code",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — D12 site-agnostic failure vocabulary (trf5-adapter spec, Content-Based Validity Chain) > maps a host-defect search response to hostDefect, never inventing a permanentError",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — D12 site-agnostic failure vocabulary (trf5-adapter spec, Content-Based Validity Chain) > keeps an exhausted per-row invalid-token failure as unresolved data, never re-inventing its classification",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — bounded per-row tolerance > keeps 29 resolved rows, retries one broken detail row, and reports its process number with a bounded reason",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — bounded per-row tolerance > retries exhausted hostDefect detail outcomes through the configured row budget",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — bounded per-row tolerance > retries exhausted permanentError detail outcomes through the configured row budget",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — bounded per-row tolerance > immediately aborts the row set for a per-row sessionExpired outcome",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — bounded per-row tolerance > immediately aborts the row set for a per-row transient outcome",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — 429 precedence over content classification (S5g, core-resilience-policy) > classifies a stubbed 429 search response as transient before the validity chain runs, never as an empty result set",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — frontier seed search (core-frontier-crawl, \"Seed Harvesting and Prioritization\") > sends the seed CPF as documentoParte when the cursor carries one, alongside the mandatory date range",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — frontier seed search (core-frontier-crawl, \"Seed Harvesting and Prioritization\") > omits documentoParte entirely for an ordinary phase-1 unit (no seedCpf on the cursor)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — name-substring partition level (trf5-adapter spec, \"Discover applies the cursor's name probe to nomeParte\") > sends the cursor's name probe as nomeParte, alongside the mandatory date range and class",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — name-substring partition level (trf5-adapter spec, \"Discover applies the cursor's name probe to nomeParte\") > omits nomeParte entirely for a unit whose cursor carries no name probe",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.discover — adaptive name-probe harvesting (trf5-adapter spec, \"Adaptive Name-Probe Extension\") > harvests party names from parsed rows into the shared harvester, issuing no extra request",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.fetchDocument — composes the existing documents.ts fetch/decode path > follows the 302 redirect and returns the fetched bytes",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.withDocumentOutcome — writes the real fetch outcome back onto the payload (task 5i.1/5i.2/5i.13) > updates only the matching document's fetchStatus/byteLength/fileName, and recomputes documentsGrid by fetch outcome, never by documentKind",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "TRF5Site.reprimeSession — re-primes without replaying the caller's request > issues exactly one priming GET and leaves discover to make its own next request",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/site.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > returns response bytes byte-identical, never decoded (design.md D2)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > forwards the request body and content-type header on POST",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > surfaces a 302 with its Location header rather than auto-following it",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > surfaces Retry-After so the existing retry policy can honor it",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > never throws on a non-2xx status — every HTTP status is a normal response",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > persists a session cookie across requests through the same instance (cookie jar)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > does not share cookies between two separate instances",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > resolves a site-relative URL against the configured base",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "AxiosTransport — HttpTransport over axios, never the live TRF5 host > leaves an absolute URL untouched even when a base is configured",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/http/axios-transport.test.ts"
+  },
+  {
+    "name": "deriveMaxSplitDepth — design.md D4 constraint (maxSplitDepth >= ceil(log2(range_days)) + 2) > covers a single day: 0 bisection hops + 1 class + 1 name level",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "deriveMaxSplitDepth — design.md D4 constraint (maxSplitDepth >= ceil(log2(range_days)) + 2) > covers a 10-day window: ceil(log2(10)) = 4 bisection hops + 2",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "deriveMaxSplitDepth — design.md D4 constraint (maxSplitDepth >= ceil(log2(range_days)) + 2) > covers a one-year window: ceil(log2(365)) = 9 bisection hops + 2 (design.md D4 worked example: 11)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "runScraper — the composition root wiring (S5e) > a run driven with a stubbed transport reaches the sinks and writes the expected envelope",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "runScraper — the composition root wiring (S5e) > retry-failed drives the same composition without discovery bounds",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "runScraper — the composition root wiring (S5e) > persists a fetched document under pdfsDir, separate from outputDir (the real `pdfs/` layout .gitignore/README have documented since S1)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "runScraper — frontier seed harvesting and crawl (S6, core-frontier-crawl) > a plain scrape (no --frontier) persists harvested seeds to output/state/seeds.jsonl",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "runScraper — frontier seed harvesting and crawl (S6, core-frontier-crawl) > scrape --frontier reads seeds a prior process persisted and searches them, writing any new item found",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "runScraper - frontier failure-ledger wiring > persists a failed seed search through the composed frontier failure ledger",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/main.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > derives a human-navigable path from processNumber + idProcessoDocumento, with a decorative slug",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > gives three same-labeled documents three distinct paths, keyed only on idProcessoDocumento",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > drops the label trailing type parenthesis so the type is not repeated in the filename",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > keeps a descriptive title that merely happens to end in a parenthesis-free type word",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > falls back to the whole label when stripping the type would leave nothing to name the file",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > discards a hostile label and degrades to <processNumber>/<idProcessoDocumento>.pdf",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > discards an empty label and degrades the same way",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > discards an unrepresentable (non-ASCII-after-folding) label the same way",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > derives the identical path across repeated calls — there is no session token input at all",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > rejects processNumber or documentId components outside [A-Za-z0-9._-]",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > folds every accented character the site actually emits to its ASCII base, never dropping the base letter",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > folds Petição to peticao, matching the site’s own accented labels",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > keeps a descriptive slug for a label containing a slash, instead of collapsing to a bare id (task 5i.5/5i.6)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > produces a date-ordered, type-bearing slug from a real document-list label shape, truncated to MAX_SLUG_LENGTH",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "buildDocumentPath — Stable Document Filename Derivation (trf5-adapter spec, amended) > still discards a hostile label containing \"..\" even after per-character sanitization (task 5i.5 regression guard)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — born-digital rows have no legacy download path when the viewer URL itself is missing (design.md D14, defensive guard) > returns a permanentError:invalidReference without ever calling the transport",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — born-digital two-step viewer-then-PDF flow (design.md D14, task 5j.4) > GETs the viewer, harvests the Gerar PDF contract, POSTs it, and returns the same StoredDocument shape the legacy path returns",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — born-digital two-step viewer-then-PDF flow (design.md D14, task 5j.4) > POSTs directly to a 200 PDF response with no redirect at all, never assuming a 302 is mandatory",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — born-digital two-step viewer-then-PDF flow (design.md D14, task 5j.4) > classifies a real observed host response (a viewer/error page instead of a PDF) as a failure, never as ok -- verified by content, never by status alone (task 5j.5, docs/RESEARCH.md §5)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — born-digital two-step viewer-then-PDF flow (design.md D14, task 5j.4) > ledgers a born-digital fetch failure as a FetchOutcome instead of throwing, so the already-extracted item is not discarded (S4b precedent)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — born-digital two-step viewer-then-PDF flow (design.md D14, task 5j.4) > classifies a 429 on the viewer GET as transient, before ever attempting the PDF harvest (S5g precedence)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — born-digital two-step viewer-then-PDF flow (design.md D14, task 5j.4) > classifies an unrecognized viewer response (missing the Gerar PDF contract entirely) as a hostDefect, never throwing",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — 429 precedence over the 404/302 status checks (S5g, core-resilience-policy) > classifies a stubbed 429 on the document link as transient, never as a hostDefect",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding) > follows the 302 redirect and returns the fetched document under a stable, id-derived path",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding) > stores three same-labeled Decisão documents with three distinct paths end to end",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding) > maps a 404 on the document link to a permanent notFound outcome, never throwing, with detail null (design.md D12)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding) > maps an unsafe processNumber component to permanentError:schemaMismatch with detail null (design.md D12)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "fetchDocument — 302-follow (trf5-adapter spec, Document Byte-Level ISO-8859-1 Decoding) > ledgers an unexpected status as a hostDefect FetchOutcome instead of throwing, so the already-extracted item is not discarded",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/documents.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — declared facet > declares classeJudicial as its partition facet",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — the class catalogue is fetched per run, never hardcoded > expands a saturated single day into one unit per fetched class, bounded by maxFacetValues",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — the class catalogue is fetched per run, never hardcoded > caps facet expansion at the run-declared maxFacetValues",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — the class catalogue is fetched per run, never hardcoded > returns null once a single day is saturated even after facet expansion",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — every unit declares its partition dimensions, starting at the date layer > declares the date range on a seed window, so a top-level record is analyzable like every other",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — every unit declares its partition dimensions, starting at the date layer > declares a bare day, not a collapsed range, once bisection reaches a single day",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — every unit declares its partition dimensions, starting at the date layer > adds the class to the dimensions once a day expands into per-class units",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — frontier seed-cursor propagation (core-frontier-crawl, \"Saturated seed search bisects\") > carries seedCpf through date bisection unchanged, reusing the same split()",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — frontier seed-cursor propagation (core-frontier-crawl, \"Saturated seed search bisects\") > returns null for a saturated single-day seed search rather than expanding into judicial classes",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — name-substring partition level (trf5-adapter spec, \"Name-Substring Partition Level\") > expands a saturated single-day class cell into bounded name-probe children with unique unitKeys",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — name-substring partition level (trf5-adapter spec, \"Name-Substring Partition Level\") > returns null for a cell that already carries a name probe and is still saturated (irreducible residue)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — name-substring partition level (trf5-adapter spec, \"Name-Substring Partition Level\") > disables the name-substring level entirely when maxNameProbes is 0, matching pre-change behavior",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — date bisection boundary contract > splits an even-length window at mid/mid+1 with no gap or overlap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "TRF5Traversal — date bisection boundary contract > splits an odd-length window with the extra day on the left half",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/traversal.test.ts"
+  },
+  {
+    "name": "parseResultFragment — Declared Result-Page Cap and Item Identity Key (trf5-adapter spec) > extracts one row per result with its process number and opaque ca token, in document order",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/result-fragment.test.ts"
+  },
+  {
+    "name": "parseResultFragment — Declared Result-Page Cap and Item Identity Key (trf5-adapter spec) > reports the observed row count so the engine can compare it against resultPageCap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/result-fragment.test.ts"
+  },
+  {
+    "name": "parseResultFragment — Declared Result-Page Cap and Item Identity Key (trf5-adapter spec) > yields an empty list rather than throwing for a zero-row fragment",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/result-fragment.test.ts"
+  },
+  {
+    "name": "parseResultFragment — party-name extraction (trf5-adapter spec, \"Adaptive Name-Probe Extension\") > extracts the raw parties text, carrying both party names when one side lists \"e outros (N)\"",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/result-fragment.test.ts"
+  },
+  {
+    "name": "parseResultFragment — party-name extraction (trf5-adapter spec, \"Adaptive Name-Probe Extension\") > extracts a plain two-party parties text with no \"e outros\" suffix",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/parsing/result-fragment.test.ts"
+  },
+  {
+    "name": "FsDocumentSink — Document Persistence to Disk (trf5-adapter spec) > creates the per-process directory and writes bytes matching the fetched body exactly",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/fs-document-sink.test.ts"
+  },
+  {
+    "name": "FsDocumentSink — Document Persistence to Disk (trf5-adapter spec) > leaves no lingering temp file after a successful write",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/fs-document-sink.test.ts"
+  },
+  {
+    "name": "FsDocumentSink — Document Persistence to Disk (trf5-adapter spec) > a write interrupted before the rename completes leaves no file that reads as complete at the final path",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/fs-document-sink.test.ts"
+  },
+  {
+    "name": "FsDocumentSink — Document Persistence to Disk (trf5-adapter spec) > reports the size actually persisted on disk, not the byte length it received",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/fs-document-sink.test.ts"
+  },
+  {
+    "name": "JsonlFailureLedger > keys a discovery-stage failure by itemId with a null documentId",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-failure-ledger.test.ts"
+  },
+  {
+    "name": "JsonlFailureLedger > keys a document-stage failure by itemId+documentId and carries the item/doc payload",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-failure-ledger.test.ts"
+  },
+  {
+    "name": "JsonlFailureLedger > resolves by appending a resolved:true line, never editing or deleting the original",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-failure-ledger.test.ts"
+  },
+  {
+    "name": "JsonlCheckpointStore > round-trips a cursor as byte-identical JSON, with no transformation of its fields",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-checkpoint-store.test.ts"
+  },
+  {
+    "name": "JsonlCheckpointStore > round-trips facetValue and label alongside cursor — a checkpoint describes a complete WorkUnit",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-checkpoint-store.test.ts"
+  },
+  {
+    "name": "JsonlCheckpointStore > keeps only the latest-by-observedAt record per unitKey on load",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-checkpoint-store.test.ts"
+  },
+  {
+    "name": "JsonlCheckpointStore > normalizes a legacy checkpoint without unresolvedItemCount to zero",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-checkpoint-store.test.ts"
+  },
+  {
+    "name": "JsonlAdapterStateStore > appends values under a key and reads them back in order",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-adapter-state-store.test.ts"
+  },
+  {
+    "name": "JsonlAdapterStateStore > isolates values under different keys",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-adapter-state-store.test.ts"
+  },
+  {
+    "name": "JsonlAdapterStateStore > returns an empty list for a key that was never appended to",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-adapter-state-store.test.ts"
+  },
+  {
+    "name": "search — expired ViewState triggers re-prime and a single replay > re-primes and replays once on an Ajax-Response redirect to login.seam, never treating it as data",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/search.test.ts"
+  },
+  {
+    "name": "buildSearchRequestBody — the complete documented field set > includes every documented field, populated ones with real values and the rest empty",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/search.test.ts"
+  },
+  {
+    "name": "buildSearchRequestBody — the complete documented field set > rejects a request built without dataAutuacaoInicio/dataAutuacaoFim before sending",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/search.test.ts"
+  },
+  {
+    "name": "engine portability against a fake, non-TRF5 adapter > runs pool + site + traversal end to end against the fake adapter",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/portability.test.ts"
+  },
+  {
+    "name": "engine portability against a fake, non-TRF5 adapter > resolves a retry decision for a failing fake outcome without any TRF5 involvement",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/portability.test.ts"
+  },
+  {
+    "name": "module-graph seam check > never imports adapters/trf5, axios, or cheerio from any file under src/engine",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/portability.test.ts"
+  },
+  {
+    "name": "JsonlCoverageSink > appends one coverage record per line, round-tripping through readJsonlFile",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-coverage-sink.test.ts"
+  },
+  {
+    "name": "JsonlCoverageSink > never interleaves coverage records into the items file (separate files, task 2.14)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/storage/jsonl-coverage-sink.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > matches sessionExpired for an Ajax-Response redirect to login.seam (case 3)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > matches unprimedSession for an errorUnexpected.seam page without PersistenceException (case 2)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > matches hostDefect for an errorUnexpected.seam page carrying a PersistenceException (case 5)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > picks sessionExpired first when a view satisfies every schema at once (order contract)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > falls through to hostDefect once sessionExpired no longer matches (order contract)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > does not classify an unrecognized response as any of the first three branches",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > matches invalidTokenShell for a 200 detail page with no header block and no parties block (D8)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > matches validData for a 200 detail page with header+parties but zero documents — not mistaken for a shell",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > does not classify a text/xml search fragment as invalidTokenShell even when it lacks detail blocks",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > matches hostDefect for a 302 redirect to errorUnexpected.seam, with an empty body (measured live 2026-09-06)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyValidity — ordered chain, first match wins (trf5-adapter spec) > does not swallow a 302 to an unrelated location into hostDefect — it still falls through to unclassified",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/validity-chain.test.ts"
+  },
+  {
+    "name": "classifyCellState > classifies a cell under the adapter-declared cap as complete",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "classifyCellState > classifies a cell at or above the adapter-declared cap as truncated",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "classifyCellState > judges saturation against the adapter-declared cap, not a hardcoded value",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "classifyCellState > never classifies a cell as truncated when the adapter declares no cap (null)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "isSaturated > is true at or above the adapter-declared cap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "isSaturated > is always false when the adapter declares no cap (null)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "computeSetHash > produces matching hashes for the same set of ids observed twice",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "computeSetHash > reports a differing hash when the underlying set changed, as an observation not an error",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "summarizeRunCoverage > reports exact counts derived from the ledger, not an estimate",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "summarizeRunCoverage > excludes a subdivided parent from all three tallies, counting only its children",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "summarizeRunCoverage > does not treat an earlier complete observation as invalidated by a later re-check",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "verifyPartitionInvariant > passes when the per-facet-value sum exceeds the unfiltered day count",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "verifyPartitionInvariant > flags a violation rather than silently accepting the discrepancy",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "verifyPartitionInvariant > sources the unfiltered count from the LATEST facetValue-null record, never the first array match",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "verifyPartitionInvariant > compares a subdivided class cell against the sum of its own name-probe children (one level down, core-coverage-accounting delta)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "verifyPartitionInvariant > flags a name-probe-level violation rather than silently accepting the discrepancy",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "verifyPartitionInvariant > detects a deeper partition level from dimension-bag SHAPE alone, never from a concrete key name (core-coverage-accounting delta: \"the core does not learn a concrete name field\")",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "verifyPartitionInvariant > degenerate case: an adapter that declares no dimensions anywhere produces no deeper-partition entries at all",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "pendingDocumentFailures > excludes a discovery-stage failure (documentId null) from document retry candidates",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "pendingDocumentFailures > excludes a document failure that already has a matching resolution entry",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "pendingDocumentFailures > includes an unresolved document failure",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "summarizeRunCoverage unresolved item accounting > reports unresolved rows as a separate tally across complete and subdivided cells",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/coverage.test.ts"
+  },
+  {
+    "name": "engine portability against a non-date-partitioning fake adapter > runs the full saturation/split path: seed, discover, saturate, split, children enqueued, parent subdivided",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/portability-non-date.test.ts"
+  },
+  {
+    "name": "engine portability against a non-date-partitioning fake adapter > never saturates or calls split() when the site declares no result-page cap (null)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/portability-non-date.test.ts"
+  },
+  {
+    "name": "module-graph seam check (non-date fake) > never imports adapters/trf5, axios, or cheerio from the non-date fixture files",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/portability-non-date.test.ts"
+  },
+  {
+    "name": "RateLimiter > pauses every worker once one trips the cooldown, and resumes only after it elapses",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/rate-limiter.test.ts"
+  },
+  {
+    "name": "RateLimiter > spaces consecutive grants by the configured politeness interval",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/rate-limiter.test.ts"
+  },
+  {
+    "name": "RateLimiter > never delays a request that already waited longer than the spacing on its own",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/rate-limiter.test.ts"
+  },
+  {
+    "name": "RateLimiter > serializes concurrent acquisitions so spacing holds across parallel workers",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/rate-limiter.test.ts"
+  },
+  {
+    "name": "RateLimiter > lets a cooldown tripped during the spacing wait still gate the grant",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/rate-limiter.test.ts"
+  },
+  {
+    "name": "RateLimiter > lets a requeued unit return to the work queue instead of being marked permanently failed",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/rate-limiter.test.ts"
+  },
+  {
+    "name": "rankSeeds (core-frontier-crawl, \"Seed Harvesting and Prioritization\") > selects the higher-ranked seed kind first, for seeds from the same cell state",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "rankSeeds (core-frontier-crawl, \"Seed Harvesting and Prioritization\") > schedules truncated-cell seeds before complete-cell seeds, regardless of kind ranking",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "harvestAndPersistSeeds (core-frontier-crawl, \"Deferred Phase-2 Invocation\") > persists every harvested seed tagged with the given cell state, issuing no request",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "runFrontierCrawl — reads seeds a prior process persisted (core-frontier-crawl, \"Frontier run consumes seeds from a prior process\") > reads and searches seeds from a store it never wrote to itself",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "runFrontierCrawl — yield-decay stop condition (core-frontier-crawl, \"Yield-Decay Stop Condition\") > stops issuing further seed searches once a rolling window of seeds yields zero new items",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "runFrontierCrawl — request budget ceiling (core-frontier-crawl, \"Request Budget Ceiling\") > stops at the configured request ceiling even while every seed keeps yielding new items",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "runFrontierCrawl — saturated seed search bisects, reusing traversal.split() (core-frontier-crawl, \"Mandatory Date Range on Seed Searches\") > splits a saturated seed search the same way phase 1 does, and searches the resulting children",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "runFrontierCrawl - unresolved-row and failed-seed ledger parity > records one entry per unresolved row and a failed seed, then continues to the next seed",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/frontier.test.ts"
+  },
+  {
+    "name": "JsonlLogger > appends one valid JSON object per line to logs/run-<runId>.jsonl, UTF-8 explicit",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/jsonl-logger.test.ts"
+  },
+  {
+    "name": "JsonlLogger > emits nothing when the event level is below the configured threshold",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/jsonl-logger.test.ts"
+  },
+  {
+    "name": "STATIC_SURNAME_BIGRAMS — the guaranteed probe floor (trf5-adapter spec, \"Static Name-Probe Dictionary Floor\") > is non-empty and every declared entry has at least two space-separated tokens",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "mergeRanked — one frequency-ranked queue: static dictionary + adaptive harvest (design.md D2) > returns the dictionary in declared order when nothing has been harvested",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "mergeRanked — one frequency-ranked queue: static dictionary + adaptive harvest (design.md D2) > puts harvested probes ahead of unused dictionary entries, deduplicating overlap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "mergeRanked — one frequency-ranked queue: static dictionary + adaptive harvest (design.md D2) > rejects a single-token probe value before it becomes a work unit (Name-Substring Partition Level)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "extractPartyNames — reads the already-parsed parties column (no extra request) > splits an \"A e outros (N) X B\" parties string into both party names",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "extractPartyNames — reads the already-parsed parties column (no extra request) > splits a plain \"A X B\" parties string with no \"e outros\" suffix",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "extractPartyNames — reads the already-parsed parties column (no extra request) > returns an empty list for blank parties text",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "NameHarvester — adaptive extension ranked ahead of unused dictionary entries (trf5-adapter spec, \"Adaptive Name-Probe Extension\") > starts empty: ranked() returns nothing before any party name is observed",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "NameHarvester — adaptive extension ranked ahead of unused dictionary entries (trf5-adapter spec, \"Adaptive Name-Probe Extension\") > orders bigrams by descending frequency across harvested party names",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "NameHarvester — adaptive extension ranked ahead of unused dictionary entries (trf5-adapter spec, \"Adaptive Name-Probe Extension\") > excludes name probes already emitted for the same cell",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "NameHarvester — adaptive extension ranked ahead of unused dictionary entries (trf5-adapter spec, \"Adaptive Name-Probe Extension\") > merges its ranked output ahead of unused dictionary entries via mergeRanked",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/name-probes.test.ts"
+  },
+  {
+    "name": "assembleTrfPayload — Judicial Record Payload Contract (trf5-adapter spec) > carries cnjCode and label on caseClass and every subjects[] entry",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload.test.ts"
+  },
+  {
+    "name": "assembleTrfPayload — Judicial Record Payload Contract (trf5-adapter spec) > nests parties.active/passive/others, each with a lawyers[] array",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload.test.ts"
+  },
+  {
+    "name": "assembleTrfPayload — Judicial Record Payload Contract (trf5-adapter spec) > never emits a source page Portuguese form/query-parameter name as a payload property name",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload.test.ts"
+  },
+  {
+    "name": "assembleTrfPayload — Judicial Record Payload Contract (trf5-adapter spec) > produces an item whose declared itemId equals the payload processNumber",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > parses the complete documented flag set",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > defaults request spacing to the documented politeness interval",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > accepts zero spacing but rejects a negative interval",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > applies documented defaults when optional flags are omitted",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > requires --from and --to — an unbounded date range is never reachable by omission",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > only the literal \"unbounded\" disables --max-requests — never reachable by omission",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > sets dryRun when --dry-run is present",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > defaults frontier to false, and sets it when --frontier is present (core-frontier-crawl, \"Deferred Phase-2 Invocation\")",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > parses --max-name-probes and defaults it when omitted (trf5-adapter spec, \"Name-Probe Budget\")",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > accepts 0 for --max-name-probes to disable the name-substring level (trf5-adapter spec, \"Zero budget disables the level\")",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — scrape command > rejects an unrecognized --log-level",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — retry-failed command > parses with no further flags required",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "parseArgs — unknown command > rejects a command that is neither scrape nor retry-failed",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/args.test.ts"
+  },
+  {
+    "name": "behavioral-port derivation — the port list is read from ports.ts, never hand-listed > classifies an interface with a method as behavioral and a pure-data shape as not",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/ports-implementation-audit.test.ts"
+  },
+  {
+    "name": "behavioral-port derivation — the port list is read from ports.ts, never hand-listed > is not fooled by parentheses inside comments, or by a multi-line method signature",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/ports-implementation-audit.test.ts"
+  },
+  {
+    "name": "behavioral-port derivation — the port list is read from ports.ts, never hand-listed > puts a newly added port on the radar with no list to edit — the point of deriving",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/ports-implementation-audit.test.ts"
+  },
+  {
+    "name": "behavioral-port derivation — the port list is read from ports.ts, never hand-listed > still recognises every port the hand-maintained list named, and no pure-data shape",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/ports-implementation-audit.test.ts"
+  },
+  {
+    "name": "engine/ports.ts implementation audit — every behavioral port has a real implementation > scanned a non-trivial file set and found real implements clauses (sanity: not silently empty)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/ports-implementation-audit.test.ts"
+  },
+  {
+    "name": "engine/ports.ts implementation audit — every behavioral port has a real implementation > proves the audit is non-vacuous: SitePort was fixture/test-only before TRF5Site existed (RED proof)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/ports-implementation-audit.test.ts"
+  },
+  {
+    "name": "engine/ports.ts implementation audit — every behavioral port has a real implementation > finds a non-fixture, non-test implementation for every behavioral port except the disclosed, tracked gaps",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/ports-implementation-audit.test.ts"
+  },
+  {
+    "name": "ConsoleLogger > writes to stderr only, never to stdout",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/console-logger.test.ts"
+  },
+  {
+    "name": "ConsoleLogger > renders a readable line carrying the event name and its fields, never raw JSON",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/console-logger.test.ts"
+  },
+  {
+    "name": "ConsoleLogger > omits fields whose value is null or undefined rather than printing empty placeholders",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/console-logger.test.ts"
+  },
+  {
+    "name": "ConsoleLogger > renders a single line even when a field value is a nested object",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/console-logger.test.ts"
+  },
+  {
+    "name": "ConsoleLogger > emits nothing when the event level is below the configured threshold",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/console-logger.test.ts"
+  },
+  {
+    "name": "Budget > stops further document fetches once --max-documents is reached (default 10)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "Budget > stops further item collection once --max-items is reached",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "Budget > bounds --documents-per-item independently of the global document ceiling",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "Budget > an omitted --max-requests still stops at the default ceiling",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "Budget > an explicit null maxRequests is the only way to go unbounded",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "Budget > unboundedBudget never stops any axis",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "clampDateRange > leaves a range within --max-days unchanged",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "clampDateRange > clamps dateTo when the requested range exceeds --max-days",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/budget.test.ts"
+  },
+  {
+    "name": "SystemClock — the real Clock implementation, wired inline by main.ts > now() returns the current wall-clock time",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/clock.test.ts"
+  },
+  {
+    "name": "SystemClock — the real Clock implementation, wired inline by main.ts > sleep(ms) resolves only after the requested delay elapses",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/clock.test.ts"
+  },
+  {
+    "name": "classifyHttpStatus — 429/5xx transient precedence, before any content classification > classifies 429 as transient, carrying the status and no Retry-After",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "classifyHttpStatus — 429/5xx transient precedence, before any content classification > carries a parsed Retry-After delay onto the 429 outcome",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "classifyHttpStatus — 429/5xx transient precedence, before any content classification > classifies 502, 503, and 504 as transient, each carrying its own status",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "classifyHttpStatus — 429/5xx transient precedence, before any content classification > returns null for 200 and 302 so content-based classification still owns every status this host actually uses for failure",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "classifyHttpStatus — 429/5xx transient precedence, before any content classification > returns null for 404 — that classification stays where documents.ts already places it, never relocated here",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "parseRetryAfterMs — delta-seconds only (5g.3, a deliberate disclosed narrowing) > converts a delta-seconds value to milliseconds",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "parseRetryAfterMs — delta-seconds only (5g.3, a deliberate disclosed narrowing) > converts a zero delta-seconds value to zero milliseconds",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "parseRetryAfterMs — delta-seconds only (5g.3, a deliberate disclosed narrowing) > returns null for an HTTP-date value — no observed response has ever carried one",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "parseRetryAfterMs — delta-seconds only (5g.3, a deliberate disclosed narrowing) > returns null for a negative value",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "parseRetryAfterMs — delta-seconds only (5g.3, a deliberate disclosed narrowing) > returns null for a non-numeric value",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "parseRetryAfterMs — delta-seconds only (5g.3, a deliberate disclosed narrowing) > returns null when the header is absent",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/http-status.test.ts"
+  },
+  {
+    "name": "forecastRun > forecasts one search request per day in the optimistic non-saturated case",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/dry-run.test.ts"
+  },
+  {
+    "name": "forecastRun > adds forecasted detail and document requests bounded by the declared result-page cap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/dry-run.test.ts"
+  },
+  {
+    "name": "forecastRun > never exceeds an explicit --max-requests ceiling",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/dry-run.test.ts"
+  },
+  {
+    "name": "forecastRun > clamps the forecasted day count to --max-days",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/dry-run.test.ts"
+  },
+  {
+    "name": "forecastRun > estimates duration from the forecasted request count and politeness spacing",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/dry-run.test.ts"
+  },
+  {
+    "name": "printDryRunForecast > writes exactly one human-readable line carrying both the request count and duration",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/dry-run.test.ts"
+  },
+  {
+    "name": "nullable-field derivation — the field list is read from schemas/payload.ts, never hand-listed > extracted a non-trivial nullable-field set (sanity: not silently empty)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload-construction-audit.test.ts"
+  },
+  {
+    "name": "schemas/payload.ts construction audit — no nullable field is hardcoded null at every production construction site > scanned a non-trivial file set and found real construction sites (sanity: not silently empty)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload-construction-audit.test.ts"
+  },
+  {
+    "name": "schemas/payload.ts construction audit — no nullable field is hardcoded null at every production construction site > proves the audit is non-vacuous: occurredAt had a single hardcoded-null construction site before task 5i.4 (RED proof)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload-construction-audit.test.ts"
+  },
+  {
+    "name": "schemas/payload.ts construction audit — no nullable field is hardcoded null at every production construction site > finds a real, non-test, non-fixture, non-exempt field that is hardcoded null everywhere",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/payload-construction-audit.test.ts"
+  },
+  {
+    "name": "exponential backoff > grows per attempt with base 1000ms and factor 2",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/backoff.test.ts"
+  },
+  {
+    "name": "withJitter > keeps every computed delay within +/-30% of the base delay for the same attempt",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/backoff.test.ts"
+  },
+  {
+    "name": "withCap > never exceeds the cap at attempt 12",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/backoff.test.ts"
+  },
+  {
+    "name": "decide — transient outcome > schedules backoff via retryAfter when the attempt count is within the cap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — transient outcome > records and stops once the transient cap is reached",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — transient outcome > routes a 429 status to requeue so the global cooldown owns the wait",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — transient outcome > lets a server Retry-After override the computed backoff delay",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — sessionExpired outcome > re-primes and retries immediately with zero delay within the replay cap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — sessionExpired outcome > records and stops once the single-replay cap is exhausted",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — hostDefect outcome > retries within the 1-2 attempt cap",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — hostDefect outcome > records and stops once the cap is reached",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "decide — permanentError outcome > never retries",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/retry-policy.test.ts"
+  },
+  {
+    "name": "formatRunSummary > prints exactly summarizeRunCoverage's counts, with no independent completeness claim",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/summary.test.ts"
+  },
+  {
+    "name": "formatRunSummary > reflects only the latest observation per unitKey, exactly as summarizeRunCoverage does",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/summary.test.ts"
+  },
+  {
+    "name": "printRunSummary > writes the formatted lines to the given sink, human-facing output only",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/summary.test.ts"
+  },
+  {
+    "name": "formatFrontierRunSummary (core-frontier-crawl, \"Documented Unmeasurable Bias\") > states plainly that frontier-crawl coverage gains are unmeasured and self-reinforcing",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/summary.test.ts"
+  },
+  {
+    "name": "printFrontierRunSummary > writes the formatted lines to the given sink",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/summary.test.ts"
+  },
+  {
+    "name": "formatRunSummary unresolved items > prints unresolved rows on a separate tally line rather than folding them into complete",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/cli/summary.test.ts"
+  },
+  {
+    "name": "buildResponseView — detail/parties block detection against a captured page (D8) > detects the header and parties blocks on a real captured detail page, whose ids carry a server-generated form prefix",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/response-view.test.ts"
+  },
+  {
+    "name": "buildResponseView — detail/parties block detection against a captured page (D8) > still detects neither block on a captured invalid-token shell (5f.3 must not accept everything)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/response-view.test.ts"
+  },
+  {
+    "name": "buildResponseView — a 302 redirect landing on errorUnexpected.seam (measured live 2026-09-06) > sets isErrorRedirect from the Location header when a 302 body is empty",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/response-view.test.ts"
+  },
+  {
+    "name": "buildResponseView — a 302 redirect landing on errorUnexpected.seam (measured live 2026-09-06) > does not set isErrorRedirect for a 302 to an unrelated location",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/response-view.test.ts"
+  },
+  {
+    "name": "buildResponseView — a 302 redirect landing on errorUnexpected.seam (measured live 2026-09-06) > does not set isErrorRedirect for a non-redirect status even if Location happens to be present",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/schemas/response-view.test.ts"
+  },
+  {
+    "name": "decodePercentEncodedLatin1 — Document Byte-Level ISO-8859-1 Decoding (trf5-adapter spec) > decodes a percent-encoded ISO-8859-1 nomeArqProcDocBin value at the byte level",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/encoding.test.ts"
+  },
+  {
+    "name": "decodePercentEncodedLatin1 — Document Byte-Level ISO-8859-1 Decoding (trf5-adapter spec) > decodes a second accented label, proving each %XX escape is read as its own ISO-8859-1 byte, not a fixed lookup",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/encoding.test.ts"
+  },
+  {
+    "name": "decodePercentEncodedLatin1 — Document Byte-Level ISO-8859-1 Decoding (trf5-adapter spec) > leaves an already-plain label untouched",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/encoding.test.ts"
+  },
+  {
+    "name": "decodePercentEncodedLatin1 — Document Byte-Level ISO-8859-1 Decoding (trf5-adapter spec) > never decodes through UTF-8: the same raw escape sequence is not valid UTF-8",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/encoding.test.ts"
+  },
+  {
+    "name": "withRedaction > redacts personal-data-bearing fields by name, leaving every other field byte-identical",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/redacting-logger.test.ts"
+  },
+  {
+    "name": "withRedaction > redacts by field name only, never by sniffing a CPF-shaped value under an unlisted key",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/redacting-logger.test.ts"
+  },
+  {
+    "name": "engine/ports.ts reverse requirement-coverage audit > extracted a non-trivial symbol list from the real ports.ts file (sanity: not silently empty)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/ports-coverage-audit.test.ts"
+  },
+  {
+    "name": "engine/ports.ts reverse requirement-coverage audit > maps every symbol actually exported from ports.ts to at least one named requirement",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/ports-coverage-audit.test.ts"
+  },
+  {
+    "name": "engine/ports.ts reverse requirement-coverage audit > proves the audit is non-vacuous: deleting a real mapping is caught by name, and restoring it passes again",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/__fixtures__/ports-coverage-audit.test.ts"
+  },
+  {
+    "name": "FetchOutcome-variant derivation — the kind list is read from types.ts, never hand-listed > extracted the real, non-trivial variant set from engine/types.ts (sanity: not silently empty)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/outcome-construction-audit.test.ts"
+  },
+  {
+    "name": "engine/types.ts outcome-construction audit — every FetchOutcome variant is built somewhere in production code > scanned a non-trivial file set and found real construction sites (sanity: not silently empty)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/outcome-construction-audit.test.ts"
+  },
+  {
+    "name": "engine/types.ts outcome-construction audit — every FetchOutcome variant is built somewhere in production code > proves the audit is non-vacuous: transient had zero production construction sites before this slice's 429 wiring (RED proof)",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/outcome-construction-audit.test.ts"
+  },
+  {
+    "name": "engine/types.ts outcome-construction audit — every FetchOutcome variant is built somewhere in production code > finds a real, non-test, non-fixture construction site for every FetchOutcome variant",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/engine/outcome-construction-audit.test.ts"
+  },
+  {
+    "name": "Persisted Identifier Stability (core-run-control-and-output spec) > harvested a non-null jsessionid, so the leak assertions below are not vacuous",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/persisted-identifier-stability.test.ts"
+  },
+  {
+    "name": "Persisted Identifier Stability (core-run-control-and-output spec) > a derived document path carries no ca/jsessionid/ViewState value",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/persisted-identifier-stability.test.ts"
+  },
+  {
+    "name": "Persisted Identifier Stability (core-run-control-and-output spec) > a TraversalCursor carries no ca/jsessionid/ViewState value",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/persisted-identifier-stability.test.ts"
+  },
+  {
+    "name": "Persisted Identifier Stability (core-run-control-and-output spec) > a CheckpointRecord carries no ca/jsessionid/ViewState value",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/adapters/trf5/persisted-identifier-stability.test.ts"
+  },
+  {
+    "name": "NullLogger > accepts any event and does nothing",
+    "file": "C:/Users/Proyectos/Personales/pje-trf5-scraper/src/infra/logging/null-logger.test.ts"
+  }
+]
