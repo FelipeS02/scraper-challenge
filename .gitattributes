@@ -1,0 +1,3 @@
+﻿# Captured fixture bytes are protocol evidence and must not be line-ending normalized.
+src/adapters/trf5/__fixtures__/document-sample.pdf -text
+src/adapters/trf5/tests/fixtures/document-sample.pdf -text

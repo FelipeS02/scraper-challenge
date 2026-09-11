@@ -23,6 +23,6 @@ openspec/
 # formatter. The `.xml` fixtures escape today only because no parser is inferred
 # for them, which is luck, not a rule — so the directory is excluded wholesale.
 # `stub-transport.ts` is code and stays formatted via the negation below.
-src/**/__fixtures__/*.html
-src/**/__fixtures__/*.xml
-src/**/__fixtures__/*.pdf
+src/**/tests/fixtures/*.html
+src/**/tests/fixtures/*.xml
+src/**/tests/fixtures/*.pdf
