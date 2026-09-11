@@ -121,9 +121,9 @@ function nameProbeUnit(
 
 /**
  * Date window x judicial class x name-substring (docs/RESEARCH.md §3). `seed()`
- * produces one unfaceted unit for the whole run window; `split()` bisects a
- * saturated multi-day window, then lazily expands a saturated single day into
- * per-class units (design.md D4), and — new in this change — a single-day
+ * produces one unfaceted unit per day for the general sweep. `split()` retains
+ * multi-day bisection for range-first frontier units, then lazily expands a
+ * saturated sweep day into per-class units, and a single-day
  * class cell that is STILL saturated into name-probe units (design.md D3).
  * Each level is fetched/computed only once its parent is proven saturated.
  */
@@ -148,7 +148,11 @@ export class TRF5Traversal implements TraversalPort<TraversalCursor> {
 
   seed(bounds: RunBounds): Promise<readonly WorkUnit<TraversalCursor>[]> {
     this.maxFacetValues = bounds.maxFacetValues;
-    return Promise.resolve([windowUnit(bounds.dateFrom, bounds.dateTo, null)]);
+    const units: WorkUnit<TraversalCursor>[] = [];
+    for (let day = bounds.dateFrom; day <= bounds.dateTo; day = addDays(day, 1)) {
+      units.push(windowUnit(day, day, null));
+    }
+    return Promise.resolve(units);
   }
 
   async split(

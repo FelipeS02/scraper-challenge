@@ -272,6 +272,10 @@ run already harvested — never as part of a plain `scrape`, and never automatic
    window of seed searches that stop finding new items (yield decay), or the
    `--max-requests` ceiling.
 
+The general sweep uses a different temporal strategy: it starts with one work unit per
+day, then partitions only saturated days by judicial class and name substring. Frontier
+keeps its existing range-first traversal and remains disabled unless explicitly requested.
+
 **Frontier-crawl coverage gains are UNMEASURED and self-reinforcing.** A seed is only
 ever harvested from an item the sweep already found, so every frontier search is
 biased toward data already connected to what is known — it can never discover a

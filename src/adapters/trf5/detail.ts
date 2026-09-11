@@ -9,6 +9,7 @@ import {
   type DocumentGridPager,
   type DocumentRow,
 } from './parsing/detail-page.js';
+import { encodeFormBodyLatin1 } from './encoding.js';
 import { assembleTrfPayload, type TrfPayload } from './schemas/payload.js';
 import { buildResponseView } from './schemas/response-view.js';
 import { classifyValidity } from './schemas/validity-chain.js';
@@ -101,18 +102,22 @@ async function fetchDocumentGridPages(
 ): Promise<FetchOutcome<readonly DocumentRow[]>> {
   const rows: DocumentRow[] = [];
   for (let page = 2; page <= pager.totalPages; page++) {
-    const params = new URLSearchParams();
-    for (const [name, value] of pager.hiddenFields) params.set(name, value);
-    params.set(pager.pageFieldName, String(page));
-    params.set(pager.triggerParam, pager.triggerParam);
-    params.set('AJAXREQUEST', pager.formId);
-    params.set('AJAX:EVENTS_COUNT', '1');
+    // Latin-1, like every other body this adapter posts: the hidden fields
+    // echoed back here were themselves decoded from an ISO-8859-1 page, so
+    // re-encoding them as UTF-8 would hand the host back a different value
+    // than the one it rendered.
+    const params: [string, string][] = [];
+    for (const [name, value] of pager.hiddenFields) params.push([name, value]);
+    params.push([pager.pageFieldName, String(page)]);
+    params.push([pager.triggerParam, pager.triggerParam]);
+    params.push(['AJAXREQUEST', pager.formId]);
+    params.push(['AJAX:EVENTS_COUNT', '1']);
 
     const response = await transport.send({
       method: 'POST',
       url: pagerUrl,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
+      body: encodeFormBodyLatin1(params),
     });
 
     // Transport-boundary precedence (S5g): every real request path is

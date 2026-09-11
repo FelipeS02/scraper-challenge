@@ -87,17 +87,29 @@ describe('TRF5Traversal — the class catalogue is fetched per run, never hardco
 });
 
 describe('TRF5Traversal — every unit declares its partition dimensions, starting at the date layer', () => {
-  it('declares the date range on a seed window, so a top-level record is analyzable like every other', async () => {
+  it('seeds one inclusive single-day unit per day without gaps or duplicates', async () => {
     const transport = new StubTransport([]);
     const traversal = new TRF5Traversal({ transport, session });
 
-    const [seedUnit] = await traversal.seed({
+    const seedUnits = await traversal.seed({
       dateFrom: '2026-08-24',
-      dateTo: '2026-09-02',
+      dateTo: '2026-08-27',
       maxFacetValues: 10,
     });
 
-    expect(seedUnit?.dimensions).toEqual({ date: '2026-08-24..2026-09-02' });
+    expect(seedUnits.map((unit) => unit.cursor)).toEqual([
+      { dateFrom: '2026-08-24', dateTo: '2026-08-24' },
+      { dateFrom: '2026-08-25', dateTo: '2026-08-25' },
+      { dateFrom: '2026-08-26', dateTo: '2026-08-26' },
+      { dateFrom: '2026-08-27', dateTo: '2026-08-27' },
+    ]);
+    expect(seedUnits.map((unit) => unit.dimensions)).toEqual([
+      { date: '2026-08-24' },
+      { date: '2026-08-25' },
+      { date: '2026-08-26' },
+      { date: '2026-08-27' },
+    ]);
+    expect(new Set(seedUnits.map((unit) => unit.unitKey)).size).toBe(seedUnits.length);
   });
 
   it('declares a bare day, not a collapsed range, once bisection reaches a single day', async () => {

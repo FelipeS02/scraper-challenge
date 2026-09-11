@@ -89,6 +89,82 @@ describe('printFrontierRunSummary', () => {
   });
 });
 
+describe('formatRunSummary partition invariant (core-coverage-accounting, "Partition Invariant Verification")', () => {
+  /** A saturated day subdivided into facets that recover fewer items than the day itself. */
+  const underCoveringSplit = [
+    coverageRecord({
+      unitKey: 'day',
+      windowKey: '2026-01-05..2026-01-05',
+      state: 'subdivided',
+      resultCount: 30,
+      saturated: true,
+      dimensions: { date: '2026-01-05' },
+    }),
+    coverageRecord({
+      unitKey: 'day|A',
+      windowKey: '2026-01-05..2026-01-05',
+      facetValue: 'A',
+      resultCount: 29,
+      dimensions: { date: '2026-01-05', class: 'A' },
+    }),
+    coverageRecord({
+      unitKey: 'day|B',
+      windowKey: '2026-01-05..2026-01-05',
+      facetValue: 'B',
+      resultCount: 0,
+      dimensions: { date: '2026-01-05', class: 'B' },
+    }),
+  ];
+
+  it('reports a split whose facets recover fewer items than their parent, with the shortfall', () => {
+    const text = formatRunSummary(underCoveringSplit).join('\n');
+
+    expect(text).toMatch(/partition/i);
+    expect(text).toContain('2026-01-05..2026-01-05');
+    expect(text).toContain('30');
+    expect(text).toContain('29');
+    expect(text).toMatch(/1 item/);
+  });
+
+  it('never lets a cell that passed its own state check hide a partition gap', () => {
+    const text = formatRunSummary(underCoveringSplit).join('\n');
+
+    // Every facet cell is individually `complete`; the gap exists only in the
+    // arithmetic ACROSS cells, which is exactly what the summary must surface.
+    expect(text).toContain('complete: 2');
+    expect(text).toMatch(/unaccounted/i);
+  });
+
+  it('states that the invariant held when every split closes, rather than staying silent', () => {
+    const text = formatRunSummary([
+      coverageRecord({
+        unitKey: 'day',
+        windowKey: '2026-01-06..2026-01-06',
+        state: 'subdivided',
+        resultCount: 30,
+        saturated: true,
+        dimensions: { date: '2026-01-06' },
+      }),
+      coverageRecord({
+        unitKey: 'day|A',
+        windowKey: '2026-01-06..2026-01-06',
+        facetValue: 'A',
+        resultCount: 31,
+        dimensions: { date: '2026-01-06', class: 'A' },
+      }),
+    ]).join('\n');
+
+    expect(text).toMatch(/partition/i);
+    expect(text).not.toMatch(/unaccounted/i);
+  });
+
+  it('says nothing about partitions when the run subdivided nothing at all', () => {
+    const text = formatRunSummary([coverageRecord({})]).join('\n');
+
+    expect(text).not.toMatch(/partition/i);
+  });
+});
+
 describe('formatRunSummary unresolved items', () => {
   it('prints unresolved rows on a separate tally line rather than folding them into complete', () => {
     const lines = formatRunSummary([coverageRecord({ unresolvedItemCount: 2 })]);

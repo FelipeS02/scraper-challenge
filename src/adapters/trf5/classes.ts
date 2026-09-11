@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import type { HttpTransport } from '../../engine/ports.js';
 import { decodeByContentType } from './decode.js';
+import { encodeFormBodyLatin1 } from './encoding.js';
 import type { SessionState } from './session.js';
 
 /** One entry of the judicial-class suggestion catalogue (docs/RESEARCH.md §3, "the second axis"). */
@@ -27,19 +28,21 @@ export async function fetchClassCatalogue(
   if (!classeField) throw new Error('priming response did not expose the classeJudicial field');
   const suggestionField = classeField.replace(/classeJudicial$/, 'sgbClasseJudicial');
 
-  const params = new URLSearchParams();
-  params.set('AJAXREQUEST', suggestionField);
-  params.set(classeField, '');
-  params.set(suggestionField, suggestionField);
-  params.set('fPP', 'fPP');
-  params.set('javax.faces.ViewState', session.viewState);
-  params.set('AJAX:EVENTS_COUNT', '1');
+  // Latin-1, like every other body this adapter posts (`encodeFormBodyLatin1`).
+  const params: [string, string][] = [
+    ['AJAXREQUEST', suggestionField],
+    [classeField, ''],
+    [suggestionField, suggestionField],
+    ['fPP', 'fPP'],
+    ['javax.faces.ViewState', session.viewState],
+    ['AJAX:EVENTS_COUNT', '1'],
+  ];
 
   const response = await transport.send({
     method: 'POST',
     url: session.actionUrl,
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
+    body: encodeFormBodyLatin1(params),
   });
   return parseClassCatalogue(response.body, response.headers['content-type'] ?? null);
 }
